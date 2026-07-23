@@ -1,0 +1,179 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-shardingsphere",
+      "name": "Apache ShardingSphere",
+      "description": "Distributed database ecosystem comprising ShardingSphere-JDBC (an in-application library that does not directly provide external services) and ShardingSphere-Proxy (which provides external services through database protocols with user/password authentication), plus the ElasticJob and ElasticJob-UI sub-projects. The security page is primarily a reporting policy that also declares several classes of reports the community does not accept.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://shardingsphere.apache.org/community/en/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://shardingsphere.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "shardingsphere"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://shardingsphere.apache.org/community/en/security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-jdbc-improper-use",
+        "name": "ShardingSphere-JDBC exploited through improper use by the integrating application",
+        "description": "ShardingSphere-JDBC does not directly provide external services; users write code to use it, and ShardingSphere cannot control how that code is written. The community does not accept security reports where ShardingSphere-JDBC is exploited due to improper use, for example a user introducing a MySQL Connector/J version with known vulnerabilities, or trusting externally-input JDBC URLs as the data source configuration.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-vet-application-usage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-proxy-known-password",
+        "name": "Attacks presupposing knowledge of the ShardingSphere-Proxy user password",
+        "description": "ShardingSphere-Proxy provides external services through database protocols and authenticates based on user passwords; users must ensure the security of those passwords themselves. The community does not accept security reports that presuppose the attacker knows the ShardingSphere-Proxy user password. The same applies to ElasticJob-UI: reports presupposing the attacker knows the user's password are not accepted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "mitigations": [
+          "control-protect-passwords"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-middleware-compromise",
+        "name": "Exploitation via compromised cluster middleware such as ZooKeeper",
+        "description": "ShardingSphere cluster mode relies on middleware such as ZooKeeper and trusts the middleware provided by users; ElasticJob likewise relies on and trusts the user-provided ZooKeeper. Users must protect such middleware themselves; the community does not accept security reports where ShardingSphere or ElasticJob is exploited because middleware such as ZooKeeper was attacked.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-secure-middleware"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-non-default-dependencies",
+        "name": "Vulnerabilities in dependencies not included by default in releases",
+        "description": "For dependencies not included by default in the ShardingSphere release version, users are required to ensure the security of those dependencies. For example, the release does not include MySQL Connector/J by default, so reports that ShardingSphere is exploited due to a vulnerability in MySQL Connector/J itself are not accepted; the same applies to other non-bundled dependencies.",
+        "origin": "structural",
+        "mitigations": [
+          "control-vet-application-usage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unmaintained-ui",
+        "name": "Vulnerabilities in the unmaintained ShardingSphere-UI",
+        "description": "ShardingSphere-UI is no longer maintained; the community will no longer accept any security issue reports related to ShardingSphere-UI.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-elasticjob-ui-exposure",
+        "name": "Exposure of ElasticJob-UI beyond the intranet",
+        "description": "ElasticJob-UI provides a job management and control platform for developers and operations personnel, not directly for Internet users. It is recommended to deploy it only on the intranet and to avoid leakage of user passwords.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-intranet-deployment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-protect-passwords",
+      "name": "Protect ShardingSphere-Proxy and UI user passwords",
+      "description": "Users must ensure the security of ShardingSphere-Proxy user passwords and avoid leakage of ElasticJob-UI user passwords.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-secure-middleware",
+      "name": "Protect cluster middleware such as ZooKeeper",
+      "description": "Protect the middleware (such as ZooKeeper) that ShardingSphere cluster mode and ElasticJob rely on; ShardingSphere trusts the middleware provided by users.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-vet-application-usage",
+      "name": "Use ShardingSphere-JDBC properly and vet added dependencies",
+      "description": "Do not trust externally-input JDBC URLs as data source configuration, and ensure the security of dependencies not bundled by default in ShardingSphere releases (such as MySQL Connector/J).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-intranet-deployment",
+      "name": "Deploy ElasticJob-UI only on the intranet",
+      "description": "Deploy ElasticJob-UI only on the intranet, since the platform serves developers and operations personnel rather than Internet users.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

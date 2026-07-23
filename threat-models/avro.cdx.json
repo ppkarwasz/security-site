@@ -1,0 +1,144 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-avro",
+      "name": "Apache Avro",
+      "description": "Data serialization library implementations designed to read and write any data conforming to a schema. Transport is outside the scope of the Avro library. The project shares the security policy of the Apache Software Foundation. In short, using Avro is safe provided applications are surrounded by security measures that prevent attackers from writing random data and otherwise interfering with the consumers of schemas, avoid leaking data (for example by catching and handling exceptions), have a secured supply chain, and validate user-provided schemas after parsing.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://avro.apache.org/project/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://avro.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "avro"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://avro.apache.org/project/security/"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/avro/main/doc/content/en/project/Security/_index.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-untrusted-data-injection",
+        "name": "Attackers writing random data or interfering with schema consumers",
+        "description": "Transport is outside the scope of the Avro library: applications using Avro should be surrounded by security measures that prevent attackers from writing random data and otherwise interfering with the consumers of schemas.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-surrounding-security-measures"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-side-channel-leakage",
+        "name": "Data leakage into side channels such as log files",
+        "description": "Although the Avro library will not read or write data except as directed by invoking it, avoiding leaking data into a side channel like log files is a non-goal security-wise for Avro. Applications need to catch and handle exceptions instead of simply writing them to a log file.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-handle-exceptions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-environment-code-execution",
+        "name": "Execution of environment-provided code",
+        "description": "In some cases, like schema parsing, type conversions and based on explicit schema properties, Avro can execute code provided by the environment. Avro has opt-in mechanisms for code that is eligible for execution; applications must ensure code registered to be executed is safe. The supply chain also includes the schemas being used: if they are user provided, additional validation is strongly advised. Such validation can use the parsed schema, as schema parsing itself is safe: the parser allows SPIs but is not otherwise configurable.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-optin-code-execution",
+          "control-secure-supply-chain",
+          "control-validate-user-schemas"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-surrounding-security-measures",
+      "name": "Surround Avro with transport and access security measures",
+      "description": "Applications using Avro should be surrounded by security measures that prevent attackers from writing random data and otherwise interfering with the consumers of schemas; transport security is the application's responsibility.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-handle-exceptions",
+      "name": "Catch and handle exceptions instead of logging them",
+      "description": "Avoid leaking data into side channels like log files by catching and handling exceptions rather than simply writing them to a log file.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-optin-code-execution",
+      "name": "Opt-in mechanisms for executable code",
+      "description": "Avro has opt-in mechanisms for code that is eligible for execution during schema parsing, type conversions, and via explicit schema properties; no such code runs without registration.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-secure-supply-chain",
+      "name": "Secure the supply chain of registered code and schemas",
+      "description": "Applications using Avro should have a secured supply chain, ensuring code registered to be executed is safe. The supply chain also includes the schemas being used.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-validate-user-schemas",
+      "name": "Validate user-provided schemas after parsing",
+      "description": "If schemas are user provided, additional validation is strongly advised; validation can use the parsed schema, as schema parsing itself is safe.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,601 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-doris",
+      "name": "Apache Doris",
+      "description": "MPP analytical (OLAP) database. Clients submit SQL over the MySQL wire protocol or Arrow Flight; queries are parsed and planned by the FE (Frontend, Java) and executed by the BE (Backend, C++) against locally managed columnar storage and/or external lakehouse catalogs (Hive, Iceberg, Hudi, Paimon, JDBC, S3/HDFS/Azure). Two deployment shapes are in model: classic on-prem (FE+BE+Broker) and the cloud-native variant (storage-compute disaggregated, shared multi-tenant Meta Service, K8s-native). The threat model is v1.0, accepted, with maintainer-confirmed claims (2 documented / 88 maintainer / 0 inferred).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/doris/blob/master/threat-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://doris.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "doris"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/doris/blob/master/threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/doris/master/threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-doris",
+      "name": "Doris cluster trust zones",
+      "description": "Three concentric trust zones with a tenant boundary inside the cloud Meta Service: Zone-0 untrusted clients on the client-facing ports (MySQL 9030, HTTP 8030, FE Arrow Flight 8070, BE Arrow Flight 8050); Zone-1 the cluster-core processes (FE JVM, BE C++ process, cloud Meta Service); Zone-2 the cluster-internal network (FE-FE, FE-BE, BE-BE, FE-Broker, FE-MetaService links) trusted by network isolation; Zone-3 external systems (Hive, Iceberg, Hudi, Paimon, JDBC, S3, HDFS, Azure) trusted by admin connection. The single load-bearing trust transition is Zone-0 to Zone-1 at the client-facing ports.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-fe",
+          "type": "service",
+          "name": "FE (Frontend, Java)",
+          "description": "Parses and plans SQL; exposes MySQL 9030, HTTP 8030, and FE Arrow Flight 8070 to clients, plus internal RPC 9020 and edit-log 9010. Runs on JDK 17; auth backends: native, LDAP, Kerberos, OIDC.",
+          "zone": "zone-cluster-core"
+        },
+        {
+          "bom-ref": "asset-be",
+          "type": "service",
+          "name": "BE (Backend, C++)",
+          "description": "Executes queries against columnar storage. BE Arrow Flight 8050 is client-facing (Zone-0); BRPC 8060, webserver 8040, heartbeat 9050, and BE-BE 9060 are cluster-internal. UDFs (Java default-on; Python requires a BE opt-in to execute) run with full BE process privileges.",
+          "zone": "zone-cluster-core"
+        },
+        {
+          "bom-ref": "asset-meta-service",
+          "type": "service",
+          "name": "Cloud Meta Service",
+          "description": "Cloud-variant shared, multi-tenant metadata service (with Recycler and Resource Manager). Per-tenant isolation enforced inside the Meta Service is a security claim of the project: cross-tenant leak or escalation is VALID.",
+          "zone": "zone-cluster-core"
+        },
+        {
+          "bom-ref": "asset-internal-network",
+          "type": "network",
+          "name": "Cluster-internal network",
+          "description": "FE-FE, FE-BE, BE-BE, FE-Broker, and FE-MetaService links, trusted by operator-provided network isolation; internal RPC has no mutual authentication and accepts any peer that can connect at the network layer.",
+          "zone": "zone-cluster-internal"
+        },
+        {
+          "bom-ref": "asset-external-catalogs",
+          "type": "data-store",
+          "name": "External catalogs and storage",
+          "description": "Hive Metastore, Iceberg, Hudi, Paimon, JDBC sources, S3, HDFS, Azure Blob: metadata and data files (Parquet, ORC, Avro, JSON, CSV) trusted by admin connection.",
+          "zone": "zone-external"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Zone-0: clients",
+          "type": "trust",
+          "description": "Untrusted MySQL/HTTP/Arrow Flight clients, including anonymous network attackers and authenticated SQL users bounded by RBAC."
+        },
+        {
+          "bom-ref": "zone-cluster-core",
+          "name": "Zone-1: cluster-core processes",
+          "type": "trust",
+          "description": "FE JVM, BE C++ process, and the cloud Meta Service (which additionally enforces the per-tenant boundary inside this zone)."
+        },
+        {
+          "bom-ref": "zone-cluster-internal",
+          "name": "Zone-2: cluster-internal network",
+          "type": "trust",
+          "description": "Internal ports and links trusted by network isolation; an attacker reaching them is presumed to have already compromised the operator's network."
+        },
+        {
+          "bom-ref": "zone-external",
+          "name": "Zone-3: external systems",
+          "type": "trust",
+          "description": "External catalogs and storage, trusted by admin connection."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-ports",
+          "name": "Client-facing ports",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster-core"
+          ]
+        },
+        {
+          "bom-ref": "boundary-internal",
+          "name": "Cluster-internal links",
+          "type": "trust",
+          "zones": [
+            "zone-cluster-core",
+            "zone-cluster-internal"
+          ]
+        },
+        {
+          "bom-ref": "boundary-external",
+          "name": "External catalog connections",
+          "type": "trust",
+          "zones": [
+            "zone-cluster-core",
+            "zone-external"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Supported platform: Linux x86_64 and aarch64; FE on JDK 17; BE built with GCC 11+ libstdc++ or an equivalent conformant toolchain. Anything else is a non-default build."
+        },
+        {
+          "description": "The cluster-internal network is a security boundary provided by the operator (VPC, firewall, K8s NetworkPolicy); direct internet exposure of any Doris-listened port is an unsupported deployment that collapses the trust model."
+        },
+        {
+          "description": "BE assumes ownership of storage_root_path directories; concurrent external mutation is undefined. Clock rollback is not an attacker capability."
+        },
+        {
+          "description": "Negative claims (code-verified): BE spawns subprocesses only for Python UDF execution, Python venv creation, Broker shell utilities, and the CDC client; FE installs no custom signal handlers; consumed environment variables are enumerated and passwords are never read from the environment."
+        },
+        {
+          "description": "Vendored MySQL sources, samples/dev/CI directories, all FE plugins (including auditloader), and the separately versioned SDK/extension/CDC client code are shipped but not threat-modeled."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-preauth-memory-safety",
+        "name": "Memory-safety violation from untrusted client bytes",
+        "description": "Crafted bytes on a client-facing port (MySQL handshake or auth bytes, SQL text post-auth, HTTP request bytes, FE or BE Arrow Flight handshake and result-stream traffic) causing an FE JVM or BE crash, out-of-bounds access, information disclosure, or parser RCE. Memory safety on these untrusted inputs is a security-critical claimed property, pre- and post-auth.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe",
+          "asset-be"
+        ],
+        "mitigations": [
+          "control-memory-safety"
+        ]
+      },
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass or session hijack",
+        "description": "A wrong credential authenticating, or session hijack, against the MySQL, HTTP, FE Arrow Flight, or BE Arrow Flight authentication (configurable backends: native, LDAP, Kerberos, OIDC) is security-critical. Note: FE HTTP auth honors only the Authorization header (Basic/Bearer) or the PALO_SESSION_ID cookie; reverse-proxy headers such as X-Forwarded-User are not trusted and that pattern is unsupported.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe",
+          "asset-be"
+        ],
+        "mitigations": [
+          "control-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-rbac-bypass",
+        "name": "RBAC bypass by an authenticated user",
+        "description": "An authenticated user reading, modifying, or discovering the existence of objects outside their grant scope: privilege escalation, reading rows, tables, databases, or metadata not granted. Security-critical; side-channel inference is excluded.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe"
+        ],
+        "mitigations": [
+          "control-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-tenant",
+        "name": "Cross-tenant leak or escalation through the cloud Meta Service",
+        "description": "In the cloud variant, tenant T1 requests must not see tenant T2 metadata or data: cross-tenant metadata read, data read, or privilege escalation through the shared Meta Service is a VALID, security-critical finding. OS/K8s/hypervisor isolation between co-tenant pods is the cloud operator's job, not Doris'.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-meta-service"
+        ],
+        "mitigations": [
+          "control-tenant-isolation",
+          "control-cloud-host-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-credentials",
+        "name": "Credential sniffing on plaintext client connections",
+        "description": "TLS is off by default on all client ports and off IS the supported production posture, so 'credentials sniffable in default config' is disclaimed by design (BY-DESIGN: property-disclaimed). Operators must enable TLS on client ports, or layer mTLS/VPN externally, if the network is not acceptably trusted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe",
+          "asset-be"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-brute-force",
+        "name": "Credential brute force against accounts without lockout",
+        "description": "Doris ships numFailedLogin = 0 and passwordLockSeconds = 0: no default pre-auth lockout. The per-user lockout mechanism exists and must work when configured (a configured lockout failing to take effect is security-critical), but brute-forcing an account in default config is disclaimed by design; enabling lockout per user is the operator's obligation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe"
+        ],
+        "mitigations": [
+          "control-enable-lockout"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-query-dos",
+        "name": "Denial of service via pathological SQL",
+        "description": "A single authenticated SQL user submitting an unbounded-resource query (for example a huge cross join causing BE OOM) is not a Doris bug: the project makes no quantitative or categorical resource guarantee on post-auth queries. Operators must constrain users via exec_mem_limit, Workload Groups, and max_connections / max_connection_per_user.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-be",
+          "asset-fe"
+        ],
+        "mitigations": [
+          "control-resource-caps"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-internal-network-attacker",
+        "name": "Attacks from inside the cluster network",
+        "description": "An attacker reaching cluster-internal ports (BE BRPC 8060, BE webserver 8040, FE edit-log 9010, FE RPC 9020, heartbeat 9050, BE-BE 9060, the FS broker) is presumed to have already compromised the operator's network and is out of model. Internal RPC has no mutual authentication and no encryption; scanner reports about unauthenticated internal ports are known non-findings. Byzantine FE followers and BE replicas are also out of model (honest peers assumed).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-internal-network"
+        ],
+        "mitigations": [
+          "control-network-perimeter"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-super-udf-rce",
+        "name": "Code execution via SUPER-privileged features (UDFs, JDBC catalogs, admin config)",
+        "description": "UDF code (Java JAR, C++ .so, Python script) and JDBC driver JARs are SUPER-installed trusted input running with full BE process privileges; there is no sandbox. RCE achievable only after acquiring SUPER (UDF install, JDBC driver attach, FE plugin registration, ADMIN SET CONFIG) is out of model: SUPER holders are trusted by definition and must be treated as having local code execution on every BE. Java UDF support is on by default, so SUPER discipline is load-bearing in the default config.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-be"
+        ],
+        "mitigations": [
+          "control-super-discipline"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-create-catalog",
+        "name": "SSRF via Iceberg REST catalog URL",
+        "description": "An authenticated user holding CREATE CATALOG (but not SUPER) can attach an external catalog whose iceberg.rest.uri is an attacker-supplied URL, causing FE to issue HTTP requests to internal hosts; the URL is not validated and localhost/private IPs are not blocked. A real, named surface, with mitigation on the operator side: restrict the CREATE CATALOG privilege to administrators, or apply egress controls at the FE host.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fe"
+        ],
+        "mitigations": [
+          "control-restrict-create-catalog"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-external-data",
+        "name": "Malicious data or metadata from connected external catalogs",
+        "description": "Bytes returned from admin-connected catalogs (Hive, Iceberg, Hudi, Paimon, JDBC, S3/HDFS/Azure) are trusted; crashes from crafted Parquet/ORC/Avro/JSON files, decompression or deserialization bombs, and JDBC drivers that execute code on connection are OUT-OF-MODEL: trusted-input. Admins must audit every external catalog and JDBC driver JAR before connecting it.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-external-catalogs",
+          "asset-be"
+        ],
+        "mitigations": [
+          "control-audit-catalogs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-false-friend-features",
+        "name": "Misuse of false-friend features as security controls",
+        "description": "Features that look security-relevant but are not: md5()/sha1() are checksum/compatibility functions, not cryptographic primitives; password() is not a KDF; AES_ENCRYPT/DES_ENCRYPT are not a managed-key envelope (ECB and IV-reuse pitfalls unmitigated, DES broken); audit logs are not tamper-evident; Workload Group is resource QoS, not a security isolation boundary; Resource Tag is a tablet scheduling hint, not tenant isolation; the web UI is not a security boundary against an authenticated user; the LDAP cache is no backstop for LDAP compromise. Also left to the caller/operator: SQL injection in applications concatenating queries, credential leakage in BI tools, and exfiltration channels opened by granting LOAD_PRIV/EXPORT_PRIV to low-privilege users.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-ports",
+        "boundary": "boundary-client-ports",
+        "name": "Client-facing ports trust boundary",
+        "description": "The single load-bearing trust transition (Zone-0 to Zone-1): MySQL 9030, HTTP 8030, FE Arrow Flight 8070, and BE Arrow Flight 8050. Bytes are attacker-controlled before and during auth, and SQL is untrusted (RBAC-enforced) after auth.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-preauth-memory-safety",
+          "threat-authentication-bypass",
+          "threat-rbac-bypass",
+          "threat-plaintext-credentials",
+          "threat-credential-brute-force",
+          "threat-query-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-memory-safety",
+          "control-authentication",
+          "control-rbac",
+          "control-enable-tls",
+          "control-enable-lockout",
+          "control-resource-caps"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-internal",
+        "boundary": "boundary-internal",
+        "name": "Cluster-internal trust boundary",
+        "description": "All cluster-internal links are trusted by network isolation; there is no mutual authentication or per-call auth on internal RPC, and protecting these ports is the operator's responsibility.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-internal-network-attacker"
+        ],
+        "controlsAtBoundary": [
+          "control-network-perimeter"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-external",
+        "boundary": "boundary-external",
+        "name": "External catalog trust boundary",
+        "description": "External catalog metadata and data files are trusted by admin connection (Zone-3); pointing Doris at untrusted catalogs or file systems is the admin's decision and out of model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-external-data",
+          "threat-ssrf-create-catalog"
+        ],
+        "controlsAtBoundary": [
+          "control-audit-catalogs",
+          "control-restrict-create-catalog"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-memory-safety",
+      "name": "Memory safety on untrusted client input",
+      "description": "Memory safety on untrusted MySQL handshake/auth bytes, SQL text, HTTP request bytes, and FE/BE Arrow Flight bytes, pre- and post-auth, is a security-critical claimed property of FE and BE.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-fe",
+        "asset-be",
+        "boundary-client-ports"
+      ]
+    },
+    {
+      "bom-ref": "control-authentication",
+      "name": "Client authentication",
+      "description": "Authentication of MySQL, HTTP, FE Arrow Flight, and BE Arrow Flight clients when credentials are presented, with configurable backends: native, LDAP, Kerberos, OIDC.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-ports"
+      ]
+    },
+    {
+      "bom-ref": "control-rbac",
+      "name": "RBAC enforcement",
+      "description": "An authenticated user cannot read, modify, or discover the existence of objects outside their grant scope when RBAC is configured.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-fe"
+      ]
+    },
+    {
+      "bom-ref": "control-tenant-isolation",
+      "name": "Per-tenant isolation inside the cloud Meta Service",
+      "description": "In the cloud variant, per-tenant isolation is enforced inside the shared Meta Service; tenant T1 requests must not see tenant T2 metadata or data.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-meta-service"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS on client ports",
+      "description": "Enable TLS (enable_ssl) on client-facing ports if the network is not acceptably trusted, or layer mTLS/VPN externally; TLS is off by default and off is the supported production posture.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-ports"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-lockout",
+      "name": "Enable per-user pre-auth lockout",
+      "description": "Enable per-user login lockout for any account reachable from a network-adjacent attacker: CREATE USER ... FAILED_LOGIN_ATTEMPTS N PASSWORD_LOCK_TIME T (a reasonable start: 5 attempts, 300 seconds). Doris ships no default lockout; the mechanism is available and must work when configured.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fe"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-caps",
+      "name": "Configure resource caps",
+      "description": "Before granting access to any user not fully trusted, configure the canonical knob set: exec_mem_limit (per-query memory), Workload Groups via CREATE WORKLOAD GROUP (recommended production posture for per-user/group memory, CPU, and concurrency caps), and max_connections / max_connection_per_user (FE config, prevents connection exhaustion).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fe",
+        "asset-be"
+      ]
+    },
+    {
+      "bom-ref": "control-network-perimeter",
+      "name": "Network perimeter around all Doris ports",
+      "description": "Place every Doris-listened port behind a network perimeter so that only the client-facing ports are reachable from authorized clients; internal ports must be reachable only by other Doris processes in the same cluster. Never expose BE webserver 8040 or BRPC 8060 outside the cluster network, and configure auth if BE Arrow Flight 8050 is reachable.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-internal-network",
+        "boundary-internal"
+      ]
+    },
+    {
+      "bom-ref": "control-super-discipline",
+      "name": "Treat SUPER as local code execution",
+      "description": "Treat SUPER (and equivalent) privileges as equivalent to local code execution on every BE in the cluster: anyone who can install a UDF, attach a JDBC catalog, or set arbitrary ADMIN SET CONFIG values can run arbitrary code on the BE process. Do not grant EXECUTE on a UDF to non-admin users without understanding it runs with full BE privileges; rotate credentials and do not embed root credentials in BI tools.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-be"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-create-catalog",
+      "name": "Restrict the CREATE CATALOG privilege",
+      "description": "Restrict CREATE CATALOG to administrators; granting it to low-privilege users lets them issue HTTP requests from FE to attacker-chosen URLs (SSRF via the Iceberg REST catalog URL). If it must be granted more broadly, apply network egress controls at the FE host level.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fe"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-catalogs",
+      "name": "Audit external catalogs and JDBC drivers",
+      "description": "Audit every external catalog before connecting it and every JDBC driver JAR before attaching a JDBC catalog that uses it; external bytes are trusted once connected.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-external-catalogs",
+        "boundary-external"
+      ]
+    },
+    {
+      "bom-ref": "control-cloud-host-isolation",
+      "name": "K8s and host-level isolation for cloud deployments",
+      "description": "For cloud deployments, rely on the Meta Service's per-tenant isolation for the tenant data boundary, and additionally enforce K8s NetworkPolicy, namespace isolation, and node-level isolation for OS-layer defense; host-level isolation is the cloud operator's job.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-meta-service"
+      ]
+    }
+  ]
+}

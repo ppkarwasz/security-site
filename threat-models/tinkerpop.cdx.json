@@ -1,0 +1,712 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-tinkerpop",
+      "name": "Apache TinkerPop",
+      "description": "Graph computing framework: the Gremlin query language, the traversal machine, Gremlin Server (remote query execution over HTTP/1.1), the GraphSON and GraphBinary wire serializers, the Gryo IO format, the reference in-memory graph TinkerGraph, and the Gremlin Language Variants (Java, Python, .NET, Go, JavaScript). Gremlin runs embedded in the caller's JVM or remotely against Gremlin Server; the threat model focuses on the remote, network-facing, and deserialization surfaces.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/tinkerpop/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://tinkerpop.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tinkerpop"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/tinkerpop/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/tinkerpop/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-tinkerpop",
+      "name": "Gremlin Server remote deployment",
+      "description": "Architecture described by the TinkerPop threat model: remote clients (GLVs) submit Gremlin over HTTP/1.1 to Gremlin Server, which authenticates, deserializes the request body (GraphSON/GraphBinary), authorizes, parses and executes via the script engine and traversal machine against the graph, and encodes responses back to the client. The io() file surface feeds graph data from disk. The operator controls gremlin-server.yaml, serializers, auth, and TLS.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-gremlin-server",
+          "type": "service",
+          "name": "Gremlin Server",
+          "description": "HTTP/1.1 endpoint (HttpChannelizer, the only transport) accepting gremlin-lang string requests with GraphSON/GraphBinary serialization; the primary network-facing trust boundary. Intended to be deployable on the public internet once hardened; the shipped gremlin-server.yaml is a getting-started config that must not be deployed as-is.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-script-engine",
+          "type": "module",
+          "name": "Script engine",
+          "description": "Evaluates the request's script string. The shipped default GremlinLangScriptEngine parses only Gremlin and is not a code-execution surface; the optional gremlin-groovy engine evaluates arbitrary code in-process and is unrestricted out of the box where added.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-gremlin-parser",
+          "type": "module",
+          "name": "Gremlin and GQL language parsers",
+          "description": "ANTLR grammars for string Gremlin (gremlin-language) and for the GQL string of a match(String) request (gql-gremlin, active on the default distribution via TinkerGraph). Must not crash, hang, or OOM on malformed input, nor let a crafted string break out of a literal to inject steps.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-serializers",
+          "type": "component",
+          "name": "Wire and IO serializers",
+          "description": "GraphSON and GraphBinary wire readers parse untrusted request bytes (server side) and untrusted response bytes (GLV side). Gryo (Kryo) is IO-format-only, not on the wire, and defaults to a locked registration allow-list (registrationRequired=true). The GraphML reader disables external entities and DTDs by default.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-tinkergraph",
+          "type": "data-store",
+          "name": "TinkerGraph reference graph",
+          "description": "In-memory reference graph, the shipped default, with optional file persistence via the io() readers; reference code on the default reachable path, so defects in unmodified TinkerGraph are valid findings.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-glvs",
+          "type": "component",
+          "name": "Gremlin Language Variants (client drivers)",
+          "description": "Java gremlin-driver, gremlin-python, gremlin-dotnet, gremlin-go, gremlin-javascript: build requests and deserialize server responses. Response-deserialization robustness and TLS certificate validation are in-model per language.",
+          "zone": "zone-clients"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Remote clients",
+          "type": "trust",
+          "description": "Network clients (GLVs, gremlin-console as a remote client, gremlin-mcp) submitting requests; trust depends entirely on whether the operator enabled authentication, authorization, and script restrictions. Authentication is off in the shipped default (AllowAllAuthenticator)."
+        },
+        {
+          "bom-ref": "zone-server",
+          "name": "Gremlin Server process",
+          "type": "trust",
+          "description": "The server JVM: HTTP layer, script engine, parsers, traversal machine, serializers, and graph."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operator and host",
+          "type": "trust",
+          "description": "gremlin-server.yaml, the host, and the graph data directory; an attacker who controls them already has the operator's authority and is out of model."
+        },
+        {
+          "bom-ref": "zone-files",
+          "name": "Graph IO files",
+          "type": "trust",
+          "description": "On-disk or cluster bytes read through the io() step, persistence, or OLAP (Gryo, GraphSON, GraphML); untrusted only if the caller loads untrusted files."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http",
+          "name": "Remote request/response surface",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-io",
+          "name": "Graph IO file surface",
+          "type": "trust",
+          "zones": [
+            "zone-files",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-config",
+          "name": "Operator configuration surface",
+          "type": "trust",
+          "zones": [
+            "zone-operator",
+            "zone-server"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-remote-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Remote client"
+              }
+            ],
+            "persona": {
+              "description": "Connects over HTTP/1.1 and submits Gremlin as a gremlin-lang string (or, if gremlin-groovy is explicitly enabled, a Groovy script). Trust level depends entirely on whether the operator enabled authentication, authorization, and script restrictions."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-provider",
+          "party": {
+            "roles": [
+              {
+                "name": "Application / provider"
+              }
+            ],
+            "persona": {
+              "description": "Runs gremlin-core directly, embedded or as Gremlin Server, and may supply the Authenticator/Authorizer implementations the server runs. Trusted within the compile-time and configuration boundary; defects in the provider's own code or modifications route to the provider."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Runs Gremlin Server; controls gremlin-server.yaml, serializers, auth, TLS, the script engine configuration, and the host. Trusted for the instance."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Gremlin Server is safe enough to run on the public internet once hardened beyond the shipped gremlin-server.yaml, at minimum with TLS plus an authenticator; the insecure getting-started default is a testing convenience, not a supported production posture."
+        },
+        {
+          "description": "Auth/authz is a shared responsibility: the provider supplies the policy (Authenticator/Authorizer plugins; no authorizer ships), while Gremlin Server owns the enforcement machinery that runs them on every request."
+        },
+        {
+          "description": "The graph data and config directories are private to the server process and not writable by untrusted local users; an attacker who can write them already has the operator's authority."
+        },
+        {
+          "description": "The standard request path is isolated per request (thread-pool dispatch, per-request script bindings); transactions are the deliberate stateful exception."
+        },
+        {
+          "description": "Gremlin Server authenticates before deserializing the request body, so on a deployment with an authenticator the body deserializers are a post-auth surface; the HTTP protocol layer itself remains pre-auth on every deployment."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-auth-bypass",
+        "name": "Bypass of configured authentication, authorization, or restrictions",
+        "description": "An unauthenticated or unauthorized client executes requests beyond its grants despite a configured Authenticator/Authorizer, or a request evades a configured restriction living in server configuration (script sandbox, compilation customizer, allow-list, or a TraversalStrategy pinned by an Authorizer). Security-critical violation of the enforcement property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "mitigations": [
+          "control-enable-auth",
+          "control-supply-authorizer",
+          "control-bcrypt-credentials"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-request-dos",
+        "name": "Server crash, OOM, or hang from malformed or pre-auth input",
+        "description": "Malformed HTTP messages, Gremlin strings, or serialized payloads crash, hang, or exhaust Gremlin Server instead of yielding a clean error. The HTTP/1.1 transport layer (request line, headers, chunked/streamed bodies, keep-alive sequences) is itself a pre-auth surface on every deployment, bounded only by maxRequestContentLength before credentials are checked. Security-critical (remote DoS) when pre-auth.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server",
+          "asset-gremlin-parser"
+        ],
+        "mitigations": [
+          "control-request-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-breakout",
+        "name": "Gremlin or GQL grammar breakout / step injection",
+        "description": "A crafted string breaks out of a string literal in the gremlin-language (or gql-gremlin) grammar to inject additional traversal steps, violating the safe string-to-traversal path. Distinct from the calling application building a Groovy string by concatenation, which is the application's concern. Critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-parser"
+        ],
+        "mitigations": [
+          "control-default-lang-engine"
+        ]
+      },
+      {
+        "bom-ref": "threat-deserializer-gadget",
+        "name": "Deserializer code execution or gadget instantiation",
+        "description": "GraphSON, GraphBinary, or Gryo in its locked default (registrationRequired=true) reading attacker bytes leads to arbitrary object instantiation, code execution, or XXE beyond the registered type set, or a registered type's (de)serializer crashes/OOMs the reader, on the server (request) or GLV (response) side. Includes the PDT hydration mechanism, which must stay inert with no registry configured and instantiate only registered types when configured. Critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-serializers"
+        ],
+        "mitigations": [
+          "control-locked-gryo"
+        ]
+      },
+      {
+        "bom-ref": "threat-request-state-leak",
+        "name": "Cross-request state leakage or interference",
+        "description": "One request's bindings or state leaks into or alters another's despite per-request bindings and thread-pool dispatch. Transactions are the deliberate stateful exception. Security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ]
+      },
+      {
+        "bom-ref": "threat-amplification-dos",
+        "name": "Amplification denial of service from small valid input",
+        "description": "A grammatically valid string the parser accepts enables DoS from small input, e.g. ReDoS via a pathological regex pattern, super-linear amplification, a missing-where-expected limit, or an unbounded traversal. This is the in-model half of the resource split; ordinary expensive traversals are operator capacity. With the opt-in gremlin-groovy engine, unbounded compiled-script cache growth from distinct unparameterized scripts is a documented remote DoS unless bounded.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server",
+          "asset-gremlin-parser"
+        ],
+        "mitigations": [
+          "control-request-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-server-response",
+        "name": "GLV compromise by a hostile server response",
+        "description": "A malicious or compromised server, or a network attacker when TLS is off or certificates are not validated, returns crafted response bytes that crash, OOM, or execute code in a Gremlin Language Variant, or harvests the credentials the client sends with its request. GLV robustness against hostile responses is in-model; a driver configured without TLS/certificate validation is a misconfiguration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-glvs"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-groovy-script-rce",
+        "name": "Arbitrary code execution via enabled Groovy scripting",
+        "description": "When an operator enables the optional gremlin-groovy engine, submitted scripts (and string lambdas) have access to the full power of the language and the JVM; evaluating attacker-supplied Groovy is arbitrary code execution on the server by design, not a bug, for any principal the deployment permits to script. The shipped default GremlinLangScriptEngine parses only Gremlin. Only a bypass of a configured restriction is a finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-script-engine"
+        ],
+        "mitigations": [
+          "control-default-lang-engine",
+          "control-restrict-groovy",
+          "control-enable-auth"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-no-tls-default",
+        "name": "Traffic interception on the no-TLS, no-auth shipped default",
+        "description": "TLS is off in the shipped default (ssl.enabled: false) and authentication is off (AllowAllAuthenticator), so an exposed unhardened server is reachable by anyone on the network and traffic (including client credentials) can be read or modified in transit. Operator deployment concern, not a code bug; pre-auth robustness properties still apply to the exposed surface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "mitigations": [
+          "control-enable-tls",
+          "control-enable-auth"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-strategy-removal",
+        "name": "Traversal strategy removal or bypass",
+        "description": "A TraversalStrategy is not an access-control boundary on its own: the Gremlin language lets any request remove or replace strategies (withoutStrategies()), PartitionStrategy is bypassable via direct Vertex.property(), and ReservedKeysVerificationStrategy does not cover mergeV/mergeE. A strategy only restricts a client when a configured Authorizer denies its removal; a finding exists only where such a pin is evaded.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "mitigations": [
+          "control-supply-authorizer"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-transaction-sharing",
+        "name": "Transaction sharing across clients (known problem)",
+        "description": "A transaction is identified by a server-generated UUID and looked up with no owning-user check, so any client presenting a valid id accesses that transaction's state. Accepted as how Gremlin Server works today (the enforcement property explicitly excepts it); a deployment needing per-user isolation must use a provider that adds it.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ordinary-resource-exhaustion",
+        "name": "Ordinary resource exhaustion from expensive traversals",
+        "description": "Expensive traversals and large results that consume CPU/memory are an operator capacity concern, not a defended property, unless a specific bug applies (super-linear amplification, missing-where-expected limit, unbounded traversal). Gremlin Server has per-request limits but no traversal-depth or result-count cap.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "mitigations": [
+          "control-request-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unlocked-gryo",
+        "name": "Reading untrusted files through unlocked Gryo",
+        "description": "Running Gryo with registrationRequired=false is not a safe boundary against untrusted bytes and is the user's responsibility; even locked, a few registered types use Java native serialization (a gadget caveat). Gryo is not on the wire, so this is an IO/file-surface concern only.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-serializers"
+        ],
+        "mitigations": [
+          "control-locked-gryo"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-gremlin-injection",
+        "name": "Gremlin injection by the calling application",
+        "description": "A calling application that builds a Gremlin/Groovy string by concatenating its own untrusted input owns the resulting injection; a safe-language script engine is not a sandbox for the application's own injection. The GLV must not itself be harmed by a pass-through string (that half is in-model), but the server-side effect is the application's responsibility.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-glvs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-no-audit-default",
+        "name": "No attribution or audit record by default",
+        "description": "Audit logging (enableAuditLog) is off by default for privacy reasons and absent from the shipped config, so a default deployment keeps no record of who ran which query; enabling it is the operator's responsibility.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gremlin-server"
+        ],
+        "mitigations": [
+          "control-audit-log"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http",
+        "boundary": "boundary-http",
+        "name": "Remote request surface",
+        "description": "Bytes arriving over HTTP/1.1 (request line, headers, serialized body carrying the Gremlin string) are untrusted; the server authenticates before deserializing the body, so body deserializers are post-auth where an authenticator is configured, while the HTTP layer is always pre-auth. The response direction crosses back to the GLV, for which server bytes are untrusted.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-auth-bypass",
+          "threat-malformed-request-dos",
+          "threat-parser-breakout",
+          "threat-deserializer-gadget",
+          "threat-amplification-dos",
+          "threat-groovy-script-rce",
+          "threat-no-tls-default",
+          "threat-hostile-server-response",
+          "threat-transaction-sharing"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-auth",
+          "control-supply-authorizer",
+          "control-enable-tls",
+          "control-request-limits",
+          "control-default-lang-engine",
+          "control-cors"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-io",
+        "boundary": "boundary-io",
+        "name": "Graph IO file surface",
+        "description": "Files read via the io() step, TinkerGraph persistence, or OLAP are untrusted only if the caller loads untrusted files; GraphSON, locked Gryo, and GraphML with the default XML factory owe deserializer integrity, while unlocked Gryo and caller-supplied unhardened XML factories are the caller's responsibility.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unlocked-gryo"
+        ],
+        "controlsAtBoundary": [
+          "control-locked-gryo"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-config",
+        "boundary": "boundary-config",
+        "name": "Operator configuration surface",
+        "description": "gremlin-server.yaml, the host, and the data directory are operator-trusted; a finding requiring control of them is out of model (trusted input).",
+        "trustLevel": "highly-trusted"
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-auth",
+      "name": "Enable authentication",
+      "description": "Configure an Authenticator before exposing Gremlin Server; authentication is off in the shipped default (no authentication block, AllowAllAuthenticator). The built-in SimpleAuthenticator over TLS is secure enough for public deployment as a baseline; production deployments commonly layer a provider Authenticator (SSO/bearer token) on top.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-supply-authorizer",
+      "name": "Supply and configure an Authorizer",
+      "description": "An Authorizer SPI exists but no implementation ships (AllowListAuthorizer is a test example), so there is no meaningful authorization out of the box; supply one for any non-trivial deployment, including to pin restrictive traversal strategies against removal via withoutStrategies().",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS",
+      "description": "TLS is off by default (ssl.enabled: false; enabled only in gremlin-server-secure.yaml). Enable it wherever traffic crosses an untrusted segment, and configure GLVs with TLS and certificate validation so credentials sent with requests are protected.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-default-lang-engine",
+      "name": "Groovy-free default script engine",
+      "description": "The shipped default GremlinLangScriptEngine parses only Gremlin: it can neither evaluate arbitrary code nor run lambdas, so the default string-request surface is a parser, not a code-execution surface. Prefer it over gremlin-groovy.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-script-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-groovy",
+      "name": "Restrict Groovy script execution where enabled",
+      "description": "If gremlin-groovy is needed, apply the documented Protecting Script Execution controls (sandbox, compilation customizers, allow-list), restrict who may submit scripts, bound classMapCacheSpecification, and prefer parameterized scripts; where added, gremlin-groovy is unrestricted out of the box and the docs are explicit that TinkerPop offers no complete out-of-the-box protection against nefarious scripts.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-script-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-locked-gryo",
+      "name": "Locked Gryo registration allow-list",
+      "description": "Gryo defaults to a registration allow-list (registrationRequired=true), so it is not an arbitrary-instantiation sink; disabling the lock removes the untrusted-input protection and is the user's responsibility. Gryo stays off the wire (wire set is GraphSON + GraphBinary).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-serializers",
+        "boundary-io"
+      ]
+    },
+    {
+      "bom-ref": "control-request-limits",
+      "name": "Per-request and transaction resource limits",
+      "description": "Apply the server's per-request limits (timeoutMillis, maxRequestContentLength, maxParameters, maxWorkQueueSize) and transaction bounds (idleTransactionTimeoutMillis, maxTransactionLifetimeMillis, maxConcurrentTransactions) appropriate to capacity; there is no traversal-depth or result-count cap.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gremlin-server"
+      ]
+    },
+    {
+      "bom-ref": "control-bcrypt-credentials",
+      "name": "BCrypt credential storage",
+      "description": "Where a deployment uses SimpleAuthenticator with the credentials graph, passwords are stored and verified as BCrypt hashes, never plaintext; a provider's own Authenticator and credential store are the provider's responsibility.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-gremlin-server"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-log",
+      "name": "Enable audit logging where attribution is needed",
+      "description": "enableAuditLog records the authenticated user, remote address, and gremlin query; off by default for privacy reasons, so enable it where attribution of requests is needed.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gremlin-server"
+      ]
+    },
+    {
+      "bom-ref": "control-cors",
+      "name": "Scope CORS allowed origins",
+      "description": "Scope cors.allowedOrigins to specific origins for browser-facing deployments; it defaults to [\"*\"].",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-fs-permissions",
+      "name": "Filesystem permissions on config and data",
+      "description": "Set filesystem permissions so only the server user can read the configuration and data directories.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-config"
+      ]
+    }
+  ]
+}

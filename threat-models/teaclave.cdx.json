@@ -1,0 +1,290 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-teaclave",
+      "name": "Apache Teaclave",
+      "description": "Trusted Execution Environment (TEE) application ecosystem. The main branch of apache/teaclave is a landing page with no enclave, Trusted Application, or TEE code, so there is no trust boundary or Trusted Computing Base to audit on main itself; the security model document is a map to scanning targets. The active experimental-web3 branch hosts a TEE-backed crypto-wallet custody gateway (vm/wallet-gateway); the cleanroom (2022 prototype) and legacy (deprecated, with its own security docs) branches host SGX FaaS-style platforms. The authoritative trust-boundary methodology is the Teaclave SGX SDK, TrustZone SDK, and dependency-crates security models; the common rule is that the TEE side is trusted while the host OS, clients, network, external feeds, and persisted storage are attacker-controlled and must be validated at the boundary.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/teaclave/blob/main/docs/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it. The document is intentionally brief: a map to scanning targets, not a full threat model; per-platform trust models live in the SDK repositories."
+        },
+        {
+          "type": "website",
+          "url": "https://teaclave.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "teaclave"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/teaclave/blob/main/docs/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/teaclave/main/docs/security-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-wallet-gateway",
+      "name": "Wallet gateway (experimental-web3 branch)",
+      "description": "The primary scanning target: a multi-crate wallet gateway custodying keys and signing blockchain transactions inside a TEE. The trust boundary is visible in the workspace layout: the task runner is split into a trusted half (task-runner-tee) and an untrusted host half (task-runner-normal), with the public edge, persistence, and outbound network on the untrusted side.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-task-runner-tee",
+          "type": "subsystem",
+          "name": "task-runner-tee and key material",
+          "description": "The TCB: the trusted task runner and the key/credential material it handles (credential-manager, the signing/wallet logic). Private keys and plaintext must never leave it.",
+          "zone": "zone-tee"
+        },
+        {
+          "bom-ref": "asset-api-edge",
+          "type": "api",
+          "name": "api-server and webapi",
+          "description": "The public client-facing edge on the untrusted host; every client request entering it is attacker-controlled input.",
+          "zone": "zone-host"
+        },
+        {
+          "bom-ref": "asset-db-service",
+          "type": "data-store",
+          "name": "db-service / db-manager",
+          "description": "Persistence in untrusted storage; everything read back must be treated as adversarial and be encrypted/authenticated (sealed) before leaving the TEE.",
+          "zone": "zone-host"
+        },
+        {
+          "bom-ref": "asset-net",
+          "type": "gateway",
+          "name": "net (outbound calls)",
+          "description": "Outbound calls to external, attacker-influenced services such as blockchain RPC (net/.../btc_rpc.rs) and price oracles (net/.../asset_price.rs); external data is untrusted.",
+          "zone": "zone-host"
+        },
+        {
+          "bom-ref": "asset-task-runner-normal",
+          "type": "process",
+          "name": "task-runner-normal and authority-server host surface",
+          "description": "The untrusted half of the task runner; the boundary crossing between task-runner-normal and task-runner-tee is a focus for review.",
+          "zone": "zone-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-tee",
+          "name": "Trusted (inside the TEE)",
+          "type": "trust",
+          "description": "The TCB: task-runner-tee, credential-manager, and the signing/wallet logic."
+        },
+        {
+          "bom-ref": "zone-host",
+          "name": "Untrusted (host / normal world)",
+          "type": "trust",
+          "description": "api-server, webapi, task-runner-normal, db-service/db-manager, net, and authority-server's host surface."
+        },
+        {
+          "bom-ref": "zone-external",
+          "name": "External services and clients",
+          "type": "trust",
+          "description": "Clients of the public edge and external attacker-influenced services (blockchain RPC, price oracles)."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-tee-edge",
+          "name": "TEE boundary",
+          "type": "trust",
+          "zones": [
+            "zone-host",
+            "zone-tee"
+          ]
+        },
+        {
+          "bom-ref": "boundary-external-edge",
+          "name": "External input boundary",
+          "type": "trust",
+          "zones": [
+            "zone-external",
+            "zone-host"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The main branch contains no TEE code (its crates/, sgx/, and trustzone/ directories hold only README showcase pointers); security scans should target the experimental-web3, cleanroom, and legacy branches."
+        },
+        {
+          "description": "Applications on these branches are built on the Teaclave TEE SDKs; the SDK security models (SGX SDK, TrustZone SDK, dependency crates) are the authoritative trust-boundary methodology when auditing."
+        },
+        {
+          "description": "The legacy branch carries its own security docs (docs/threat-model.md, docs/mutual-attestation.md, docs/service-internals.md, docs/access-control.md); do not duplicate them. cleanroom is an earlier prototype of the same untrusted app/ wrapper plus trusted enclave/ shape joined by mutually attested TLS."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-key-exfiltration",
+        "name": "Wallet private keys or plaintext secrets leaving the TEE",
+        "description": "The key audit question for the wallet gateway: do wallet private keys and unencrypted secrets ever cross out of task-runner-tee? The TCB holds the signing and credential material; private keys and plaintext must never leave it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-task-runner-tee"
+        ],
+        "mitigations": [
+          "control-validate-at-boundary"
+        ]
+      },
+      {
+        "bom-ref": "threat-unvalidated-external-feeds",
+        "name": "Signing or balance decisions based on unvalidated external feeds",
+        "description": "Every response from net (blockchain RPC, price feeds) is untrusted external data; a signing or balance decision must never be based on it without validation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-net",
+          "asset-task-runner-tee"
+        ],
+        "mitigations": [
+          "control-validate-external-feeds"
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-storage-reads",
+        "name": "Trusting data read back from untrusted storage",
+        "description": "Everything read back from db-service / db-manager lives in untrusted storage and must be encrypted/authenticated; reads are to be treated as adversarial. Key question: is data persisted by db-service sealed/authenticated before it leaves the TEE?",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-db-service",
+          "asset-task-runner-tee"
+        ],
+        "mitigations": [
+          "control-seal-persisted-data"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-client-requests",
+        "name": "Malicious client requests at the public edge",
+        "description": "Every client request entering api-server / webapi is attacker-controlled input a scanner should focus on, as is the boundary crossing between task-runner-normal and task-runner-tee.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-api-edge",
+          "asset-task-runner-normal"
+        ],
+        "mitigations": [
+          "control-validate-at-boundary"
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-tee-edge",
+        "boundary": "boundary-tee-edge",
+        "name": "TEE trust boundary",
+        "description": "The common rule across all Teaclave trust models: the TEE side is trusted; everything else (host OS, clients, network, external feeds, persisted storage) is attacker-controlled and must be validated at the boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-key-exfiltration",
+          "threat-untrusted-storage-reads",
+          "threat-malicious-client-requests"
+        ],
+        "controlsAtBoundary": [
+          "control-validate-at-boundary",
+          "control-seal-persisted-data"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-external-edge",
+        "boundary": "boundary-external-edge",
+        "name": "External services boundary",
+        "description": "Blockchain RPC and price oracle responses, and public client requests, enter the untrusted host from external, attacker-influenced parties.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unvalidated-external-feeds",
+          "threat-malicious-client-requests"
+        ],
+        "controlsAtBoundary": [
+          "control-validate-external-feeds"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-validate-at-boundary",
+      "name": "Validate everything crossing into the TEE",
+      "description": "Apply the SDK security models' common rule: treat the host OS, clients, the network, external feeds, and persisted storage as attacker-controlled and validate all data at the TEE boundary; keep private keys and plaintext inside task-runner-tee.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-tee-edge",
+        "asset-task-runner-tee"
+      ]
+    },
+    {
+      "bom-ref": "control-seal-persisted-data",
+      "name": "Seal and authenticate persisted data",
+      "description": "Data persisted through db-service lives in untrusted storage; encrypt/authenticate (seal) it before it leaves the TEE and treat reads as adversarial.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-db-service"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-external-feeds",
+      "name": "Validate external feed responses",
+      "description": "Validate blockchain RPC and price feed responses before they influence a signature or a balance; never base a signing or balance decision on unvalidated external data.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-net"
+      ]
+    }
+  ]
+}

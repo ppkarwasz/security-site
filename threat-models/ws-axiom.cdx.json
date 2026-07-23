@@ -1,0 +1,380 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-ws-axiom",
+      "name": "Apache Axiom",
+      "description": "StAX-based XML object model conforming to the W3C XML Information Set, with a SAX adapter, a self-contained MIME multipart parser for SOAP-with-Attachments / XOP / MTOM, a base64 utility, and pluggable implementations (axiom-impl LLOM and axiom-dom). Axiom is an in-process Java library, the underlying object model used by Apache Axis2, Apache WSS4J's bindings, and Apache Neethi: no daemon, no listening socket, no CLI. The threat model is that of a streaming XML parser plus DOM-like object model plus MIME multipart parser with caller-selectable hardening profiles (StAXParserConfiguration DEFAULT / STANDALONE / SOAP). Source document is a draft awaiting Axiom / Webservices PMC review.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ws-axiom/blob/master/THREAT-MODEL.md",
+          "comment": "Source security threat model (draft); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ws.apache.org/axiom/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ws"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ws-axiom/blob/master/THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ws-axiom/master/THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ws-axiom",
+      "name": "Axiom embedded-library trust structure",
+      "description": "Trust structure described by the threat model: the embedding Java application or SOAP stack (which selects the StAXParserConfiguration profile and supplies factories) is trusted; the producer of the XML / SOAP / MIME bytes is the only attacker-controllable input position. Out of model: the SOAP stack (Axis2), the transport layer, XML schema validation, the underlying StAX parser (Woodstox, SJSXP, JDK), the build-time axiom-weaver, and WS-Security processing (WSS4J).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-om-builders",
+          "type": "component",
+          "name": "Object model and builders (axiom-api, axiom-impl, axiom-dom)",
+          "description": "OMXMLBuilderFactory entry points, the core OM (OMElement, OMDocument, OMText), StAX wrappers, SAX adapter, and the bundled LLOM (axiom-impl) and DOM-view (axiom-dom) implementations. The parser hardening profile chosen at builder-call time (DEFAULT, STANDALONE, SOAP) shapes the security envelope.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-mime-parser",
+          "type": "component",
+          "name": "MIME multipart parser (MultipartBody)",
+          "description": "Self-contained MIME parser for SOAP-with-Attachments / XOP / MTOM: parses MIME framing and produces per-part streams. Targeted at SOAP attachments, not a complete email-style MIME parser; imposes no bound on total body size, per-part size, part count, or nesting depth.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-locator",
+          "type": "module",
+          "name": "OMMetaFactoryLocator extension point",
+          "description": "Locator that loads the class named by the org.apache.axiom.om.OMMetaFactoryLocator system property (and OSGi service registry state) via Class.forName at JVM startup. A privilege-escalation surface if the property can be set by an untrusted actor; the system property is trusted by the model.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-producers",
+          "name": "Producers of XML / SOAP / MIME bytes",
+          "type": "trust",
+          "description": "The only attacker-controllable input position: whoever supplies the bytes handed to the builders, the MIME parser, or the base64 decoder."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Embedding application process",
+          "type": "trust",
+          "description": "The embedding Java application or SOAP stack, its caller-supplied OMFactory / OMMetaFactory / XMLInputFactory / XMLOutputFactory / PartBlobFactory, and the JVM system properties and classpath. All trusted by construction."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-parse",
+          "name": "Byte-parsing boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-producers",
+            "zone-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A conformant JDK and a working StAX provider on the classpath (Woodstox is the supported preferred provider; SJSXP and the JDK StAX implementation are also recognized). Defects intrinsic to the StAX implementation are out of model and reported upstream."
+        },
+        {
+          "description": "Axiom opens no listening sockets, spawns no child processes, installs no signal handlers, reads only a small set of documented system properties, and writes only to the OutputStream / Writer the caller hands in (negative claims awaiting maintainer ratification)."
+        },
+        {
+          "description": "Caller-supplied factories (OMFactory, OMMetaFactory, XMLInputFactory, XMLOutputFactory, XMLResolver, PartBlobFactory) and the OMMetaFactoryLocator system property are part of the caller's trusted computing base."
+        },
+        {
+          "description": "In-process callers, co-tenants in a shared JVM, side-channel observers, and quantum adversaries are out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-soap-doctype-bypass",
+        "name": "DOCTYPE accepted through the SOAP profile (XXE / billion laughs)",
+        "description": "The SOAP profile (used by default by OMXMLBuilderFactory.createSOAPModelBuilder) disallows DOCTYPE declarations, since a SOAP message MUST NOT contain a Document Type Declaration. An inbound SOAP envelope containing a DOCTYPE that is parsed to completion without an exception, letting an XXE or billion-laughs payload trigger, violates claimed property P1 and is security-critical (VALID).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om-builders"
+        ],
+        "mitigations": [
+          "control-soap-profile"
+        ]
+      },
+      {
+        "bom-ref": "threat-standalone-external-entity",
+        "name": "External entity fetched despite the STANDALONE profile",
+        "description": "The STANDALONE profile sets IS_SUPPORTING_EXTERNAL_ENTITIES=false and installs a custom XMLResolver that returns empty content for any external resource. If a caller explicitly selected STANDALONE and an external entity reference still results in an HTTP fetch to the attacker URL, claimed property P2 is violated (security-critical, VALID).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om-builders"
+        ],
+        "mitigations": [
+          "control-standalone-profile"
+        ]
+      },
+      {
+        "bom-ref": "threat-mime-part-bleed",
+        "name": "MIME part streams bleeding bytes across part boundaries",
+        "description": "The MIME multipart parser claims that per-Part streams do not bleed bytes from neighboring parts. If PartImpl.getInputStream() returns bytes past the boundary of its part, contaminating a neighboring part's body, the property is violated; this is security-critical when the parts cross a trust boundary (for example one part is signed or authenticated and a neighboring part is not).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-mime-parser"
+        ]
+      },
+      {
+        "bom-ref": "threat-default-profile-xxe",
+        "name": "XXE / billion laughs via the DEFAULT parser profile",
+        "description": "The default OMXMLBuilderFactory.createOMBuilder(InputStream) resolves to StAXParserConfiguration.DEFAULT, which does not disable DTD support or external entities; it only enables CDATA reporting. The model documents no XXE defense on this path: callers handling untrusted non-SOAP XML must explicitly select STANDALONE. Whether a report shaped 'I called createOMBuilder on attacker bytes and an XXE worked' is a valid finding or out of model (caller documented as required to pick a hardened profile) is an open maintainer question (Q7, proposed answer: out of model).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om-builders"
+        ],
+        "mitigations": [
+          "control-choose-hardened-profile"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-caller-supplied-reader",
+        "name": "Attacks through a caller-supplied, mis-hardened XMLStreamReader or factory",
+        "description": "When the caller passes a pre-built XMLStreamReader (or their own XMLInputFactory via setStAXFactory), Axiom does not re-configure it: the caller's XMLInputFactory is the gate for XXE / DTD posture. A mis-hardened caller factory is the caller's problem; hostile OMFactory / OMMetaFactory / XMLInputFactory / XMLOutputFactory implementations are out of scope.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-om-builders"
+        ],
+        "mitigations": [
+          "control-harden-caller-factories"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unbounded-input-dos",
+        "name": "Resource exhaustion via unbounded XML, MIME, or base64 input",
+        "description": "Axiom imposes no bound on input XML / SOAP / MIME size, on the number of MIME parts, on per-part size or nesting depth, or on the decoded size of a base64 payload; the StAX implementation may enforce its own limits. Bounding input size is explicitly the caller's responsibility (at the HTTP / transport layer and at the MIME layer). Compression bombs in base64 and MIME nesting bombs are attack classes Axiom does not single-handedly defend against.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om-builders",
+          "asset-mime-parser"
+        ],
+        "mitigations": [
+          "control-caller-bounds"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-locator-class-loading",
+        "name": "Privilege escalation via the OMMetaFactoryLocator system property",
+        "description": "A class named in the org.apache.axiom.om.OMMetaFactoryLocator system property is Class.forName-loaded into the running JVM. The system property is a trusted, JVM-startup-time decision; an untrusted actor able to set it (for example from a servlet-context init parameter) is outside the model. The misuse pattern is documented so operators lock the property down.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-locator"
+        ],
+        "mitigations": [
+          "control-lock-down-locator"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-layer-concerns",
+        "name": "Out-of-layer concerns: signature wrapping, SOAP routing, transport, validation",
+        "description": "Axiom provides no protection against XML signature wrapping (the WS-Security layer's concern, WSS4J), no SOAP / WSDL routing or dispatch (Axis2), no transport-layer security (there is no transport), no XML Schema validation, no data-at-rest protection, no constant-time guarantees, and no thread-safety claim for concurrent mutation of the same OMElement. Defects intrinsic to the underlying StAX implementation and the build-time axiom-weaver are likewise out of model.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-parse",
+        "boundary": "boundary-parse",
+        "name": "Byte-parsing trust boundary",
+        "description": "The moment attacker-controllable XML / SOAP / MIME / base64 bytes are handed to an Axiom builder or parser. Which hardening applies depends on the StAXParserConfiguration profile the caller selected: SOAP blocks DOCTYPE, STANDALONE neuters external entities, DEFAULT does neither.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-soap-doctype-bypass",
+          "threat-standalone-external-entity",
+          "threat-mime-part-bleed",
+          "threat-default-profile-xxe",
+          "threat-unbounded-input-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-soap-profile",
+          "control-standalone-profile",
+          "control-choose-hardened-profile",
+          "control-caller-bounds"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-soap-profile",
+      "name": "SOAP parser profile disallows DOCTYPE",
+      "description": "StAXParserConfiguration.SOAP disallows DOCTYPE declarations at first encounter (a SOAP message MUST NOT contain a Document Type Declaration). OMXMLBuilderFactory.createSOAPModelBuilder installs this profile by default; overriding it to a less safe profile is the caller's choice.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-om-builders",
+        "boundary-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-standalone-profile",
+      "name": "STANDALONE profile neuters external entities",
+      "description": "StAXParserConfiguration.STANDALONE sets IS_SUPPORTING_EXTERNAL_ENTITIES=false and installs a custom XMLResolver that returns empty content for any external resource. It is the hardened profile for general untrusted (non-SOAP) XML input and must be selected explicitly by the caller.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-om-builders",
+        "boundary-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-choose-hardened-profile",
+      "name": "Select the right hardening profile per input kind",
+      "description": "For SOAP input, use createSOAPModelBuilder (or pass StAXParserConfiguration.SOAP explicitly); for general untrusted XML input, explicitly pass StAXParserConfiguration.STANDALONE to createOMBuilder. The bare createOMBuilder(InputStream) defaults to a profile that does not disable XXE / DTD, and the DEFAULT profile name is a false friend: it is the baseline fidelity shape, not a hardened default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om-builders",
+        "boundary-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-caller-factories",
+      "name": "Harden caller-supplied XMLStreamReader factories",
+      "description": "When passing a pre-built XMLStreamReader, configure the source XMLInputFactory with SUPPORT_DTD=false and IS_SUPPORTING_EXTERNAL_ENTITIES=false; Axiom does not retroactively reconfigure caller-supplied readers. Treat any caller-installed OMFactory, XMLInputFactory, XMLOutputFactory, XMLResolver, or PartBlobFactory as part of the security TCB.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om-builders"
+      ]
+    },
+    {
+      "bom-ref": "control-caller-bounds",
+      "name": "Bound input sizes at the caller layer",
+      "description": "Bound the maximum input size at the caller's HTTP / transport layer, and bound MIME multipart total size, per-part size, and part count at the caller layer; Axiom imposes none. Do not let untrusted actors influence the Content-Type header whose boundary parameter the MIME parser keys on, and bound base64 decoder output at the caller.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-mime-parser",
+        "boundary-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-lock-down-locator",
+      "name": "Set locator system properties only at trusted JVM startup",
+      "description": "Set the OMMetaFactoryLocator system property only at JVM startup from a trusted source; never from a servlet-context init parameter or other user-influenced configuration, since the named class is loaded into the running JVM.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-locator"
+      ]
+    },
+    {
+      "bom-ref": "control-wss4j-for-message-security",
+      "name": "Route message-level security through WSS4J or equivalent",
+      "description": "For deployment shapes that ingest SOAP envelopes that may carry attachments, route signature-wrapping defense through WSS4J or an equivalent message-level security layer; Axiom is the object model, not the policy.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om-builders"
+      ]
+    }
+  ]
+}

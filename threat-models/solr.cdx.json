@@ -1,0 +1,488 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-solr",
+      "name": "Apache Solr",
+      "description": "Lucene-based search server exposing an HTTP/HTTP2 API that indexes documents and serves queries, deployable as a single node or a SolrCloud cluster coordinated by ZooKeeper. It exposes query, update (indexing), and admin/config APIs, supports pluggable authentication and authorization, and can load custom code (package manager, config API, modules). The defining operational fact is Solr's long-standing official stance: Solr is meant to run inside a trusted environment with authentication enabled; an unauthenticated Solr must never be exposed to an untrusted network. The THREAT_MODEL.md is the canonical scanner-facing model; the operator-facing 'Securing Solr' reference guide remains the human source of truth for hardening. SolrJ (the client library) and solr-sandbox (experimental) are out of scope for this model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/solr/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://solr.apache.org/"
+        },
+        {
+          "type": "documentation",
+          "url": "https://solr.apache.org/guide/solr/latest/deployment-guide/securing-solr.html",
+          "comment": "Operator-facing 'Securing Solr' guide, complementary to the scanner-facing threat model."
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "solr"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/solr/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/solr/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-solr",
+      "name": "Solr deployment",
+      "description": "The trust boundary is the Solr HTTP API, gated in the supported posture by an authentication plugin and an authorization plugin; once past auth+authz the request is trusted to the extent of the caller's permissions. Query parameters (shards, streaming expressions) can cause Solr to fetch URLs (SSRF surface); admin/config/package APIs can change configuration and load custom code and must be authorization-restricted. In SolrCloud, configuration and cluster state come from ZooKeeper (trusted) and inter-node calls are authenticated (PKI/auth).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-solr-server",
+          "type": "service",
+          "name": "Solr server / SolrCloud node",
+          "description": "Search server exposing query (/select) and update (/update) request handlers over HTTP.",
+          "zone": "zone-solr-cluster"
+        },
+        {
+          "bom-ref": "asset-admin-config-api",
+          "type": "api",
+          "name": "Admin / Config / Collections / Package APIs",
+          "description": "Highest-sensitivity surface (/admin/*, ConfigSet/Config API, package manager and blob store): changes configuration and loads custom code; must be restricted to admins via authorization.",
+          "zone": "zone-solr-cluster"
+        },
+        {
+          "bom-ref": "asset-auth-plugins",
+          "type": "module",
+          "name": "Authentication and authorization plugins",
+          "description": "Pluggable authentication (BasicAuth/JWT/Kerberos) and authorization (RuleBasedAuthorizationPlugin); off by default, the security mechanism when enabled.",
+          "zone": "zone-solr-cluster"
+        },
+        {
+          "bom-ref": "asset-zookeeper",
+          "type": "infrastructure",
+          "name": "ZooKeeper ensemble (SolrCloud)",
+          "description": "Trusted config and cluster-state store; securing/ACLing ZooKeeper is the operator's responsibility.",
+          "zone": "zone-zookeeper"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "HTTP clients",
+          "type": "trust",
+          "description": "Untrusted HTTP clients (in scope only against an intentionally exposed, auth-enabled Solr) and authenticated users bounded by their authorization."
+        },
+        {
+          "bom-ref": "zone-solr-cluster",
+          "name": "Solr trusted environment",
+          "type": "trust",
+          "description": "The trusted environment Solr is meant to run inside: firewalled internal network zone, like a database; never a public-facing zone or DMZ."
+        },
+        {
+          "bom-ref": "zone-zookeeper",
+          "name": "ZooKeeper ensemble",
+          "type": "trust",
+          "description": "Operator-secured trusted store for configuration and cluster state."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-api",
+          "name": "Solr HTTP API",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-solr-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-zookeeper",
+          "name": "Solr to ZooKeeper",
+          "type": "trust",
+          "zones": [
+            "zone-solr-cluster",
+            "zone-zookeeper"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-untrusted-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Untrusted HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "In scope only if Solr is intentionally exposed with authentication enabled; an unauthenticated Solr is assumed network-isolated."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated user"
+              }
+            ],
+            "persona": {
+              "description": "Holds credentials; trusted to authenticate but not to exceed their authorization (RuleBasedAuthorizationPlugin permissions)."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted: owns all configuration (auth/authz plus any config or configSet manipulation), locks down admin APIs, controls ZooKeeper, the network, and the JVM. There is deliberately no configuration role separate from admin; configuration is an admin-level privilege."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "In the supported posture Solr runs where only authorized clients reach the admin/config/update APIs (authentication enabled and/or network isolation)."
+        },
+        {
+          "description": "Risky features (the historic Velocity response writer, scripting, JEXL, arbitrary remote streaming) are disabled by default and must stay disabled unless the operator accepts the risk."
+        },
+        {
+          "description": "The ZooKeeper ensemble is a trusted config/state store in SolrCloud; Solr opens network listeners and, via packages/config, can load code by design."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass on a protected endpoint",
+        "description": "API requests require valid credentials when an authentication plugin is configured; an auth bypass on a protected endpoint violates this property. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth-plugins",
+          "asset-solr-server"
+        ],
+        "mitigations": [
+          "control-enable-auth-authz"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authenticated user exceeds authorization",
+        "description": "RuleBasedAuthorizationPlugin gates paths, collections, and admin actions by permission. An authenticated user performing an action outside their permissions, especially against the admin/config/package APIs, is a critical violation. An over-broad permission authored by the operator is an operator decision, not a Solr flaw.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth-plugins",
+          "asset-admin-config-api"
+        ],
+        "mitigations": [
+          "control-enable-auth-authz",
+          "control-lock-down-admin-apis"
+        ]
+      },
+      {
+        "bom-ref": "threat-risky-feature-default-exposure",
+        "name": "RCE/SSRF reachable in a default configuration",
+        "description": "Code-execution-adjacent features (Velocity/scripting, arbitrary remote streaming) are disabled by default after Solr's CVE history; RCE or SSRF reachable in a default configuration violates this property (critical). RCE via a risky feature the operator enabled is out of model (non-default config).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-solr-server"
+        ],
+        "mitigations": [
+          "control-risky-features-disabled",
+          "control-keep-risky-features-disabled"
+        ]
+      },
+      {
+        "bom-ref": "threat-internode-injection",
+        "name": "Rogue actor injects inter-node requests (SolrCloud)",
+        "description": "Node-to-node calls are authenticated (PKI/auth); a rogue actor injecting inter-node requests violates this property. Severity: high.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-solr-server"
+        ],
+        "mitigations": [
+          "control-internode-auth",
+          "control-enable-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-exposure",
+        "name": "Unauthenticated Solr exposed to an untrusted network",
+        "description": "Solr's documented posture is that it runs in a trusted environment behind authentication; an operator who exposes an unauthenticated instance to the internet has violated the deployment contract. Without auth, the admin/config/package APIs let a caller reconfigure Solr and load code, by design, for a trusted operator; this is the number-one real-world Solr incident class and is out of model. Findings whose precondition is reaching an unauthenticated admin/config endpoint over an untrusted network are operator misconfiguration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-solr-server",
+          "asset-admin-config-api"
+        ],
+        "mitigations": [
+          "control-enable-auth-authz",
+          "control-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-api-power",
+        "name": "Configuration change or code loading by an authorized admin",
+        "description": "The admin/config/package APIs allowing configuration change and custom code loading when reached by an authorized admin (or on an unauthenticated dev instance) is the feature, not a vulnerability; it is only a valid finding when reachable across an auth/authz boundary that should have stopped it.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-admin-config-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-shards-streaming",
+        "name": "SSRF via shards and streaming-expression remote fetches",
+        "description": "Query parameters (shards, stream.url, streaming-expression source URLs) can cause Solr to fetch URLs, including internal ones. SSRF is bounded by operator network controls, not by Solr: restricting which hosts Solr may contact is operator/network configuration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-solr-server"
+        ],
+        "mitigations": [
+          "control-restrict-remote-streaming"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-zookeeper-compromise",
+        "name": "ZooKeeper compromise or exposure",
+        "description": "Solr trusts its ZooKeeper ensemble, which stores configuration and cluster state; an unsecured ZooKeeper is a backdoor into the cluster. Securing and ACLing ZooKeeper is the operator's responsibility, and the ZooKeeper ensemble operator, host, and JVM are out-of-scope adversaries.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-zookeeper"
+        ],
+        "mitigations": [
+          "control-secure-zookeeper"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-api",
+        "boundary": "boundary-http-api",
+        "name": "Solr HTTP API trust boundary",
+        "description": "A finding is in-model only if reachable with authentication and authorization enabled by an actor who should not be able to do it: an unauthenticated request to an auth-protected endpoint, or an authenticated user crossing their authorization. A finding that requires an unauthenticated, internet-exposed Solr is out of model.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authorization-bypass",
+          "threat-risky-feature-default-exposure",
+          "threat-ssrf-shards-streaming",
+          "threat-unauthenticated-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-auth-authz",
+          "control-lock-down-admin-apis",
+          "control-enable-tls",
+          "control-boundary-limits"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-zookeeper",
+        "boundary": "boundary-zookeeper",
+        "name": "ZooKeeper trust boundary",
+        "description": "ZooKeeper is a trusted config/state store; Solr does not defend against its compromise.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-zookeeper-compromise"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-zookeeper"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-auth-authz",
+      "name": "Enable authentication and authorization",
+      "description": "Authentication and authorization are pluggable and off by default; enabling them (BasicAuth/JWT/Kerberos plus RuleBasedAuthorizationPlugin) is what makes the security properties hold. Off-by-default is the insecure default; the supported production posture is auth+authz on, or strict network isolation. Never expose an unauthenticated instance.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-api"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Never place Solr in a public-facing network zone",
+      "description": "Keep Solr in a firewalled internal zone, the same way you would a database; Solr is not designed to be internet-facing and must never be placed in a DMZ.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-solr-server"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Always enable TLS/SSL",
+      "description": "Enable TLS/SSL for client and inter-node traffic, to avoid leaking sensitive data or authentication credentials on the wire.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-api"
+      ]
+    },
+    {
+      "bom-ref": "control-lock-down-admin-apis",
+      "name": "Lock down the admin/config/Collections/package APIs",
+      "description": "Restrict the admin, config, Collections, and package APIs to admins via authorization; they change configuration and load custom code.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-config-api"
+      ]
+    },
+    {
+      "bom-ref": "control-risky-features-disabled",
+      "name": "Risky features disabled by default",
+      "description": "Code-execution-adjacent features (the historic Velocity response writer, scripting, JEXL, arbitrary remote streaming, custom code loading toggles) default to the hardened off/restricted values after Solr's CVE history, controlled among others by -Dsolr.* system properties.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-solr-server"
+      ]
+    },
+    {
+      "bom-ref": "control-keep-risky-features-disabled",
+      "name": "Keep risky features disabled",
+      "description": "Keep risky features disabled unless you accept the risk; an operator who enables them owns the resulting exposure.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-solr-server"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-remote-streaming",
+      "name": "Restrict remote streaming and shards targets",
+      "description": "Restrict remote streaming and the shards parameter to known hosts, and apply operator network controls limiting which hosts Solr may contact (SSRF containment).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-solr-server"
+      ]
+    },
+    {
+      "bom-ref": "control-internode-auth",
+      "name": "Inter-node authentication (SolrCloud)",
+      "description": "Node-to-node calls are authenticated (PKI/auth) in SolrCloud.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-solr-server"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-zookeeper",
+      "name": "Secure ZooKeeper",
+      "description": "Secure the ZooKeeper ensemble with ACLs and authentication in SolrCloud; an unsecured ZooKeeper holding Solr config is a backdoor into the cluster.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-zookeeper"
+      ]
+    },
+    {
+      "bom-ref": "control-boundary-limits",
+      "name": "Apply resource/rate limits and keep Solr patched",
+      "description": "Apply resource and rate limits at the boundary and keep Solr patched.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-api"
+      ]
+    }
+  ]
+}

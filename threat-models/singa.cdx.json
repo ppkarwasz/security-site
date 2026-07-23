@@ -1,0 +1,45 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-singa",
+      "name": "Apache SINGA",
+      "description": "Distributed deep learning library for training big deep learning models over large datasets.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://singa.apache.org/security.html",
+          "comment": "Source security model document; this file is a structured translation of it. The listed URL currently returns 404; the page content is served at https://singa.apache.org/docs/security.html."
+        },
+        {
+          "type": "website",
+          "url": "https://singa.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "singa"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://singa.apache.org/security.html"
+      },
+      {
+        "name": "asf:security-model-scope",
+        "value": "reporting-and-supported-versions-only"
+      }
+    ]
+  },
+  "threats": {}
+}

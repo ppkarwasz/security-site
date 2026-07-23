@@ -1,0 +1,393 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-druid",
+      "name": "Apache Druid",
+      "description": "Real-time analytics database. The security overview documents Druid's security features, configuration instructions, best practices, and trust model. By default, security features in Druid are disabled to simplify the initial deployment experience; TLS, authentication, and authorization must be configured in a production deployment.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://druid.apache.org/docs/latest/operations/security-overview.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://druid.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "druid"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://druid.apache.org/docs/latest/operations/security-overview.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-druid",
+      "name": "Druid cluster trust model",
+      "description": "Layers described by the Druid security trust model: Druid processes running as an OS user on cluster hosts; the cluster on an isolated, protected network with auxiliary services (metadata store, ZooKeeper) assumed not under adversary control; deep storage accessed through the storage system's native security; and clients authenticated by the configured authenticator and authorized per role.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-druid-processes",
+          "type": "service",
+          "name": "Druid processes",
+          "description": "Druid services (Coordinator, Broker, Historical, ingestion tasks, web console) running under a system user account; each process has the same access to local files granted to that user, and ingestion tasks inherit the user of their parent process.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-auxiliary-services",
+          "type": "infrastructure",
+          "name": "Auxiliary services (metadata store, ZooKeeper)",
+          "description": "Metadata store and ZooKeeper nodes, assumed not to be under adversary control.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-deep-storage",
+          "type": "data-store",
+          "name": "Deep storage",
+          "description": "Druid makes no assumptions about the security of deep storage: it follows the storage system's native security policies to authenticate and authorize, and does not encrypt files for deep storage, relying on the storage system's native encryption capabilities.",
+          "zone": "zone-deep-storage"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Clients",
+          "type": "trust",
+          "description": "Query and API clients, authenticated by the configured authenticator and constrained by the configured authorizer; the default configuration is the allowAll authorizer."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Druid cluster network",
+          "type": "trust",
+          "description": "An isolated, protected network where no reachable IP is under adversary control; intra-cluster traffic (API calls and data transfers) is assumed encrypted, by default with TLS."
+        },
+        {
+          "bom-ref": "zone-deep-storage",
+          "name": "Deep storage",
+          "type": "trust",
+          "description": "The deep storage system, secured by its own native policies and encryption; Druid makes no security assumptions about it."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-cluster",
+          "name": "Client to cluster",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-cluster-deep-storage",
+          "name": "Cluster to deep storage",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-deep-storage"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Druid assumes it operates on an isolated, protected network where no reachable IP within the network is under adversary control; operators must set up firewalls and other security measures to secure both inbound and outbound connections."
+        },
+        {
+          "description": "Druid assumes network traffic within the cluster is encrypted, including API calls and data transfers; the default encryption implementation uses TLS."
+        },
+        {
+          "description": "Druid assumes auxiliary services such as the metadata store and ZooKeeper nodes are not under adversary control."
+        },
+        {
+          "description": "Druid processes have the same access to local files as the system user running the process; ingestion tasks inherit the user of their parent process."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-disabled-security-defaults",
+        "name": "Exposure of a cluster running with default (disabled) security features",
+        "description": "By default, security features in Druid are disabled: no TLS, no authentication, and the allowAll authorizer. Any user with access to the web console without authorization enabled has the same privileges as the operating system user that runs the web console process. Authentication must be enabled for production environments and any environment reachable from untrusted networks, and the web console must not be exposed without authorization enabled.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-druid-processes"
+        ],
+        "mitigations": [
+          "control-enable-authentication",
+          "control-enable-authorization",
+          "control-enable-tls",
+          "control-api-gateway",
+          "control-network-filtering"
+        ]
+      },
+      {
+        "bom-ref": "threat-write-user-acts-as-process",
+        "name": "Users with write permissions act as the Druid process",
+        "description": "Druid's trust model assumes users with resource write permissions can do anything the Druid process can do. The ingestion system creates new processes that inherit the user of their parent process, so any user authorized to submit an ingestion task can use the task's permissions to read or write any local files or external resources that the Druid process has access to; users with WRITE on a datasource also reach the task and supervisor update (POST) APIs. STATE READ, STATE WRITE, CONFIG WRITE, and DATASOURCE WRITE let users access resources on behalf of the Druid server process regardless of datasource. If Druid runs as root, administrators can read or write all files the root account can, including /etc/passwd.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-druid-processes"
+        ],
+        "mitigations": [
+          "control-unprivileged-user",
+          "control-least-privilege"
+        ]
+      },
+      {
+        "bom-ref": "threat-ingestion-input-source-abuse",
+        "name": "Unchecked ingestion input source URLs reach internal resources",
+        "description": "If a Druid client application allows less-trusted users to control the input source of an ingestion task, unchecked URLs can be pointed to other locations and resources within the network or the local file system; validating those URLs is the client application's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-druid-processes"
+        ],
+        "mitigations": [
+          "control-validate-input-urls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-credentials-in-specs",
+        "name": "Credential disclosure through plain-text passwords in configuration specs",
+        "description": "Plain-text passwords in configuration specs (for example sensitive properties in the consumerProperties field of KafkaSupervisorIngestionSpec) expose credentials; the environment variable dynamic config provider should be used instead in production systems.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-druid-processes"
+        ],
+        "mitigations": [
+          "control-dynamic-config-provider"
+        ]
+      },
+      {
+        "bom-ref": "threat-network-adversary",
+        "name": "Adversary inside the cluster network or auxiliary services",
+        "description": "Druid assumes an isolated, protected network where no reachable IP is under adversary control, encrypted intra-cluster traffic, and auxiliary services (metadata store, ZooKeeper) not under adversary control. Attacks requiring control of the cluster network or auxiliary services fall outside these environmental assumptions; securing inbound and outbound connections is the operator's responsibility.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-auxiliary-services",
+          "asset-druid-processes"
+        ],
+        "mitigations": [
+          "control-network-filtering",
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-deep-storage-security",
+        "name": "Deep storage confidentiality and access control",
+        "description": "Druid makes no assumptions about the security of deep storage and does not encrypt files for deep storage: it follows the storage system's native security policies to authenticate and authorize, and relies on the storage system's native encryption capabilities. Protecting data at rest in deep storage is the storage system's and operator's responsibility.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deep-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-cluster",
+        "boundary": "boundary-client-cluster",
+        "name": "Client to cluster trust boundary",
+        "description": "Druid authenticates the client based on the configured authenticator and only performs actions when an authorizer grants permission (default: allowAll). Authorization levels: users with resource write permissions can do anything the Druid process can do; authenticated read-only users can execute queries against resources they have permission for; an authenticated user without permissions may execute only queries that require no resource access.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-disabled-security-defaults",
+          "threat-write-user-acts-as-process"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-authentication",
+          "control-enable-authorization",
+          "control-enable-tls",
+          "control-api-gateway",
+          "control-network-filtering"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-deep-storage",
+        "boundary": "boundary-cluster-deep-storage",
+        "name": "Cluster to deep storage trust boundary",
+        "description": "Druid follows the storage system's native security policies to authenticate and authorize with deep storage and relies on its native encryption; no additional guarantee is made by Druid.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-deep-storage-security"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-unprivileged-user",
+      "name": "Run Druid as an unprivileged Unix user",
+      "description": "Run Druid as an unprivileged Unix user, never as root: Druid administrators have the same OS permissions as the account running Druid, so under root they could read or write all files root can access, including sensitive files such as /etc/passwd.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-druid-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-authentication",
+      "name": "Enable an authenticator",
+      "description": "Enable authentication for production environments and other environments reachable from untrusted networks. Authenticator extensions exist for HTTP basic authentication (druid-basic-security), LDAP (with LDAPS), and Kerberos; the Escalator defines how Druid processes authenticate with one another. The initial admin and internal druid_system passwords should be changed for production.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-cluster"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-authorization",
+      "name": "Enable authorizers with role-based permissions",
+      "description": "Enable authorization and do not expose the web console without it. Authorizers employ user roles to relate authenticated users to the datasources they may access, with the finest-grained permissions per datasource; permissions are assigned through roles, never directly to users, and resource names are treated as regular expressions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-cluster"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege",
+      "name": "Grant minimum permissions",
+      "description": "Grant users the minimum permissions necessary for their functions (do not let query-only users write to datasources or view state). Only grant WRITE on any DATASOURCE to trusted users, and only grant STATE READ, STATE WRITE, CONFIG WRITE, and DATASOURCE WRITE to highly-trusted users, since these allow acting on behalf of the Druid server process regardless of datasource.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-druid-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS",
+      "description": "Enable TLS to encrypt traffic between external clients and the cluster and between services within the cluster: generate a KeyStore and trustStore (Jetty is the embedded web server), set druid.enableTlsPort=true and druid.enablePlaintextPort=false, load simple-client-sslcontext for client-side TLS, and do not use self-signed certificates in production; rely on existing public key infrastructure for trusted keys.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-cluster",
+        "asset-druid-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-api-gateway",
+      "name": "Use an API gateway",
+      "description": "Use an API gateway to restrict access from untrusted networks, create an allow list of the specific APIs users need, and implement account lockout and throttling features.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-cluster"
+      ]
+    },
+    {
+      "bom-ref": "control-network-filtering",
+      "name": "Firewall and network-layer filtering",
+      "description": "When possible, use firewall and other network-layer filtering to expose only the Druid services and ports required for the use case (for example, only expose Broker ports to downstream query applications), limiting access to specific IP addresses or ranges.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-cluster",
+        "asset-auxiliary-services"
+      ]
+    },
+    {
+      "bom-ref": "control-dynamic-config-provider",
+      "name": "Keep passwords out of configuration specs",
+      "description": "Do not provide plain-text passwords in configuration specs for production systems; use the environment variable dynamic config provider for sensitive properties.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-druid-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-javascript",
+      "name": "Disable JavaScript",
+      "description": "Disable the JavaScript feature, as noted in the security section of the Druid JavaScript guide.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-druid-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-input-urls",
+      "name": "Validate user-supplied ingestion input URLs",
+      "description": "If a client application allows less-trusted users to control the input source of an ingestion task, validate the URLs from the users; unchecked URLs can be pointed at other locations and resources within the network or local file system.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-druid-processes"
+      ]
+    }
+  ]
+}

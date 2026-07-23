@@ -1,0 +1,106 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-stormcrawler",
+      "name": "Apache StormCrawler",
+      "description": "Collection of resources for building low-latency, scalable web crawlers on Apache Storm. The threat model is designed for trusted environments: the configuration file and authorized Storm cluster users are trusted.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://stormcrawler.apache.org/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://stormcrawler.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "stormcrawler"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://stormcrawler.apache.org/security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-configuration-compromise",
+        "name": "Compromise of the trusted configuration file",
+        "description": "The configuration file is treated as a trusted source loaded during topology submission without runtime user input. If compromised, an attacker gains capabilities including topology alteration and credential access. Such compromise implies full system compromise and is out of scope for runtime protections; securing the configuration file and the submission environment is the deployer's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-protect-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cluster-user-code-execution",
+        "name": "Arbitrary code execution by authorized Storm cluster users",
+        "description": "StormCrawler runs on Apache Storm, which enables topology submission and custom code execution. The model inherently trusts authorized cluster users; code execution by them is by design, not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-cluster-access"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-protect-configuration",
+      "name": "Protect the configuration file and submission environment",
+      "description": "Secure the configuration file and protect the topology submission environment, since the configuration is trusted and its compromise grants topology alteration and credential access.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-cluster-access",
+      "name": "Restrict Storm cluster access to trusted users",
+      "description": "Restrict cluster access to trusted users only, avoid storing secrets on underlying systems beyond authorized user privileges, and do not deploy in multi-tenant environments without strong isolation.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

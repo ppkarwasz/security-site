@@ -1,0 +1,499 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-teaclave-sgx-sdk",
+      "name": "Apache Teaclave SGX SDK",
+      "description": "Rust SDK for writing Intel SGX enclaves and their host applications, built on Intel SGX and the Intel SGX SDK / EDL. Nothing in the SDK weakens or replaces the SGX hardware guarantees; it provides ergonomic Rust bindings and a trusted std on top. Trust is encoded in the crate naming convention: sgx_t* crates (sgx_trts, sgx_tstd) run inside the enclave; sgx_u* crates (sgx_urts, sgx_oc) run on the untrusted host. Samples under samplecode/ are illustrative proof-of-concept enclaves, not hardened to this model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/teaclave-sgx-sdk/blob/main/docs/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://teaclave.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "teaclave"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/teaclave-sgx-sdk/blob/main/docs/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/teaclave-sgx-sdk/main/docs/security-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-sgx",
+      "name": "SGX two-domain partition",
+      "description": "An SGX system is partitioned by the processor into the untrusted host (host application, OS, hypervisor, BIOS) and the enclave (trusted code plus this SDK's trusted runtime). The asymmetry matters: the enclave can read and write untrusted host memory, but the host cannot read enclave memory (EPC is encrypted/access-controlled), so untrusted input is the hazard, not untrusted observation of enclave internals. The boundary is the enclave edge, crossed by ECALLs (host into enclave, parameters attacker-controlled) and OCALLs (enclave out to host, returns attacker-controlled), as declared in EDL.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-sgx-trts",
+          "type": "module",
+          "name": "sgx_trts (enclave runtime)",
+          "description": "Boundary plus trusted: the lowest layer of the boundary. Range checks (is_within_enclave / is_within_host with overflow-safe arithmetic, the C ABI wrappers, and the EnclaveRange trait), the entry/exit edge, exception handling, and unsafe dereference of untrusted pointers.",
+          "zone": "zone-enclave"
+        },
+        {
+          "bom-ref": "asset-sgx-tstd",
+          "type": "module",
+          "name": "sgx_tstd and enclave-resident runtime crates",
+          "description": "Trusted enclave std; scrutinize anything that reaches host services via OCALL and presents results as trustworthy (fs, time, env, net). Includes sgx_rsrvmm, sgx_sync, sgx_alloc, sgx_unwind.",
+          "zone": "zone-enclave"
+        },
+        {
+          "bom-ref": "asset-sgx-edl",
+          "type": "interface",
+          "name": "sgx_edl (EDL interface definitions)",
+          "description": "The EDL is the boundary contract. Pointer annotations decide marshalling: [in]/[out]/[in,out] copy buffers across the edge; [string]/[size]/[count] define copied lengths; [user_check] performs no copy and no checking, handing the enclave a raw untrusted pointer, the highest-risk annotation. A [user_check] that should be [in], or a wrong [size]/[count], is a boundary vulnerability.",
+          "zone": "zone-enclave"
+        },
+        {
+          "bom-ref": "asset-sealing-attestation",
+          "type": "component",
+          "name": "Sealing and attestation crates (sgx_tseal, sgx_tse, sgx_tdh, sgx_dcap)",
+          "description": "Sealing/unsealing with AAD handling and freshness assumptions; report generation, key derivation, local (DH) attestation; DCAP quote verification inside the enclave (sgx_dcap_tvl) and RA key exchange. Quotes and collateral are untrusted input until verified.",
+          "zone": "zone-enclave"
+        },
+        {
+          "bom-ref": "asset-host-crates",
+          "type": "module",
+          "name": "Host-side crates (sgx_urts, sgx_oc, untrusted halves)",
+          "description": "Untrusted side: enclave loading/management and OCALL implementations run in the adversary's domain; whatever they return, the enclave must re-validate. Bugs here are host-side, not TCB.",
+          "zone": "zone-host"
+        },
+        {
+          "bom-ref": "asset-enclave-dependencies",
+          "type": "component",
+          "name": "Enclave dependency tree",
+          "description": "Every crate linked into the enclave runs inside it and is part of the TCB, including async runtimes, parsers, and crypto; a headline SDK feature ('most Rust crates work without modifications', Tokio/Tonic run unmodified) pulls arbitrary third-party code straight into the TCB. Feature-split crates (sgx_crypto, sgx_rand, sgx_serialize) compile trusted or untrusted depending on features.",
+          "zone": "zone-enclave"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-host",
+          "name": "Untrusted host (REE)",
+          "type": "trust",
+          "description": "The host application, OS kernel, hypervisor, and BIOS; adversary-controlled, including privileged software."
+        },
+        {
+          "bom-ref": "zone-enclave",
+          "name": "Enclave (TEE)",
+          "type": "trust",
+          "description": "The enclave: first-party trusted code, the SDK's trusted runtime, and every crate linked into the enclave image."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-enclave-edge",
+          "name": "Enclave edge (ECALL/OCALL)",
+          "type": "trust",
+          "zones": [
+            "zone-host",
+            "zone-enclave"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Trusted Computing Base: the SGX-capable CPU and its microcode, the Intel-provided architectural enclaves and platform SGX TCB, the enclave image itself once measured (MRENCLAVE) and loaded including every linked crate, and the SDK's trusted runtime."
+        },
+        {
+          "description": "The adversary controls everything outside the enclave, including privileged software: it can invoke any ECALL with arbitrary arguments, return arbitrary values from every OCALL, concurrently mutate any untrusted memory during a call (TOCTOU/double fetch), delete/withhold/replay/roll back anything persisted outside the EPC, and schedule, interrupt, fault pages, and measure timing."
+        },
+        {
+          "description": "MRENCLAVE vs MRSIGNER sealing is a deliberate security decision: MRSIGNER lets a future or different enclave from the same signer unseal the data, a broader exposure than MRENCLAVE."
+        },
+        {
+          "description": "Randomness inside the enclave must come from SGX (RDRAND/sgx_read_rand), not from a host OCALL; secrets must not cross to the host in cleartext unless the application's threat model explicitly accepts it."
+        },
+        {
+          "description": "Build-time dependencies (proc-macros, build scripts, the EDL/edge code generator) execute on the build host and determine the enclave binary measured into MRENCLAVE; the build host and CI are part of the trust chain. no_std vs BUILD_STD is a TCB-size decision."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-malicious-ecall-params",
+        "name": "Malicious ECALL parameters",
+        "description": "The host can invoke any ECALL with arbitrary arguments: values, pointers, lengths, and buffer contents are all attacker-chosen, and every byte of an ECALL buffer is adversarial input whose length, encoding, and structure must be checked (no assumed NUL-termination, well-formedness, or non-emptiness).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sgx-trts",
+          "asset-sgx-edl"
+        ],
+        "mitigations": [
+          "control-edl-marshalling",
+          "control-range-checks",
+          "control-boundary-invariants"
+        ]
+      },
+      {
+        "bom-ref": "threat-user-check-pointer",
+        "name": "Unvalidated [user_check] pointer dereference",
+        "description": "A [user_check] pointer arrives with no copy and no checking; it must be validated before any dereference, confirming the entire range is outside the enclave with is_within_host, never partially inside, which could trick the enclave into reading its own memory. Because untrusted memory may mutate concurrently, it must be copied into enclave memory once before validating and using (no double fetch).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sgx-trts",
+          "asset-sgx-edl"
+        ],
+        "mitigations": [
+          "control-range-checks",
+          "control-boundary-invariants"
+        ]
+      },
+      {
+        "bom-ref": "threat-wrong-edl-annotation",
+        "name": "Incorrect EDL pointer annotation",
+        "description": "A [user_check] that should be [in], or a wrong or attacker-influenced [size]/[count], is the classic edge bug and a boundary vulnerability: the marshaller copies the wrong length or performs no copy at all.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sgx-edl"
+        ],
+        "mitigations": [
+          "control-edl-marshalling"
+        ]
+      },
+      {
+        "bom-ref": "threat-forged-ocall-results",
+        "name": "Forged OCALL results used as a security oracle",
+        "description": "The host returns arbitrary values from every OCALL: return codes, output buffers, file contents, timestamps, and any 'randomness' obtained via the host are attacker-controlled. Time, file existence, and configuration crossing back from the host can be forged; a security decision based on an unauthenticated OCALL result is a real finding hotspot.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sgx-tstd"
+        ],
+        "mitigations": [
+          "control-verify-ocall-results",
+          "control-sgx-randomness"
+        ]
+      },
+      {
+        "bom-ref": "threat-output-secret-leak",
+        "name": "Secret leakage through [out] buffers and return values",
+        "description": "Anything copied out through [out]/[in,out] buffers or return values becomes visible to the host; secrets must not cross to the host in cleartext unless the application's threat model explicitly accepts it.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sgx-trts"
+        ],
+        "mitigations": [
+          "control-deliberate-outputs"
+        ]
+      },
+      {
+        "bom-ref": "threat-unverified-attestation",
+        "name": "Trusting unverified reports or quotes",
+        "description": "Attestation establishes trust but is not automatic: local attestation (sgx_tdh) and remote attestation (sgx_key_exchange, sgx_dcap) let a peer verify an enclave's measurement before exchanging secrets, and the report/quote and its collateral are untrusted input until verified by trusted verification code (e.g. sgx_dcap_tvl). Unverified reports/quotes are a finding hotspot.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sealing-attestation"
+        ],
+        "mitigations": [
+          "control-attestation-verification"
+        ]
+      },
+      {
+        "bom-ref": "threat-sealed-data-rollback",
+        "name": "Rollback or withholding of sealed data",
+        "description": "Sealing (sgx_tseal) gives confidentiality and integrity, not freshness or availability: a sealed blob bound to MRENCLAVE or MRSIGNER is stored in the untrusted host, which can delete, withhold, or roll it back to an earlier version. Rollback of sealed data when no anti-rollback mechanism (monotonic counters, an external freshness service) is used is outside what SGX and the SDK defend against.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sealing-attestation"
+        ],
+        "mitigations": [
+          "control-anti-rollback",
+          "control-sealing-policy"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-tcb-dependency-compromise",
+        "name": "Vulnerability or backdoor in an enclave dependency",
+        "description": "A vulnerability or backdoor in an enclave dependency is code execution inside the enclave with access to its secrets and sealing/attestation keys; the TCB includes the full transitive dependency tree linked into the enclave (async runtimes, parsers, crypto). The boundary stops attacker input at the edge but does not sandbox the enclave's own dependencies; build-time code (proc-macros, build scripts, EDL codegen) executes on the build host and affects the MRENCLAVE-measured binary.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-enclave-dependencies"
+        ],
+        "mitigations": [
+          "control-pin-lock-dependencies",
+          "control-cargo-audit-deny",
+          "control-minimize-enclave-tcb"
+        ]
+      },
+      {
+        "bom-ref": "threat-side-channels-availability",
+        "name": "Microarchitectural side channels, availability, and physical attacks",
+        "description": "SGX, and therefore this SDK, does not defend against microarchitectural and side-channel attacks (cache timing, page-fault channels, branch prediction, speculative/transient execution such as L1TF/Foreshadow and MDS; mitigation is the platform's job), availability/denial of service (the host controls scheduling and power), or physical attacks beyond SGX's memory-encryption guarantee. A finding depending only on these is generally not an SDK bug unless the SDK does something specifically worse than the platform baseline.",
+        "origin": "environmental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-host-side-findings",
+        "name": "Missing validation in host-side code",
+        "description": "Host code (sgx_urts, sgx_oc, the untrusted halves of protected-FS and remote attestation) is in the untrusted domain; the enclave must validate regardless, so host-side validation is not a security control and 'missing input validation in the host' is an expected non-finding. Similarly, samplecode/ is illustrative (note copy-risk patterns such as trusting an OCALL result, but do not report them as production vulnerabilities), and unsafe in FFI/shared crates (sgx_types, sgx_libc, sgx_ffi) is not a finding merely for existing; a finding must be a concrete mismatch or misuse.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-host-crates"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-enclave-edge",
+        "boundary": "boundary-enclave-edge",
+        "name": "Enclave edge trust boundary",
+        "description": "ECALL parameters and OCALL returns are attacker-controlled, and untrusted memory may mutate concurrently: validate and copy in before use, and never trust an OCALL result for a security decision. Feature-split crates (sgx_crypto, sgx_rand, sgx_serialize) must be judged by which side a given build links.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-malicious-ecall-params",
+          "threat-user-check-pointer",
+          "threat-wrong-edl-annotation",
+          "threat-forged-ocall-results",
+          "threat-output-secret-leak"
+        ],
+        "controlsAtBoundary": [
+          "control-edl-marshalling",
+          "control-range-checks",
+          "control-boundary-invariants",
+          "control-verify-ocall-results",
+          "control-deliberate-outputs"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-edl-marshalling",
+      "name": "EDL annotation-driven marshalling",
+      "description": "Generated edge routines act on EDL pointer annotations: [in] copies the buffer into enclave memory before the call (mitigating TOCTOU, though contents remain attacker-chosen and must be validated), [out] allocates in enclave memory and copies back on return, and [string]/[size]/[count] define the copied length. Review every [user_check] and size annotation; the EDL is the boundary contract.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sgx-edl",
+        "boundary-enclave-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-range-checks",
+      "name": "Enclave range-check primitives",
+      "description": "sgx_trts provides is_within_enclave and is_within_host with overflow-safe arithmetic, the C ABI wrappers sgx_is_within_enclave / sgx_is_outside_enclave, and the EnclaveRange trait for type-aware checks; every enclave handling raw untrusted pointers needs them.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sgx-trts"
+      ]
+    },
+    {
+      "bom-ref": "control-boundary-invariants",
+      "name": "Enclave boundary invariants",
+      "description": "Obligations on enclave code, not provided automatically: validate a [user_check] pointer's full range before any dereference; copy untrusted input in once, then validate (avoid double fetch); treat every byte of an ECALL buffer as adversarial; and fail closed, returning an error on any validation failure.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-enclave-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-verify-ocall-results",
+      "name": "Never trust OCALL results for security decisions",
+      "description": "Treat every OCALL result as adversarial: validate, bounds-check, and cryptographically verify where the value matters; use authenticated/verified data for security decisions rather than host-provided time, file contents, or configuration.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-sgx-tstd",
+        "boundary-enclave-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-deliberate-outputs",
+      "name": "Deliberate output sizing and content",
+      "description": "Size outputs deliberately and write only what the caller is authorized to learn to [out]/[in,out] buffers and return values.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-enclave-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-attestation-verification",
+      "name": "Verify reports and quotes with trusted verification code",
+      "description": "Verify attestation reports and DCAP quotes (with their collateral) using trusted in-enclave verification code such as sgx_dcap_tvl before trusting a peer enclave or exchanging secrets.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sealing-attestation"
+      ]
+    },
+    {
+      "bom-ref": "control-anti-rollback",
+      "name": "External anti-rollback mechanism for sealed data",
+      "description": "Anti-rollback requires an external mechanism (monotonic counter or freshness service); it is not provided by sealing alone.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-sealing-attestation"
+      ]
+    },
+    {
+      "bom-ref": "control-sealing-policy",
+      "name": "Choose the sealing policy deliberately",
+      "description": "Choose MRENCLAVE vs MRSIGNER sealing deliberately: MRSIGNER lets a future or different enclave from the same signer unseal the data, a broader exposure than MRENCLAVE.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-sealing-attestation"
+      ]
+    },
+    {
+      "bom-ref": "control-sgx-randomness",
+      "name": "SGX-backed randomness",
+      "description": "Any crate needing entropy inside the enclave must source it from RDRAND / sgx_read_rand, never from a host OCALL; verify the entropy path of crypto dependencies. sgx_rand in its trusted feature configuration must use an in-enclave entropy source.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-enclave-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-pin-lock-dependencies",
+      "name": "Pin and lock enclave dependencies",
+      "description": "Commit Cargo.lock so the measured enclave is reproducible.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-enclave-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-cargo-audit-deny",
+      "name": "Run cargo audit, deny, and vet",
+      "description": "Run cargo audit (RUSTSEC advisories), consider cargo deny to enforce licenses and ban yanked/duplicate crates, and consider cargo vet or vendoring for the subset of crates linked into the enclave.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-enclave-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-minimize-enclave-tcb",
+      "name": "Minimize the enclave dependency tree",
+      "description": "Review each new enclave dependency as a TCB addition with the same scrutiny as first-party enclave code; prefer the minimal dependency set, since the smaller the code linked into the enclave, the smaller the TCB and the MRENCLAVE-measured surface.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-enclave-dependencies"
+      ]
+    }
+  ]
+}

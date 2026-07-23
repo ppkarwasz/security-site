@@ -1,0 +1,634 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-knox",
+      "name": "Apache Knox",
+      "description": "Application gateway / reverse proxy providing perimeter security for the REST APIs and web UIs of Hadoop-ecosystem (and other) services. A long-running Jetty-based edge daemon terminates client TLS, authenticates callers through a configurable provider chain (LDAP/AD via Shiro, Kerberos, SAML/OIDC/CAS via pac4j, header pre-auth, SSO cookie, JWT), authorizes against service-level ACLs, rewrites URLs to hide internal topology, dispatches requests to backends while asserting the caller's identity, issues KnoxSSO and KnoxToken tokens, and manages secrets in a master-secret-protected credential store. Knox's whole purpose is to be a trust boundary.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/knox/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is a v0 draft by the ASF Security team with the Knox PMC chair's line-by-line review of 2026-07-09 folded in."
+        },
+        {
+          "type": "website",
+          "url": "https://knox.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "knox"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/knox/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/knox/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-knox",
+      "name": "Knox gateway deployment",
+      "description": "North of Knox: untrusted HTTP/WebSocket clients at the perimeter. South of Knox: trusted backend cluster services and the federated IdP. Per request: TLS termination, then the topology-defined provider chain (authentication, identity assertion, authorization, rewrite, dispatch); identity assertion is the trust-elevation point after which the request carries Knox-minted identity the backend trusts.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-gateway",
+          "type": "gateway",
+          "name": "Knox gateway request pipeline",
+          "description": "Jetty-based routing and filter chain, provider chain (authentication, identity assertion, authorization), rewrite/URL translation, and dispatch/proxy to backends.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-token-services",
+          "type": "service",
+          "name": "KnoxSSO and KnoxToken services",
+          "description": "The /knoxsso and /knoxtoken endpoints issuing signed, short-TTL, revocation-optional bearer tokens and SSO cookies.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-credential-store",
+          "type": "data-store",
+          "name": "Master secret and credential stores",
+          "description": "Master-secret-protected credential store / alias service and keystores under data/security/, protected by OS filesystem permissions; -persist-master trades a prompt for on-disk storage and requires careful file permission management.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-backend",
+          "type": "service",
+          "name": "Backend cluster services",
+          "description": "The Hadoop services Knox fronts (WebHDFS, YARN, HBase, Hive, etc.); trusted to enforce their own authorization once Knox asserts identity.",
+          "zone": "zone-backend"
+        },
+        {
+          "bom-ref": "asset-idp",
+          "type": "service",
+          "name": "Federated identity provider",
+          "description": "LDAP/AD, SAML/OIDC provider that Knox delegates authentication to; authoritative and honest, with assertions integrity-protected in transit (signed SAML, validated OIDC ID token, LDAPS).",
+          "zone": "zone-backend"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Perimeter clients",
+          "type": "trust",
+          "description": "Untrusted HTTP/WebSocket peers reaching the gateway listen port; the primary adversary."
+        },
+        {
+          "bom-ref": "zone-gateway",
+          "name": "Knox gateway",
+          "type": "trust",
+          "description": "The gateway daemon, its provider chain, token services, and filesystem-protected secrets, operated by a trusted cluster administrator."
+        },
+        {
+          "bom-ref": "zone-backend",
+          "name": "Trusted cluster and IdP",
+          "type": "trust",
+          "description": "Backend services and the federated IdP on the far side of the boundary; clients are assumed unable to reach backends except through Knox (operator network segmentation)."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-perimeter",
+          "name": "Perimeter (client to gateway)",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-gateway"
+          ]
+        },
+        {
+          "bom-ref": "boundary-dispatch",
+          "name": "Dispatch (gateway to backend)",
+          "type": "trust",
+          "zones": [
+            "zone-gateway",
+            "zone-backend"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Perimeter client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted HTTP/WebSocket peer: sends arbitrary request lines, headers (including spoofed identity/forwarded headers), bodies, and frames; presents forged or replayed credentials, cookies, SAML responses, OIDC tokens, and KnoxTokens. A secondary variant holds valid credentials for some topology and tries to exceed them."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / administrator"
+              }
+            ],
+            "persona": {
+              "description": "Authors topology descriptors and provider configs and manages the master secret and keystores; trusted for the instance, out of scope as an adversary (malicious operator config is never a Knox vulnerability)."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-backend-idp",
+          "party": {
+            "roles": [
+              {
+                "name": "Backend service / federated IdP"
+              }
+            ],
+            "persona": {
+              "description": "Trusted infrastructure on the far side of the boundary; Knox trusts IdP assertions and trusts backends to enforce their own authorization."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The filesystem is the operator trust anchor: only the operator and the Knox process user can read the master secret file, credential stores, and identity keystore."
+        },
+        {
+          "description": "The backend trusts Knox's asserted identity, so anything that lets a client control the asserted identity is an authentication bypass against every backend."
+        },
+        {
+          "description": "TLS to the backend is assumed required, in particular to protect SPNEGO tokens forwarded on the dispatch hop; TLS is required together with Kerberos for proxy-user-based trusted proxies."
+        },
+        {
+          "description": "Clustered Knox instances share the same gateway master secret and are mutually trusting, not adversarial to each other."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Perimeter authentication bypass",
+        "description": "An unauthenticated client reaches a protected backend or gets a response it should not, despite a correctly configured topology with an authentication provider. A request failing authentication or authorization never reaches dispatch, with no exceptions; a bypass is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-provider-chain"
+        ]
+      },
+      {
+        "bom-ref": "threat-identity-assertion-forgery",
+        "name": "Identity assertion forgery (impersonation to the backend)",
+        "description": "A client substitutes another principal so that the identity Knox asserts to the backend (doAs/proxy-user header, SPNEGO) is not the one Knox authenticated. Faithful identity assertion is the keystone property; any break is security-critical, because the backend trusts Knox-minted identity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway",
+          "asset-backend"
+        ],
+        "mitigations": [
+          "control-provider-chain",
+          "control-backend-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authorization bypass or cross-topology escape",
+        "description": "An authenticated-but-limited client reaches a service or topology it is not authorized for (topology ACL bypass, cross-topology confusion, rewrite escape into other topologies/services). Isolation between topologies is proposed as operator partitioning rather than a Knox-enforced boundary; a cross-topology leak is valid only if it breaks the authentication or authorization enforcement properties.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-aclsauthz",
+          "control-provider-chain"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-forgery",
+        "name": "KnoxToken/KnoxSSO forgery or tampering",
+        "description": "A client mints, forges, tampers with, or gets an expired token accepted without the corresponding credential. Tokens are integrity-protected (signed) and validated (signature plus expiry, plus server-side revocation where applicable) before acceptance; a violation is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-token-services"
+        ],
+        "mitigations": [
+          "control-token-signing"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-replay",
+        "name": "Bearer token replay within TTL",
+        "description": "KnoxSSO cookies and KnoxTokens are bearer credentials, not proof of possession: anyone who captures one can replay it until expiry. Replay within TTL is by design; TLS, short TTLs, and (where available) revocation are load-bearing, not decorative.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-token-services"
+        ],
+        "mitigations": [
+          "control-token-ttl-revocation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-secret-disclosure",
+        "name": "Network disclosure of stored secrets",
+        "description": "A network request discloses an alias, a provider secret, or the master secret. Master-secret-encrypted credential stores protect secrets at rest and secrets are not exposed over the network surface; a network-reachable disclosure is security-critical, while anything requiring local filesystem access is the operator boundary.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credential-store"
+        ],
+        "mitigations": [
+          "control-credential-store",
+          "control-protect-keystores"
+        ]
+      },
+      {
+        "bom-ref": "threat-topology-disclosure",
+        "name": "Topology and internal-address disclosure",
+        "description": "A client obtains internal backend host/port addresses or reaches an un-fronted internal endpoint via a rewrite escape, defeating the stated topology-concealment purpose. Concealment is obscurity, not an access control; generic stack traces are at most hardening, real internal-address leaks defeat the property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-rewrite-concealment"
+        ]
+      },
+      {
+        "bom-ref": "threat-proxy-attack-classes",
+        "name": "Reverse-proxy attack classes (smuggling, SSRF, open redirect, XXE, header confusion)",
+        "description": "As a reverse proxy Knox is exposed to HTTP request smuggling/desync between Knox and backend, SSRF via rewrite/dispatch if client input reaches the backend target, open redirect via the SSO originalUrl/return-URL parameter, XXE in providers parsing attacker-supplied XML (e.g. SAML responses), host-header and X-Forwarded-* trust confusion, WebSocket origin/authorization gaps, and KnoxSSO cookie scope/Secure/HttpOnly handling. Knox provides the mechanisms (WebAppSecProvider for XSRF/CORS/CSP; regexp whitelists for SSRF/open-redirect) but tuning them is the operator's responsibility: a protection that is available but unconfigured is out of model, a bypass of a configured protection is valid.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-webappsec-provider",
+          "control-dispatch-whitelists"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-dos",
+        "name": "Gateway crash or hang from unauthenticated input",
+        "description": "The confirmed resource line: an unauthenticated request that hangs or crashes the gateway process is a bug; merely consuming proportionate resources under load is not. Knox makes no strong quantitative resource guarantee beyond Jetty/topology limits; slow-loris, large-body, and many-connection pressure are bounded by operator configuration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ]
+      },
+      {
+        "bom-ref": "threat-ungated-headerpreauth",
+        "name": "Ungated HeaderPreAuth trusts client-supplied identity headers",
+        "description": "HeaderPreAuth (SM_USER and custom identity headers) looks like it authenticates the user but only trusts a header; it is secure only when paired with an mTLS/IP trust gate proving the header came from a trusted SSO front-end. Without the gate any client can impersonate anyone; the most dangerous Knox false friend. Per the PMC, an ungated deployment is the operator's risk to accept (out of model, non-default configuration), not a Knox bug, with a standing hardening ask that Knox default the trust gate.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-preauth-trust-gate"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-demo-sample-surface",
+        "name": "Findings requiring the demo/sample surface",
+        "description": "The bundled demo LDAP (ApacheDS), sample sandbox topology, gateway sample apps, and self-signed test certificate are explicitly for evaluation, not production; findings that only manifest with them in use are out of model as unsupported components.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-replace-demo-material"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-around-gateway",
+        "name": "Bypassing Knox by reaching the backend directly",
+        "description": "Knox is a perimeter control and does not defend a backend that is directly network-reachable around the gateway; network segmentation is the operator's responsibility. Clients able to authenticate directly to the backend (e.g. via Kerberos) are a legitimate deployment choice, and without explicit proxy-user configuration they cannot assert another user's identity via doAs.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-backend"
+        ],
+        "mitigations": [
+          "control-network-segmentation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-backend-hop",
+        "name": "Plaintext or unverified backend dispatch hop",
+        "description": "TLS termination at Knox does not encrypt the gateway-to-backend hop; that hop's encryption and hostname verification are separate operator configuration, and a plaintext/unverified hop is a misuse pattern, not a Knox guarantee. TLS on this hop is required to protect forwarded SPNEGO tokens.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-backend"
+        ],
+        "mitigations": [
+          "control-backend-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-perimeter",
+        "boundary": "boundary-perimeter",
+        "name": "Perimeter trust boundary",
+        "description": "Untrusted clients meet the gate where a request is authenticated, authorized, and only then re-emitted as trusted. Client-supplied identity headers and tokens are the crown-jewel untrusted inputs; the most consequential failure class is a client getting Knox to assert an identity it did not legitimately earn.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-identity-assertion-forgery",
+          "threat-authorization-bypass",
+          "threat-token-forgery",
+          "threat-token-replay",
+          "threat-secret-disclosure",
+          "threat-topology-disclosure",
+          "threat-proxy-attack-classes",
+          "threat-unauthenticated-dos",
+          "threat-ungated-headerpreauth"
+        ],
+        "controlsAtBoundary": [
+          "control-provider-chain",
+          "control-aclsauthz",
+          "control-token-signing",
+          "control-webappsec-provider",
+          "control-dispatch-whitelists",
+          "control-preauth-trust-gate"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-dispatch",
+        "boundary": "boundary-dispatch",
+        "name": "Dispatch trust boundary",
+        "description": "After identity assertion the request carries Knox-minted identity that the backend trusts; the dispatch hop opens a (possibly new-TLS) connection to the backend, whose encryption and verification are operator-configured.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-plaintext-backend-hop",
+          "threat-around-gateway"
+        ],
+        "controlsAtBoundary": [
+          "control-backend-tls",
+          "control-network-segmentation"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-provider-chain",
+      "name": "Topology-ordered provider chain enforcement",
+      "description": "The provider chain runs in topology-defined order (authentication, identity assertion, authorization, rewrite, dispatch); a request failing authentication or authorization never reaches dispatch, and the asserted identity is the one Knox authenticated.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-perimeter",
+        "asset-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-aclsauthz",
+      "name": "Service-level ACL authorization (AclsAuthz)",
+      "description": "Given an authorization provider, only principals/groups/IPs permitted by the topology ACL reach the service; perimeter ACLs are coarse and do not replace backend/Ranger fine-grained authorization.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-token-signing",
+      "name": "Signed, validated KnoxSSO/KnoxToken tokens",
+      "description": "Tokens and SSO cookies are signed and validated (signature, expiry, and server-side revocation where applicable) before acceptance.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-token-services"
+      ]
+    },
+    {
+      "bom-ref": "control-token-ttl-revocation",
+      "name": "Short token TTLs and revocation",
+      "description": "Set token TTLs and enable server-managed revocation appropriate to data sensitivity; a captured bearer token is replayable until expiry, so TTL and revocation are load-bearing.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-token-services"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-store",
+      "name": "Master-secret-protected credential stores",
+      "description": "Provider and gateway secrets are held in master-secret-encrypted credential stores (per-gateway and per-topology .jceks) behind the alias service, not exposed over the network surface.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-credential-store"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-keystores",
+      "name": "Protect the master secret and keystores on disk",
+      "description": "Protect the master secret file, credential stores, and identity keystore with OS file permissions; treat -persist-master as security-sensitive (it trades a prompt for on-disk storage and requires careful file permission management).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-credential-store"
+      ]
+    },
+    {
+      "bom-ref": "control-webappsec-provider",
+      "name": "Configure WebAppSecProvider (XSRF, CORS, CSP)",
+      "description": "The WebAppSecProvider can be configured for XSRF, CORS, CSP, and related cross-site protections; Knox provides the mechanism, the operator must turn it on and tune it to the deployment.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-dispatch-whitelists",
+      "name": "Regexp whitelists against SSRF and open redirect",
+      "description": "Regexp-based whitelists (allowed hosts, ports, domains) protect against SSRF and open redirect via the SSO return-URL; they must be tuned to the deployment's specific expectations. Dispatch targets otherwise come from trusted topology descriptors, not client input.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-preauth-trust-gate",
+      "name": "Pair HeaderPreAuth with an mTLS/IP trust gate",
+      "description": "Never deploy HeaderPreAuth without a trust gate (mTLS or IP allow-list proving the identity header comes from a trusted SSO front-end); the PMC's standing hardening ask is that Knox default the gate so operators must explicitly accept the ungated posture.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-backend-tls",
+      "name": "TLS on the backend dispatch hop",
+      "description": "Configure the dispatch hop's TLS protocol, ciphers, and hostname verification to match the threat environment; TLS is required together with Kerberos for proxy-user-based trusted proxies because it protects the forwarded SPNEGO tokens.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-dispatch"
+      ]
+    },
+    {
+      "bom-ref": "control-network-segmentation",
+      "name": "Network segmentation so backends are unreachable except through Knox",
+      "description": "Knox assumes clients cannot reach backends except through it but does not enforce this; the operator's network must.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-dispatch"
+      ]
+    },
+    {
+      "bom-ref": "control-replace-demo-material",
+      "name": "Replace all demo/sample material before production",
+      "description": "Remove the demo LDAP, sample sandbox topology, and self-signed certificate; install a real IdP and a CA-issued identity keystore, keeping provider configs pointed at integrity-checked IdP channels (signed SAML, validated OIDC, LDAPS).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateway",
+        "asset-idp"
+      ]
+    },
+    {
+      "bom-ref": "control-rewrite-concealment",
+      "name": "URL rewriting conceals cluster topology",
+      "description": "Per-service rewrite rules translate external URLs to internal ones and back, hiding backend host/port layout behind a single Knox endpoint; concealment reduces attack surface but is not itself an authentication or authorization boundary.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-gateway"
+      ]
+    }
+  ]
+}

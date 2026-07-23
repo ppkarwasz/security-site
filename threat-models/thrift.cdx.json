@@ -1,0 +1,614 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-thrift",
+      "name": "Apache Thrift",
+      "description": "IDL-driven cross-language RPC and serialization framework. A C++ compiler generates client and server code for about 28 target languages; each language runtime supplies protocol layers (Binary, Compact, JSON, Multiplex), endpoint and layered transports (Socket, TLS/SSL, Framed, Buffered, Header, HTTP, zlib), and server loops. Thrift is a library plus code generator, not a deployed service; downstream applications embed the runtime and generated code.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/thrift/blob/master/doc/thrift-threat-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://thrift.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "thrift"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/thrift/blob/master/doc/thrift-threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/thrift/master/doc/thrift-threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-thrift",
+      "name": "Thrift embedded runtime and build pipeline",
+      "description": "Architecture described by the Thrift threat model: untrusted wire peers (clients, servers, and in-process callers feeding stored bytes) exchange bytes with the language runtimes and generated code embedded in an application process; the IDL compiler runs at build time on trusted .thrift files. Scope is lib/<lang>/ runtimes, compiler/cpp/src/, and the wire-format specs; test/, tutorial/, contrib/, and packaging are out of model.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-runtime",
+          "type": "component",
+          "name": "Language runtime libraries (lib/<lang>/)",
+          "description": "Per-language protocol, transport, and server machinery (TProtocol, TTransport, T*Server, TLS and SASL transports). C++ and c_glib are memory-unsafe with the highest blast radius; Java, Python, Go, Rust and the other bindings are memory-safe but still exposed to DoS-class deserializer bugs.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-generated-code",
+          "type": "component",
+          "name": "Generated client and server code",
+          "description": "Output of thrift -gen <lang>: struct read()/write() and processor dispatch glue linking the wire to the application handler. Bugs in generated code are in model.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-compiler",
+          "type": "tool",
+          "name": "IDL compiler (compiler/cpp/)",
+          "description": "Build-time C++ program parsing .thrift files and emitting generated code. Its threat profile is a build-time text processor consuming trusted input.",
+          "zone": "zone-build"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-peers",
+          "name": "Wire peers",
+          "type": "trust",
+          "description": "Untrusted parties on the other end of a transport: clients sending bytes to a Thrift server, servers returning bytes to a Thrift client, and sources of stored bytes deserialized in process. Authentication (SASL, mTLS) narrows who the peer can be, not what bytes they can send."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Application process",
+          "type": "trust",
+          "description": "The downstream application embedding the Thrift runtime and generated code; the application handler and in-process callers are trusted."
+        },
+        {
+          "bom-ref": "zone-build",
+          "name": "Build environment",
+          "type": "trust",
+          "description": "Developer-controlled build pipeline: .thrift files, generator options, include paths, and toolchain are trusted inputs."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-wire",
+          "name": "Wire boundary",
+          "type": "trust",
+          "zones": [
+            "zone-peers",
+            "zone-application"
+          ]
+        },
+        {
+          "bom-ref": "boundary-build",
+          "name": "Build-time boundary",
+          "type": "trust",
+          "zones": [
+            "zone-build",
+            "zone-application"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-application-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer"
+              }
+            ],
+            "persona": {
+              "description": "Writes .thrift files, runs the compiler, links the runtime, writes the service handler. Trusted at the compile-time boundary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Runs the resulting binary; configures TLS material, network exposure, server type, and the limits the runtime exposes (maxMessageSize, maxFrameSize, container limits). Trusted for that instance."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-client-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Client peer"
+              }
+            ],
+            "persona": {
+              "description": "Entity sending bytes to a Thrift server's wire. Untrusted by default: bytes on the socket are attacker-controllable unless the operator imposed an authentication layer, and remain untrusted at the deserializer even then."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-server-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Server peer"
+              }
+            ],
+            "persona": {
+              "description": "Entity returning bytes to a Thrift client. Symmetric to the client peer: a Thrift client deserializes responses from a server it does not control, so server-to-client replies are also attacker-controllable. The same posture applies to in-process callers deserializing stored bytes."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The host OS provides working sockets, TLS-capable cryptography, and a working allocator; Thrift does not implement TCP, TLS handshakes, or memory allocation itself."
+        },
+        {
+          "description": "Wire encoding follows the published specs: network byte order for the Binary protocol, ZigZag varints for Compact, conformant IEEE 754 doubles. The C++ little-endian Binary mode is off-spec and must not be enabled when talking to non-C++ peers."
+        },
+        {
+          "description": "Integer overflow on any value derived from wire-supplied lengths is a security-relevant bug; most historical Thrift CVE-class issues (THRIFT-3821, THRIFT-5221, THRIFT-5255, THRIFT-5716, THRIFT-5812) are exactly this class."
+        },
+        {
+          "description": "Container and string size limits default to unlimited (INT32_MAX) per the Binary protocol spec; operators are documented as required to set finite caps before exposing a server to untrusted peers. Where TConfiguration exists (C++, Java, Go, Rust, netstd and others) maxMessageSize defaults to 100 MiB."
+        },
+        {
+          "description": "C++ embedded-API contracts hold: TSSLSocketFactory outlives every TSSLSocket it creates (THRIFT-4164), the application ignores SIGPIPE when using TSSLSocket, and TSSLSocket is not combined with TNonblockingServer (unsupported combination)."
+        },
+        {
+          "description": "No security check may rely on assert: release builds may elide it, the lesson of CVE-2018-1320 (THRIFT-4506)."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-wire-memory-corruption",
+        "name": "Memory corruption from crafted wire input in memory-unsafe runtimes",
+        "description": "A crafted byte stream causes heap corruption, out-of-bounds writes, use-after-free, or double-free in the C++ or c_glib runtimes, typically via integer overflow on wire-declared sizes (THRIFT-3821, THRIFT-5716, THRIFT-5812, THRIFT-5931 class). Critical and CVE-worthy when reachable from the wire; violates property P2.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-set-size-caps",
+          "control-oss-fuzz"
+        ]
+      },
+      {
+        "bom-ref": "threat-deserializer-crash-dos",
+        "name": "Deserializer crash or hang in memory-safe runtimes",
+        "description": "Malformed wire input escapes the read loop as an uncaught panic or exception, or drives recursive descent into a stack overflow (recursive skip of deeply nested unknown structures, THRIFT-5469, THRIFT-5221, THRIFT-5255 class). DoS-class violation of property P1; applies symmetrically to servers, clients deserializing responses, and in-process deserialization of stored bytes.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime",
+          "asset-generated-code"
+        ],
+        "mitigations": [
+          "control-oss-fuzz",
+          "control-set-size-caps"
+        ]
+      },
+      {
+        "bom-ref": "threat-configured-cap-bypass",
+        "name": "Breach of a configured resource cap",
+        "description": "With containerSizeLimit, stringSizeLimit, maxFrameSize, or maxMessageSize configured, a message drives super-linear memory or CPU in a declared size anyway, or a binding fails to enforce a cap that was set (cross-binding parity violation). Violates property P10; a hang on input with no cap set is the operator's choice, not a bug.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-set-size-caps",
+          "control-tconfiguration"
+        ]
+      },
+      {
+        "bom-ref": "threat-sasl-authentication-bypass",
+        "name": "Authentication bypass in the SASL transport",
+        "description": "A flaw in the SASL transport state machine lets an unauthenticated peer proceed as authenticated. CVE-2018-1320 (THRIFT-4506) is the canonical instance: a load-bearing assert in Java SASL code was elided in release builds, allowing bypass. Mechanism-token handling bugs (THRIFT-5926 DIGEST-MD5 crash class) are also on this surface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-avoid-assert-checks"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-validation-failure",
+        "name": "TLS certificate validation failure on a configured secure transport",
+        "description": "A TSSLSocket client accepts a forged or self-signed certificate despite a configured trust store (property P8), or a registered AccessManager's verify-decision protocol is misimplemented so a denied certificate appears allowed (property P9). Critical when applicable; the cryptographic guarantees themselves belong to the underlying TLS library.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-tls-configuration",
+          "control-register-accessmanager"
+        ]
+      },
+      {
+        "bom-ref": "threat-default-no-hostname-verification",
+        "name": "Missing host-name verification without a registered AccessManager",
+        "description": "By documented contract, C++ TSSLSocket without an AccessManager performs only certificate-chain validation, no host-name verification; a certificate for evil.example can be accepted when connecting to bank.example. Registering an AccessManager (or the per-binding equivalent) is the operator's documented requirement; THRIFT-5343 records an analogous historical Java gap. By design, not a vulnerability, unless the operator's requirement was met and verification still fails.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-register-accessmanager"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-uncapped-default-dos",
+        "name": "Resource exhaustion on a server left at default (unlimited) size caps",
+        "description": "The default container and string size limit is INT32_MAX: a hostile message declaring a 2-billion-element container or 2 GiB string will be honored, attempting the allocation. The PMC ruled this a developer convenience that operators are documented as required to flip, so incidents against the unconfigured default are out of model; setting finite caps is the single highest-leverage operator action.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-set-size-caps"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cleartext-interception",
+        "name": "Interception of cleartext transports",
+        "description": "TSocket, THttpServer without HTTPS, and SASL without a TLS wrap transmit application data (including SASL PLAIN credentials) in cleartext. Thrift provides no confidentiality without TLS; choosing TLS transports between trust domains is the deployer's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-tls-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-decompression-bomb",
+        "name": "Decompression bomb against TZlibTransport",
+        "description": "TZlibTransport has no documented decompressed-size cap; a small compressed payload can expand to many GiB. Standard compression-bomb disclaimer: the defense is an external decompressed-size cap supplied by the caller, not Thrift.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-socket-level-dos",
+        "name": "Raw socket-level denial of service",
+        "description": "Slowloris-style slow reads, SYN floods, connection floods, and half-open-connection exhaustion are operator and load-balancer concerns, not codec concerns; Thrift performs no rate limiting.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "mitigations": [
+          "control-front-loadbalancer"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-multiplexed-service-selection",
+        "name": "Peer-chosen service selection on a multiplexed processor",
+        "description": "With TMultiplexedProtocol, the peer chooses which registered service to talk to via the service-name prefix; if a privileged and an unprivileged service share one multiplexed processor, the peer picks. Per-method authorization, RBAC, and ACLs are the application's job (Thrift provides no application-layer authorization).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-generated-code"
+        ],
+        "mitigations": [
+          "control-application-validation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-message-replay",
+        "name": "Replay of captured messages",
+        "description": "The seqid in messages is a sequence number for matching responses to requests, not a nonce; Thrift provides no anti-replay. Treating seqid as a session token or replay guard is a documented misuse pattern.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-type-mismatch-divergence",
+        "name": "Undefined or divergent behavior on field type-tag mismatch",
+        "description": "Per the Binary protocol spec, behavior when a decoded field's type tag disagrees with the IDL is binding-specific (the historical default Java implementation had undefined behavior); the model does not guarantee uniformity across bindings. Cross-binding behavioral divergence on malformed type tags is disclaimed by design.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-runtime",
+          "asset-generated-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-idl-input",
+        "name": "Adversary-supplied .thrift files fed to the compiler",
+        "description": "Generating code from an adversary-supplied .thrift file is the same threat class as feeding bison or flex adversary input: the IDL compiler is a developer tool, not a sandboxed parser, and its inputs (.thrift files, generator options, include paths) are trusted build-time inputs. Out of model.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-compiler"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-wire",
+        "boundary": "boundary-wire",
+        "name": "Wire trust boundary",
+        "description": "Bytes are untrusted from the socket (or file/buffer) through the generated read() calls and become trusted only after the application handler chooses to act on them. The boundary is symmetric: server-side reads, client-side response reads, and in-process deserialization of stored bytes all cross it. Authenticated peers' bytes are still untrusted at the deserializer.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-wire-memory-corruption",
+          "threat-deserializer-crash-dos",
+          "threat-configured-cap-bypass",
+          "threat-sasl-authentication-bypass",
+          "threat-tls-validation-failure",
+          "threat-uncapped-default-dos",
+          "threat-cleartext-interception"
+        ],
+        "controlsAtBoundary": [
+          "control-set-size-caps",
+          "control-tls-configuration",
+          "control-register-accessmanager",
+          "control-front-loadbalancer"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-build",
+        "boundary": "boundary-build",
+        "name": "Build-time trust boundary",
+        "description": "The .thrift IDL source, generator options, include paths, and build toolchain are trusted; attackers controlling them (or the calling process) are out of model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-idl-input"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-set-size-caps",
+      "name": "Configure finite size and recursion caps",
+      "description": "Set containerSizeLimit, stringSizeLimit, maxFrameSize, and (where TConfiguration exists) maxMessageSize before exposing any T*Server to untrusted peers, with values reflecting actual application maximums (a cap near INT32_MAX is no protection). The shipped defaults for container and string limits are unlimited; setting them is the single highest-leverage operator action.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-tconfiguration",
+      "name": "TConfiguration message-size cap",
+      "description": "The newer cross-binding TConfiguration mechanism caps total bytes per message with a finite default of 100 MiB in the bindings that have it (C++, Java, Go, Rust, netstd and others).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-runtime"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-configuration",
+      "name": "Use TLS transports with a sane configuration",
+      "description": "Use TSSLSocket (or the per-binding TLS transport) for traffic crossing trust domains; configure a TLS 1.2 minimum floor (1.3 preferred where supported), disable known-weak ciphers in the underlying library, patch the TLS library on its own advisory cadence, and choose SASL mechanisms that fit the deployment (PLAIN over an unencrypted transport sends credentials in cleartext).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-register-accessmanager",
+      "name": "Register an AccessManager for peer identity checks",
+      "description": "Register an AccessManager (C++) or the per-binding equivalent wherever a peer trust decision depends on host-name verification or custom certificate checks; without it, only certificate-chain validation happens. Do not trust getPeerHost() as a verified host name (it can return a numeric IP).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-avoid-assert-checks",
+      "name": "No security check relies on assert",
+      "description": "After CVE-2018-1320 (THRIFT-4506), where a release build elided a load-bearing SASL assert, the model requires security checks to use unconditional code paths, never assert, since release-mode semantics may compile assertions out.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-runtime"
+      ]
+    },
+    {
+      "bom-ref": "control-oss-fuzz",
+      "name": "Continuous OSS-Fuzz deserializer and round-trip fuzzing",
+      "description": "OSS-Fuzz exercises the deserializer and serialization round-trip paths across nine bindings (Go, c_glib partial, C++, Java/JVM, JavaScript, Python, Ruby, Rust, netstd local-only); deserializing arbitrary bytes must not crash the runtime, and corpus crashes are valid findings.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-runtime",
+        "asset-generated-code"
+      ]
+    },
+    {
+      "bom-ref": "control-front-loadbalancer",
+      "name": "Front public endpoints with a load balancer or reverse proxy",
+      "description": "Public Thrift endpoints should sit behind a load balancer or reverse proxy handling slowloris, connection-rate limits, and source-IP rate limits, which Thrift does not provide.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-application-validation",
+      "name": "Application-side validation and authorization",
+      "description": "Treat all deserialized struct fields as untrusted application data (validate formats, ranges, and set membership after wire-level checks pass), and enforce per-method authorization in the handler; Thrift validates wire encoding, not application semantics, and authorizes nothing beyond the transport handshake.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,673 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-maven",
+      "name": "Apache Maven",
+      "description": "Build-automation and dependency-management tool for JVM projects. Given a pom.xml, Maven resolves dependencies and build plugins from configured repositories into a local repository (~/.m2/repository) and executes a lifecycle of plugin goals; plugins and build extensions are ordinary JVM artifacts that Maven downloads and executes as arbitrary code in the build JVM. The security model is fundamentally a supply-chain and arbitrary-code-execution model, and by explicit design Maven does not sandbox the code it builds or the plugins it runs. This umbrella threat model (v0 DRAFT, drafted by the ASF Security team for Maven PMC review, dated 2026-07-04) covers roughly 32 repositories across roughly 41 branch-targets, carrying the 3.x-vs-4.x runtime axis as a first-class distinction; most claims are tagged (inferred) pending PMC ratification via the open questions in the source document.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/maven/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://maven.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "maven"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/maven/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/maven/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-maven",
+      "name": "Maven build environment",
+      "description": "Maven is not a network service; it is a local process that pulls remote inputs and executes them. Local config crossing into the build JVM is trusted-to-trusted; the primary security boundary is remote repository to local repository (artifacts and metadata arriving over resolver transport); and resolved plugin/extension to arbitrary code execution is by design, not a boundary.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-build-jvm",
+          "type": "process",
+          "name": "Build JVM (Maven core and plugins)",
+          "description": "The Maven process executing the lifecycle: reads POM/settings/~/.m2, spawns plugin code and child processes (test runners, compilers, SCM clients), opens network connections to configured repositories.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-local-config",
+          "type": "data",
+          "name": "Local configuration (pom.xml, settings.xml, .mvn/)",
+          "description": "Operator-supplied trusted inputs: pom.xml, settings.xml (which may hold plaintext or obfuscated credentials), settings-security, .mvn/extensions.xml, and .mvn/maven.config. Malicious content here is out of model; the operator supplying it has already won.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-local-repo",
+          "type": "data-store",
+          "name": "Local repository (~/.m2/repository)",
+          "description": "Trusted-on-arrival: once an artifact lands here it is thereafter treated as trusted local input, and Maven does not re-validate it against a remote source on each build.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-resolver-transport",
+          "type": "interface",
+          "name": "Resolver transport",
+          "description": "HTTP(S) transport, repository metadata (maven-metadata.xml, checksums, index) parsing, and redirect handling; repository-supplied bytes are attacker-controllable and parsed before trust is established.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-resolved-artifacts",
+          "type": "component",
+          "name": "Resolved dependencies, plugins, and extensions",
+          "description": "Third-party artifacts resolved into the build and executed as arbitrary JVM code (by design); the semi-trusted supply-chain surface.",
+          "zone": "zone-remote-repos"
+        },
+        {
+          "bom-ref": "asset-wrapper",
+          "type": "tool",
+          "name": "Maven wrapper (mvnw)",
+          "description": "Downloads and executes whatever Maven distribution distributionUrl names; checksum pinning (distributionSha256Sum) is optional and operator-supplied, with no built-in trust anchor.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-mvnd",
+          "type": "process",
+          "name": "mvnd daemon",
+          "description": "Long-lived JVM reused across builds; not an isolation boundary between projects built by the same daemon.",
+          "zone": "zone-local"
+        },
+        {
+          "bom-ref": "asset-build-cache",
+          "type": "cache",
+          "name": "Build cache (maven-build-cache-extension)",
+          "description": "Keys build outputs by hashes; a shared or remote cache is only as trustworthy as its writers.",
+          "zone": "zone-local"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-local",
+          "name": "Operator-controlled machine",
+          "type": "trust",
+          "description": "The host the operator controls: local filesystem, environment variables, local configuration, ~/.m2, and the build JVM."
+        },
+        {
+          "bom-ref": "zone-remote-repos",
+          "name": "Remote repositories and mirrors",
+          "type": "trust",
+          "description": "Repositories and mirrors serving artifacts and metadata over resolver transport; semi-trusted (compromise, poisoning, and MITM on plaintext transport are in scope)."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-resolution",
+          "name": "Remote repository to local repository (primary security boundary)",
+          "type": "trust",
+          "zones": [
+            "zone-remote-repos",
+            "zone-local"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-build-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Build author / operator"
+              }
+            ],
+            "persona": {
+              "description": "Writes or vendors the pom.xml, settings.xml, and .mvn/ config; chooses repositories; runs mvn. Trusted: this actor has already chosen what code to execute."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-artifact-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Dependency / plugin / extension author"
+              }
+            ],
+            "persona": {
+              "description": "A third party whose artifact is resolved into the build and executed; a semi-trusted adversary in scope for supply-chain threats."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-repository-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Repository / mirror operator"
+              }
+            ],
+            "persona": {
+              "description": "Serves artifacts and metadata; a semi-trusted adversary in scope (compromise, poisoning, MITM on plaintext transport)."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Maven runs on a JVM (Maven 4 core requires Java 17+; the 3.x line runs on older JDKs) on a host the operator controls; local filesystem, environment variables, and ~/.m2 are trusted."
+        },
+        {
+          "description": "Maven reaches repositories over operator-configured URLs; plaintext http:// external repositories are treated as untrusted and blocked by default in the shipped conf/settings.xml via the external:http:* mirror/blocked mechanism (the CVE-2021-26291 mitigation)."
+        },
+        {
+          "description": "Cloning and building an untrusted third-party project makes that project's pom.xml and .mvn/ a trusted input to Maven even though the operator did not author it; the operator must understand this exception."
+        },
+        {
+          "description": "A finding is in-model only if reachable from a remote-repository-supplied artifact or metadata byte, from resolver transport, or from the Maven-4 transform surfaces, without first assuming the operator supplied malicious local config or a pre-poisoned ~/.m2."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-tampered-artifact-in-transit",
+        "name": "Tampered artifact or metadata served over resolver transport",
+        "description": "A compromised or malicious repository or mirror serves tampered artifacts, tampered metadata or checksums, or malicious redirects. Resolver compares downloaded bytes against the repository's published checksum (transport integrity), but the default checksum policy is warn, not fail: a mismatch is logged without failing the build unless --strict-checksums is set. Whether warn is the supported production posture is an open insecure-default question (Q4) for the PMC.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-resolver-transport",
+          "asset-local-repo"
+        ],
+        "mitigations": [
+          "control-checksum-verification",
+          "control-strict-checksums",
+          "control-curated-repositories"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-mitm",
+        "name": "Man-in-the-middle on plaintext repository transport",
+        "description": "A network attacker on any plaintext http:// transport the operator has not blocked can substitute artifacts (the CVE-2021-26291, CVE-2013-0253, and CVE-2012-6153 class). The shipped settings block external:http:* repositories by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-resolver-transport"
+        ],
+        "mitigations": [
+          "control-block-external-http",
+          "control-curated-repositories"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthentic-publisher",
+        "name": "Attacker-published artifact accepted (no publisher authenticity in core)",
+        "description": "Checksums prove integrity in transit, not who published the artifact. Maven core/resolver does not verify PGP signatures of dependencies or plugins by default, so a correctly-checksummed but attacker-published artifact is accepted; signature verification requires an operator-installed extension. Dependency confusion (name-squatting across repositories) and typosquatting are well-known classes left to the operator and ecosystem. A checksum is not a signature and not a MAC; 'no signature check' is a disclaimed property, not a core finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-resolved-artifacts"
+        ],
+        "mitigations": [
+          "control-signature-verification-extension",
+          "control-pin-versions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plugin-code-execution",
+        "name": "Arbitrary code execution by plugins, extensions, and tests (by design)",
+        "description": "A resolved plugin, build extension, test, or lifecycle binding runs as arbitrary JVM code in the build; crossing from 'declared in POM' to 'executing' is the intended behavior, not a violation. A scanner reporting 'plugin/extension/test executes arbitrary code' is a BY-DESIGN non-finding, applying to exec-style goals, code-generating plugins, surefire-forked test code, shade bytecode rewriting, and 'Maven downloads and runs code from the internet' generally.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-resolved-artifacts",
+          "asset-build-jvm"
+        ],
+        "mitigations": [
+          "control-isolate-untrusted-builds"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-archive-unpack",
+        "name": "Archive path traversal on unpack (zip-slip) and hostile archives",
+        "description": "Archive contents unpacked by plugins (zip/tar/jar) from remote artifacts are attacker-controllable; path traversal on unpack is the documented Plexus Archiver class. The source document lists archive path traversal, XML entity expansion in POM/metadata parsing, dependency confusion, and typosquatting among well-known classes Maven leaves to the operator and ecosystem.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-resolved-artifacts",
+          "asset-build-jvm"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-poisoned-local-repo",
+        "name": "Pre-poisoned local repository",
+        "description": "Once bytes are in ~/.m2/repository they are trusted; Maven does not re-validate them against a remote source on each build. A pre-poisoned local repository is out of model (trusted-on-arrival); poisoning it over the wire during resolution is in model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-local-repo"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-project-build",
+        "name": "Building an untrusted third-party project unsandboxed",
+        "description": "Maven does not aim to safely build code it has been told to build; if you want to use Maven to build untrusted code, it is up to you to provide the required isolation. Cloning a random repo and running mvn (or opening it in an IDE that auto-imports) executes that project's plugins and extensions as you; unknown projects should be built only inside a disposable container or VM.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-build-jvm",
+          "asset-local-config"
+        ],
+        "mitigations": [
+          "control-isolate-untrusted-builds"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-maven3-credential-obfuscation",
+        "name": "Recovery of credentials protected by Maven 3 password obfuscation",
+        "description": "Maven 3 credential 'encryption' is more accurately called password obfuscation: the master-password scheme provides no confidentiality against an attacker who reads both settings.xml and settings-security.xml. Maven 4's mvnenc reworks this into real encryption with an optional external vault; key and vault material are outside Maven's boundary. 'settings.xml contains a credential' is expected, not a finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-local-config"
+        ],
+        "mitigations": [
+          "control-mvnenc-encryption",
+          "control-protect-settings"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Resource exhaustion by hostile dependency graphs or archives",
+        "description": "Maven imposes no general bound on POM size, transitive-dependency fan-out, XML entity expansion in POM/metadata parsing, or hostile-archive decompression (zip/tar bombs). No resource-exhaustion or DoS defense is provided; a hostile graph or archive that exhausts memory or CPU is not a violation of a claimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-build-jvm",
+          "asset-resolver-transport"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-wrapper-distribution",
+        "name": "Unpinned Maven wrapper executes an attacker-controlled distribution",
+        "description": "mvnw downloads and executes whatever Maven distribution distributionUrl names; checksum pinning (distributionSha256Sum, wrapperSha256Sum) is optional and operator-supplied, and there is no built-in trust anchor. Committing a wrapper with an unpinned distributionUrl means anyone who moves or poisons that URL controls the Maven that runs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wrapper"
+        ],
+        "mitigations": [
+          "control-pin-wrapper"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-mvnd-cross-build-state",
+        "name": "Cross-build state reuse in the mvnd daemon",
+        "description": "The mvnd daemon reuses a long-lived JVM across builds and is not an isolation boundary between projects built by the same daemon; running mvnd across mutually-distrusting projects and assuming isolation is a known misuse.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-mvnd"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-shared-build-cache",
+        "name": "Poisoned shared or remote build cache",
+        "description": "maven-build-cache-extension keys outputs by hashes and makes no integrity guarantee for shared or remote caches; a shared cache is only as trustworthy as its writers, and authenticating cache writers is a downstream responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-build-cache"
+        ],
+        "mitigations": [
+          "control-authenticate-cache-writers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-consumer-pom-divergence",
+        "name": "Published consumer POM differs from the source POM (Maven 4, by design)",
+        "description": "At install/deploy, Maven 4 rewrites the source pom.xml into a flattened consumer POM (drops parent references, flattens BOM imports, keeps only compile/runtime transitive dependencies); the published POM deliberately differs from the source POM. A finding of the form 'the deployed POM does not match the repo pom.xml' is BY-DESIGN, not tampering. The transform also minimizes build-internal detail, reducing accidental exposure of internal repository URLs and config to downstream; retention of internal repository URLs would be the security-relevant concern.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-local-config"
+        ],
+        "mitigations": [
+          "control-consumer-pom-minimization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-mvnup-rewrite",
+        "name": "Unreviewed mvnup rewrite of the source pom.xml",
+        "description": "The Maven 4 upgrade tool mvnup writes back into the user's pom.xml in place, from trusted inputs. No guarantee is made that the rewrite is safe to apply unreviewed; the operator must review the diff mvnup produces.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-local-config"
+        ],
+        "mitigations": [
+          "control-review-mvnup-diff"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-resolution",
+        "boundary": "boundary-resolution",
+        "name": "Artifact resolution trust boundary",
+        "description": "The primary security boundary: artifacts and metadata arrive over resolver transport from semi-trusted repositories and mirrors and become trusted-on-arrival once written to ~/.m2/repository. Maven verifies transport integrity (checksums, warn by default) but not publisher authenticity.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-tampered-artifact-in-transit",
+          "threat-plaintext-mitm",
+          "threat-unauthentic-publisher",
+          "threat-hostile-archive-unpack",
+          "threat-resource-exhaustion"
+        ],
+        "controlsAtBoundary": [
+          "control-checksum-verification",
+          "control-strict-checksums",
+          "control-block-external-http",
+          "control-signature-verification-extension",
+          "control-curated-repositories"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-checksum-verification",
+      "name": "Transport integrity via checksums",
+      "description": "For each resolved artifact, resolver compares the downloaded bytes against the repository's published checksum. The default checksumPolicy is warn (log but do not fail on mismatch), so integrity is not enforced by default.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-resolution"
+      ]
+    },
+    {
+      "bom-ref": "control-strict-checksums",
+      "name": "Enable strict checksum policy",
+      "description": "Enable -C/--strict-checksums (checksumPolicy fail) for anything trust-sensitive so a checksum mismatch fails the build instead of only warning.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-resolution"
+      ]
+    },
+    {
+      "bom-ref": "control-block-external-http",
+      "name": "Plaintext external repository blocking",
+      "description": "The shipped conf/settings.xml blocks external:http:* so a plaintext external mirror cannot silently substitute artifacts; keep this block and prefer HTTPS.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-resolution"
+      ]
+    },
+    {
+      "bom-ref": "control-signature-verification-extension",
+      "name": "Add publisher signature verification tooling",
+      "description": "Install signature-verification tooling (an add-on extension) if the threat model needs publisher authenticity; core does not check PGP signatures by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-resolution"
+      ]
+    },
+    {
+      "bom-ref": "control-pin-versions",
+      "name": "Pin dependency and plugin versions",
+      "description": "Avoid version ranges and LATEST/RELEASE for plugins and dependencies to reduce dependency-confusion and surprise-upgrade risk.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-resolved-artifacts"
+      ]
+    },
+    {
+      "bom-ref": "control-curated-repositories",
+      "name": "Curate repositories and mirrors",
+      "description": "Prefer HTTPS, use a controlled proxy/mirror rather than arbitrary third-party repositories, and choose the checksum/signature posture deliberately.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-resolution"
+      ]
+    },
+    {
+      "bom-ref": "control-isolate-untrusted-builds",
+      "name": "Isolate builds of untrusted code",
+      "description": "Only build code and POMs you trust, or provide OS/container isolation yourself (disposable container or VM) when building unknown projects; Maven provides no build or plugin sandbox.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-build-jvm"
+      ]
+    },
+    {
+      "bom-ref": "control-mvnenc-encryption",
+      "name": "Encrypt settings credentials with mvnenc (Maven 4)",
+      "description": "Maven 4 reworks settings encryption from Maven 3's obfuscation to real encryption with an optional external vault; use mvnenc, manage the master password or vault, and never commit credentials.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-local-config"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-settings",
+      "name": "Protect settings.xml and key material",
+      "description": "Protect settings.xml, settings-security, and master-key or vault material; credential-at-rest confidentiality is the operator's responsibility on the 3.x line.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-local-config"
+      ]
+    },
+    {
+      "bom-ref": "control-pin-wrapper",
+      "name": "Pin the Maven wrapper",
+      "description": "Set distributionSha256Sum and wrapperSha256Sum if you commit mvnw into a repository others run, since the wrapper otherwise executes whatever distributionUrl names.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-wrapper"
+      ]
+    },
+    {
+      "bom-ref": "control-authenticate-cache-writers",
+      "name": "Treat shared build caches as a trust boundary",
+      "description": "Sign or authenticate the writers of any shared or remote build cache; the extension itself makes no integrity guarantee for them.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-build-cache"
+      ]
+    },
+    {
+      "bom-ref": "control-consumer-pom-minimization",
+      "name": "Consumer-POM minimization (Maven 4)",
+      "description": "The published consumer POM omits build-internal detail (internal plugin config, non-inherited structure), reducing accidental exposure of internal repository URLs and configuration to downstream; operators should verify that what they publish matches intent.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-local-config"
+      ]
+    },
+    {
+      "bom-ref": "control-resolver-api-encapsulation",
+      "name": "Resolver API encapsulation (Maven 4)",
+      "description": "Resolver 2.x is hidden behind the new Maven API; plugins no longer call it directly, shrinking the plugin-facing transport attack surface.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-resolver-transport"
+      ]
+    },
+    {
+      "bom-ref": "control-review-mvnup-diff",
+      "name": "Review mvnup diffs before committing",
+      "description": "Review the diff mvnup produces before committing the rewritten pom.xml.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-local-config"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-ant",
+      "name": "Apache Ant",
+      "description": "Java build tool. The security page documents how to report vulnerabilities and the security vulnerabilities fixed in released Ant versions, together with mitigation guidance (notably around temporary-file handling and archive reading). Binary patches are not provided; fixes require upgrading or building from patched source.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://ant.apache.org/security.html",
+          "comment": "Source security page; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ant.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ant"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://ant.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-crafted-archive-memory-dos",
+        "name": "Denial of service via specially crafted archives",
+        "description": "When reading a specially crafted archive, an Ant build can be made to allocate large amounts of memory that finally leads to an out of memory error, even for small inputs, disrupting builds. Affects TAR archives, the ZIP format and ZIP-derived formats such as JAR files and office documents (CVE-2021-36373, CVE-2021-36374; similar to Apache Commons Compress CVE-2021-35517 and CVE-2021-36090, detected by OSS Fuzz). Fixed in Ant 1.9.16 / 1.10.11.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-temp-files",
+        "name": "Source file injection and information leakage via shared temporary directory",
+        "description": "Ant used the default temporary directory identified by java.io.tmpdir for several tasks and could thus leak sensitive information; tasks such as fixcrlf and replaceregexp copy files from the temporary directory back into the build tree, allowing an attacker with access to the shared temporary directory to inject modified source files into the build process (CVE-2020-1945, and its incomplete-fix follow-up CVE-2020-11979 where fixcrlf deleted and recreated the temporary file without protection). Fixed in Ant 1.10.8 and 1.10.9; Ant 1.10.9 attempts to create a user-only-accessible temporary directory by default, which may fail on certain filesystems.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-private-temp-directory",
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-bzip2-dos",
+        "name": "Denial of service via bzip2 compression of repetitive input",
+        "description": "The bzip2 compressing streams in Apache Ant internally use sorting algorithms with unacceptable worst-case performance on very repetitive inputs; specially crafted input to the bzip2 task causes excessive processing time, resulting in denial of service (CVE-2012-2098). Fixed in Ant 1.8.4.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-log4jlistener-exposure",
+        "name": "Exposure to Apache Log4j 1.x issues via Log4jListener",
+        "description": "Ant's Log4jListener could expose security issues of the underlying Apache Log4j 1.x library (CVE-2017-5645). Log4j 1.x has reached its end of life and is no longer maintained. Fixed in Ant 1.9.10 / 1.10.2.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-private-temp-directory",
+      "name": "Configure a user-only-accessible temporary directory",
+      "description": "Configure Ant to use a temporary directory accessible only by the current user: set the ant.tmpdir property (Ant 1.9.15 and 1.10.8+) or the java.io.tmpdir system property (Ant 1.1-1.9.14 and 1.10.0-1.10.7). Best practice is to explicitly configure the respective property across all platforms rather than relying on defaults.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-upgrade-fixed-release",
+      "name": "Upgrade to a release containing the fix",
+      "description": "Binary patches are not provided; source code patches require using the building instructions for the affected Ant version. Upgrading to the release in which a vulnerability was fixed is the standard remediation.",
+      "category": "corrective",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-orc",
+      "name": "Apache ORC",
+      "description": "Low-level columnar data format library (not an execution framework) that reads and writes ORC data from trusted storage systems such as internal data lakes, HDFS, or S3. Its threat model is aligned with other foundational data format libraries such as Apache Arrow.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://orc.apache.org/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://orc.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "orc"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://orc.apache.org/security/"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/orc/main/site/security/index.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-crafted-file-security-impact",
+        "name": "Remote code execution or security-boundary bypass via a crafted ORC file",
+        "description": "A malformed or fuzzed file is treated as a security vulnerability (CVE) only when it leads to remote code execution, bypasses a defined security boundary or causes cross-tenant data leakage, or occurs in a server component explicitly designed to process unverified external data. CVE-2018-8015 (stack overflow from malformed types) and CVE-2025-47436 (heap buffer overflow during C++ LZO decompression) are fixed instances.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-ingestion-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-fuzzed-file-robustness",
+        "name": "Crash, OOM, OOB read, or assertion failure from a fuzzed file fed to the low-level parser",
+        "description": "A crash, out-of-memory condition, out-of-bounds read, or assertion failure caused by feeding a maliciously fuzzed file directly into the low-level parser is a robustness issue (a regular software bug), not a security vulnerability. Missing bounds checks or crashes during parsing of malformed files do not typically lead to code execution or break isolation sandboxes. Mandating strict defensive programming on every internal memory operation would severely degrade the performance a low-level serialization library is built for.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-ingestion-validation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-files-in-trusted-storage",
+        "name": "Maliciously crafted ORC files written into trusted internal storage",
+        "description": "The parsing APIs assume the underlying data originates from a trusted internal source. If an attacker can write arbitrary, maliciously crafted ORC files into internal storage, the system is already compromised at the infrastructure or access control level (IAM permissions, API gateways); the ORC library itself is not the appropriate security boundary to defend against compromised storage infrastructure.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-storage-access-controls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-ingestion-validation",
+      "name": "Validate and sanitize untrusted inputs at the data ingestion layer",
+      "description": "Security validation and sanitization of untrusted inputs should occur at the data ingestion layer, before data is admitted into the data lake. It is outside the scope of the format parser to proactively defend against all possible artificially corrupted bits.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-storage-access-controls",
+      "name": "Protect trusted storage with infrastructure access controls",
+      "description": "Rely on infrastructure and access-control mechanisms (for example IAM permissions and API gateways) to keep untrusted parties from writing arbitrary files into the trusted storage systems that ORC reads from.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

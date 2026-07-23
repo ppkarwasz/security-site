@@ -1,0 +1,201 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-rocketmq",
+      "name": "Apache RocketMQ",
+      "description": "Distributed messaging and streaming platform (Broker, NameServer, Proxy, clients, Dashboard, and observability components). The project provides security features such as ACL and TLS, but the final security effectiveness depends on the operator's comprehensive protection of network, hosts, accounts, and data.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://rocketmq.apache.org/docs/security/01security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://rocketmq.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "rocketmq"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://rocketmq.apache.org/docs/security/01security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-no-acl-open-access",
+        "name": "Unrestricted access when ACL is not enabled",
+        "description": "RocketMQ's authentication/authorization capabilities rely on ACL configuration. If ACL is not enabled or configured, RocketMQ will not enforce client identity verification at the protocol layer, and any entity that can access RocketMQ ports may initiate message sending/receiving or management operations. The security deployment baseline requires operators to either enable and properly configure ACL or strictly restrict RocketMQ components and ports within a trusted network. Per the FAQ, processing requests without identity verification when ACL is not enabled is a deployment/configuration choice, not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-enable-acl",
+          "control-trusted-network"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dashboard-exposure",
+        "name": "Cluster metadata disclosure via exposed Dashboard and observability components",
+        "description": "RocketMQ Dashboard and some observability components (such as the RocketMQ Prometheus Exporter) do not enable strong authentication by default; anyone who can access the HTTP port can read cluster metadata. Information-leakage risks from such exposure are the responsibility of the deployment side rather than RocketMQ vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-protect-dashboard"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-sensitive-data-exposure",
+        "name": "Exposure of sensitive message data in transit or at rest",
+        "description": "Without TLS, client-server communication can be intercepted. The message body is defined by the business; RocketMQ will not parse or persist decrypted content, so messages containing sensitive information stored in plaintext are exposed to whoever can read the store.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-enable-tls",
+          "control-business-side-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-consumer-deserialization",
+        "name": "Unsafe deserialization of message payloads by consumers",
+        "description": "RocketMQ only transmits byte arrays and does not perform object deserialization itself. If consumers need to deserialize message content, unsafe formats or missing validation of untrusted data can expose them to deserialization attacks; this is the consuming application's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-safe-deserialization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-leakage",
+        "name": "Leakage of sensitive information through logs",
+        "description": "RocketMQ-related logs (including Broker, NameServer, Proxy, and Client logs) can leak sensitive information if not properly kept.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-protect-logs"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-acl",
+      "name": "Enable and properly configure ACL",
+      "description": "Enable ACL (authentication and authorization) for production unless RocketMQ is strictly isolated within a trusted network. ACL 1.0 has been supported since 4.4.0; the more secure ACL 2.0 was introduced in 5.3.0 and ACL 1.0 was removed in 5.3.3, so all ACL users should migrate to ACL 2.0. Configure accounts with minimum privileges for applications, avoid using administrator accounts in business applications, implement tiered access keys, rotate them regularly, and audit changes.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-trusted-network",
+      "name": "Restrict RocketMQ components to a trusted network",
+      "description": "Strictly restrict RocketMQ components and ports within a trusted network (intranet/VPC/private network) rather than exposing them to untrusted networks.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-dashboard",
+      "name": "Protect Dashboard and observability endpoints",
+      "description": "Bind the Dashboard listening address to the intranet or a trusted VPC; configure ACL / IP allow-lists on the gateway, Ingress, or reverse proxy; and if public-network operation and maintenance is required, add a VPN, HTTP Basic/OAuth authentication, or a WAF.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS transport encryption",
+      "description": "Clients and servers can communicate through TLS encryption; enable it if sensitive data is involved.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-business-side-encryption",
+      "name": "Encrypt sensitive message content on the business side",
+      "description": "If messages contain sensitive information, perform field-level or overall encryption on the business side to avoid storing plaintext; RocketMQ does not parse or persist decrypted content.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-safe-deserialization",
+      "name": "Use secure serialization formats in consumers",
+      "description": "Consumers that need to deserialize message content should choose secure formats (such as JSON-Binding or Protobuf) and validate untrusted data.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-latest-sdk",
+      "name": "Use the latest official stable client",
+      "description": "Always use the latest official stable client to obtain the latest vulnerability fixes and improvements.",
+      "category": "corrective",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-logs",
+      "name": "Properly keep RocketMQ logs",
+      "description": "Properly keep RocketMQ-related logs (including Broker, NameServer, Proxy, and Client logs) to avoid leakage of sensitive information.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

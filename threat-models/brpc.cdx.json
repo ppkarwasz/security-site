@@ -1,0 +1,690 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-brpc",
+      "name": "Apache bRPC",
+      "description": "Embeddable C++ RPC framework that dispatches multiple protocols on the same port via content sniffing (baidu_std, HTTP/1.x, HTTP/2/gRPC, Thrift, Redis, memcached, RTMP, Mongo, the nshead family, and others). Provides naming services, load balancers, optional TLS, bthread scheduling, and HTTP built-in admin services. bRPC is not a standalone daemon: downstream applications link libbrpc and start brpc::Server in-process, and it is not a secure-by-default managed service. Translated from the DRAFT v1 threat model (based on master around 2026-05-21).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/brpc/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://brpc.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "brpc"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/brpc/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/brpc/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-brpc",
+      "name": "bRPC embedded runtime",
+      "description": "Substrate described by the threat model: server-side socket bytes flow through Acceptor/Socket into InputMessenger::CutInputMessage, which tries registered protocol parsers one by one and checks declared body size against -max_body_size, then through protobuf/json2pb/mcpack2pb decoders into the user's Service::Method (the trust transition). Built-in admin services may be routed from the same listening port unless moved to internal_port or disabled. Clients deserialize server responses through symmetric paths. Operator configuration and naming-service backends are trusted.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-wire-parsers",
+          "type": "module",
+          "name": "Wire-protocol parsers and decoders",
+          "description": "Parse*Message parsers for all registered protocols, plus protobuf, json2pb, mcpack2pb decoders and the gzip/snappy/zlib/lz4 compression layer. The most important surface: they directly receive untrusted bytes, are memory-unsafe C++, cover many protocols of different maturity, and multi-protocol sniffing can make every registered parser reachable from the same listening port. All protocol parsers are enabled by default.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-builtin-services",
+          "type": "endpoint",
+          "name": "Built-in admin services",
+          "description": "/status, /vars, /flags, /connections, /rpcz, /health, /dir, /threads, profiler and metrics endpoints. Served on the main port by default (internal_port=-1, has_builtin_services=true); /dir and /threads are disabled by default. An administrative surface, not just harmless debug pages: /flags can modify reloadable gflags when -immutable_flags=false.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-tls-layer",
+          "type": "component",
+          "name": "TLS/SSL layer and authentication hooks",
+          "description": "ServerSSLOptions/ChannelSSLOptions wrapping OpenSSL, and the Authenticator::VerifyCredential hook (runs once per connection, not per request, and does not cover all protocols by default). Cryptographic guarantees are inherited entirely from OpenSSL.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-client-channel",
+          "type": "component",
+          "name": "Client Channel and response parsing",
+          "description": "brpc::Channel accessing a single server or a cluster via naming service plus load balancer. Response bytes from server peers are untrusted and enter parsers and decoders symmetric to the server side.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-naming-services",
+          "type": "service",
+          "name": "Naming services",
+          "description": "file://, http(s)://, consul://, nacos://, dns:// and similar backends, configured by the operator and treated by bRPC as trusted infrastructure. Reply parsers should still tolerate malformed input.",
+          "zone": "zone-trusted-infra"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-wire-peers",
+          "name": "Wire peers",
+          "type": "trust",
+          "description": "RPC clients sending bytes to a bRPC server, and remote servers whose response bytes a bRPC client parses. Untrusted by default; an authenticated peer is still untrusted at the parser layer."
+        },
+        {
+          "bom-ref": "zone-runtime",
+          "name": "bRPC runtime in the host process",
+          "type": "trust",
+          "description": "The runtime code linked by the application: parsers, transports, built-in services, TLS layer, bthread/butil/bvar support libraries. Deserialization, business handlers and the host application share the same process; bRPC provides no sandbox."
+        },
+        {
+          "bom-ref": "zone-admin-consumers",
+          "name": "Built-in admin-service consumers",
+          "type": "trust",
+          "description": "People or programs accessing /status, /flags, /rpcz and similar endpoints. Their trust level depends entirely on whether the operator places these endpoints on an internal network or disables them."
+        },
+        {
+          "bom-ref": "zone-trusted-infra",
+          "name": "Operator configuration and naming-service backends",
+          "type": "trust",
+          "description": "ServerOptions, ChannelOptions, gflags, flagfiles, TLS file paths, naming-service URIs and the server lists naming services return; supplied or chosen by the operator and trusted. Backend compromise is out of scope."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-wire-server",
+          "name": "Boundary 1: the wire (server side, business RPC)",
+          "type": "trust",
+          "zones": [
+            "zone-wire-peers",
+            "zone-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-builtin-admin",
+          "name": "Boundary 2: the wire (server side, built-in admin services)",
+          "type": "trust",
+          "zones": [
+            "zone-admin-consumers",
+            "zone-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-wire-client",
+          "name": "Boundary 3: the wire (client side)",
+          "type": "trust",
+          "zones": [
+            "zone-runtime",
+            "zone-wire-peers"
+          ]
+        },
+        {
+          "bom-ref": "boundary-operator-config",
+          "name": "Boundary 4: operator config and naming-service backend",
+          "type": "trust",
+          "zones": [
+            "zone-trusted-infra",
+            "zone-runtime"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-application-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer"
+              }
+            ],
+            "persona": {
+              "description": "Defines .proto files, implements services, chooses protocols and ports, and calls clients. Trusted within the compile-time and configuration boundary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Runs the binary and configures ports, internal_port, TLS, gflags, naming services, rate limiting, and built-in services. Trusted for that instance."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-client-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Client peer (RPC client)"
+              }
+            ],
+            "persona": {
+              "description": "Sends bytes to a bRPC server. Untrusted by default; protocol sniffers must handle arbitrary input. The primary adversary: can send arbitrary bytes, confuse inputs across protocols, declare large lengths, construct compression bombs, or trigger parser bugs."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-server-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Server peer"
+              }
+            ],
+            "persona": {
+              "description": "The remote server a bRPC client connects to. Response bytes are also untrusted."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-admin-consumer",
+          "party": {
+            "roles": [
+              {
+                "name": "Built-in admin-service consumer"
+              }
+            ],
+            "persona": {
+              "description": "A person or program accessing /status, /flags, /rpcz and similar endpoints; trust level depends entirely on operator exposure decisions."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Linux and macOS are supported; Windows is not included in the security support scope for now. POSIX sockets and epoll/kqueue are required; TLS depends on OpenSSL, and risks from old OpenSSL versions are managed by the operator."
+        },
+        {
+          "description": "bRPC is memory-unsafe C++: all Parse*Message, Read*, Decompress*, JSON/mcpack/protobuf decoder paths are candidate surfaces for OOB access, UAF, double-free, integer overflow and stack overflow. -max_body_size (default 64 MiB, a supported production default) is the key outer cap."
+        },
+        {
+          "description": "Resistance to timing side channels is not a goal."
+        },
+        {
+          "description": "By default bRPC does not install signal handlers, does not fork child processes unless a profiler endpoint is triggered, reads limited environment variables and gflags, and does not modify locale or FPU state; fork without exec must happen before bRPC initialization."
+        },
+        {
+          "description": "Defaults triaged by the PMC as acceptable: built-in services on the main port (operator responsibility), -immutable_flags=false with reachable /flags, client TLS not verifying the server certificate (verify_mode NOT_SET), client TLS protocols including TLS 1.0/1.1, and force_ssl=false letting a TLS-configured port still accept plaintext."
+        },
+        {
+          "description": "Streaming unconsumed bytes are unlimited by default (-socket_max_streams_unconsumed_bytes=0); there is no per-protocol or per-method body cap, no framework-level connection-count cap, no general rate limiting, and idle_timeout_sec is disabled by default. Connection count and slowloris are handled by operators and load balancers."
+        },
+        {
+          "description": "bRPC has no continuous fuzzing/OSS-Fuzz; memory-safety properties rely mainly on code review and CI."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-parser-memory-corruption",
+        "name": "Memory corruption in wire-reachable parsers and decoders",
+        "description": "Any OOB access, use-after-free, double-free, or heap corruption in a parser, decoder, decompressor, TLS path, or built-in handler reachable from the server or client wire boundary is a high/critical issue (violates property P1: under configured caps, valid wire input should not cause memory corruption). Wire-reachable integer overflow/OOB is a valid vulnerability class; a fuzz crash in an opt-in parser can still be valid when the path is enabled, and all parsers are enabled by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-max-body-size",
+          "control-enabled-protocols"
+        ]
+      },
+      {
+        "bom-ref": "threat-stack-overflow-recursion",
+        "name": "Stack overflow via deeply nested input",
+        "description": "Protobuf, JSON, AMF, mcpack and similar decoders should reject excessively deep input before exhausting the stack (property P2). Protobuf has a recursion limit; JSON, mcpack and AMF depth limits need maintainer confirmation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-max-body-size"
+        ]
+      },
+      {
+        "bom-ref": "threat-protocol-sniffing-confusion",
+        "name": "Cross-protocol confusion in the multi-protocol sniffer",
+        "description": "Multi-protocol sniffing must be conservative (property P3): when a parser returns TRY_OTHERS it should not consume bytes, and the same frame should not be taken over by the wrong parser. Cross-protocol sniffer confusion is handled as a framework issue; the risk of not restricting the protocol set is the operator's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-enabled-protocols"
+        ]
+      },
+      {
+        "bom-ref": "threat-body-size-cap-bypass",
+        "name": "Bypass of the -max_body_size cap or superlinear memory growth",
+        "description": "Parsers with declared lengths should reject and close the connection when -max_body_size (default 64 MiB) is exceeded, without allocating oversized memory first (property P4); single-message memory use should be bounded by the cap with at most linear constant-factor overhead (property P9). Superlinear expansion or allocations that bypass the cap are bugs. A small compressed payload decompressing to huge output and causing OOM is a valid finding, although bRPC does not guarantee a decompressed-output size cap (decompression failure is allowed; crashes or memory boundary violations are not).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-max-body-size",
+          "control-app-decompression-limit"
+        ]
+      },
+      {
+        "bom-ref": "threat-h2-flood",
+        "name": "HTTP/2 HPACK bomb and flood attacks",
+        "description": "h2/HPACK bomb, CONTINUATION flood, and PING flood defenses are currently missing and should preferably be added (disclaimed property D7). If defenses are missing and the path is reachable, such a finding is potentially valid.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-h2-flood-defenses"
+        ]
+      },
+      {
+        "bom-ref": "threat-client-response-parsing",
+        "name": "Malicious server responses attacking a bRPC client",
+        "description": "A bRPC client deserializes server responses through paths symmetric to the server side: untrusted bytes enter parsers and decoders before being handed to the application. Parser/decoder vulnerabilities triggered by malicious server responses are in model, and client response parsing is modeled equivalently to server request parsing.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-client-channel",
+          "asset-wire-parsers"
+        ],
+        "mitigations": [
+          "control-max-body-size"
+        ]
+      },
+      {
+        "bom-ref": "threat-builtin-abuse",
+        "name": "Abuse of reachable built-in admin services",
+        "description": "When internal_port is unset and has_builtin_services=true, any HTTP client that can reach the listening port may access /status, /vars, /flags, profiler, and metrics endpoints; /flags can modify reloadable gflags when -immutable_flags=false, /dir reads files and /threads dumps stacks when explicitly enabled, /rpcz may expose sampled request information, and profiler endpoints cost CPU/IO. Even when served only internally, built-in services still need to avoid severe attacks such as command injection or denial of service; but exposure to the public internet, information disclosure from reachable built-ins, and /flags modification are operator responsibility (built-in services should only be exposed to trusted internal consumers).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-builtin-services"
+        ],
+        "mitigations": [
+          "control-hide-builtin-services",
+          "control-immutable-flags",
+          "control-dir-threads-disabled"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-and-tls-defaults",
+        "name": "Missing transport security under default TLS posture",
+        "description": "Bare baidu_std, HTTP, Thrift, Redis and similar protocols have no default authentication or encryption; there is no confidentiality without TLS (D11). Client TLS does not verify server certificates by default (verify_mode NOT_SET), client TLS protocols include TLS 1.0/1.1 by default, and force_ssl=false means a TLS-configured port still accepts plaintext. The PMC triages all of these as by-design/operator responsibility; TLS security itself comes from OpenSSL, and OpenSSL CVEs are external dependency issues.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tls-layer"
+        ],
+        "mitigations": [
+          "control-configure-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-missing-authn-authz",
+        "name": "Missing per-request authentication and authorization",
+        "description": "Authenticator authenticates per connection, not per request, and does not cover all protocols by default; no application-layer authorization (RBAC, ACLs, scopes, rate limits) is provided; no anti-replay is provided (request/sequence IDs are only for request/response matching); authentication brute force via many short connections is rate-limited by the operator. An authenticated peer remains untrusted at the parser layer. These are disclaimed properties implemented by the application (Authenticator, Interceptor) or the operator.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tls-layer"
+        ],
+        "mitigations": [
+          "control-authenticator-interceptor"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-forged-user-ip-header",
+        "name": "Forged client-IP headers when -http_header_of_user_ip is enabled",
+        "description": "When -http_header_of_user_ip is enabled, bRPC does not defend against attacker-forged headers; trusted proxies and firewalls must enforce the boundary, and Controller::remote_side() may be affected. Enabling the flag while allowing clients to bypass the trusted proxy is a known misuse pattern.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-proxy-boundary"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-socket-layer-dos",
+        "name": "Raw socket-layer denial of service",
+        "description": "SYN flood, slowloris, half-open connection exhaustion, and kernel table exhaustion are explicitly out of scope, as is unlimited growth of unconsumed streaming data without a configured cap and resource exhaustion in bvar/bthread/butil caused purely by in-process call patterns. Public endpoints should sit behind a load balancer or reverse proxy for connection-rate control, slowloris handling and L7 hardening.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-resource-caps",
+          "control-reverse-proxy"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-adversaries",
+        "name": "In-process, supply-chain, side-channel and naming-backend adversaries",
+        "description": "Out-of-scope adversaries: attackers who control the calling process, can read/write process memory, or can call arbitrary bRPC APIs; attackers who control the compiler, dependencies, build environment, or supply chain; side channels (timing, cache, power, RowHammer); attackers controlling ServerOptions/ChannelOptions; and compromise of the naming-service backend, which bRPC trusts as configured by the operator (crashes in reply parsers on malformed backend input remain in model). Vulnerabilities in application handlers (SQL injection, missing business authorization) are the application's, and test/example/tools/build/community/docs code is out of model.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-naming-services"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-wire-server",
+        "boundary": "boundary-wire-server",
+        "name": "Server-side wire trust boundary",
+        "description": "Server-side socket bytes are untrusted by default and remain untrusted until the framework calls the user's Service::Method. Crashes or memory corruption reachable from the wire in parsers, decoders, compression and the TLS handshake are in model; how the business handler processes the request is the application's responsibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-parser-memory-corruption",
+          "threat-stack-overflow-recursion",
+          "threat-protocol-sniffing-confusion",
+          "threat-body-size-cap-bypass",
+          "threat-h2-flood",
+          "threat-plaintext-and-tls-defaults",
+          "threat-missing-authn-authz"
+        ],
+        "controlsAtBoundary": [
+          "control-max-body-size",
+          "control-enabled-protocols",
+          "control-configure-tls",
+          "control-resource-caps"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-builtin-admin",
+        "boundary": "boundary-builtin-admin",
+        "name": "Built-in admin services trust boundary",
+        "description": "Built-in services are treated as an operator-trusted surface when placed on an internal port or protected by firewall; exposed to the public internet they become a major risk surface. Modifying gflags, enabling rpcz, or profiling through built-in services affects business logic or performance as normal use, not vulnerabilities; command injection or denial of service in built-in handlers must still be avoided even internally.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-builtin-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-hide-builtin-services",
+          "control-immutable-flags",
+          "control-dir-threads-disabled"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-wire-client",
+        "boundary": "boundary-wire-client",
+        "name": "Client-side wire trust boundary",
+        "description": "Untrusted server response bytes enter parsers and decoders before being handed to the application; modeled equivalently to server-side request handling.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-client-response-parsing"
+        ],
+        "controlsAtBoundary": [
+          "control-max-body-size",
+          "control-configure-tls"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-operator-config",
+        "boundary": "boundary-operator-config",
+        "name": "Operator configuration and naming-service trust boundary",
+        "description": "ServerOptions, ChannelOptions, gflags, flagfiles, TLS file paths, and naming-service URIs are operator-supplied and trusted; server lists returned by naming services are trusted infrastructure. Backend compromise is out of scope, but crashes in reply parsers on malformed input remain in model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-out-of-scope-adversaries"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-config-files"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-max-body-size",
+      "name": "Global message body cap (-max_body_size)",
+      "description": "Global 64 MiB body cap for all protocols; parsers with declared lengths must uniformly check it and reject oversized messages before allocation. Note it does not limit decompressed size, decoded JSON size, or protobuf's internal cap (lifted to INT_MAX). Setting it very large and assuming it will not affect memory is a known misuse.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-wire-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-enabled-protocols",
+      "name": "Restrict the protocol sniffing set (enabled_protocols)",
+      "description": "ServerOptions.enabled_protocols can restrict which parsers the sniffer tries, exposing only required protocols; parsers not listed should never be tried. All protocol parsers are enabled by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-wire-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-hide-builtin-services",
+      "name": "Hide built-in services from public ports",
+      "description": "Set internal_port to move built-in services to a separate port, set has_builtin_services=false to disable them entirely, or use a firewall. Do not expose profiler endpoints or /rpcz on sensitive traffic to untrusted consumers.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-builtin-services"
+      ]
+    },
+    {
+      "bom-ref": "control-immutable-flags",
+      "name": "Freeze runtime gflags (-immutable_flags)",
+      "description": "Unless truly needed, set -immutable_flags=true or ensure /flags is reachable only by trusted operators, so reachable /flags cannot modify reloadable gflags.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-builtin-services"
+      ]
+    },
+    {
+      "bom-ref": "control-dir-threads-disabled",
+      "name": "/dir and /threads disabled by default",
+      "description": "-enable_dir_service and -enable_threads_service default to false (property P15); enabling them on public ports is a dangerous non-default configuration.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-builtin-services"
+      ]
+    },
+    {
+      "bom-ref": "control-configure-tls",
+      "name": "Configure TLS properly",
+      "description": "Configure server certificate and client verification, remove TLS 1.0/1.1 from ChannelSSLOptions.protocols, and set force_ssl=true when plaintext must be refused. With SSL correctly configured and OpenSSL secure, TLS provides confidentiality and integrity (P5); the server rejects SSLv3 by default (P6), SNI selection is governed by strict_sni (P7) and ALPN by ServerSSLOptions.alpns (P8). Track OpenSSL patches and rotate TLS material.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-tls-layer"
+      ]
+    },
+    {
+      "bom-ref": "control-authenticator-interceptor",
+      "name": "Implement Authenticator and Interceptor in the application",
+      "description": "Implement Authenticator when identity is required (remembering it authenticates per connection and does not cover all protocols by default), and implement Interceptor or handler checks for per-request authorization; revalidate auth_context() and downstream identity information.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-tls-layer"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-caps",
+      "name": "Configure resource bounds",
+      "description": "Set max_concurrency and per-method concurrency (they limit in-flight requests, not connections, and do not constrain built-in services), idle_timeout_sec, -socket_max_streams_unconsumed_bytes for streaming, and -socket_max_unwritten_bytes for per-socket write buffers (property P10/P11).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-wire-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-app-decompression-limit",
+      "name": "Limit decompressed size at the application layer",
+      "description": "bRPC does not guarantee a decompressed-output size cap; if compression is enabled, limit decompressed size at the application layer or a sidecar. Adding a -max_decompressed_size flag is noted as preferable by the maintainers.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-wire-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-h2-flood-defenses",
+      "name": "Add h2/HPACK bomb and flood defenses",
+      "description": "Defenses against HPACK bomb, CONTINUATION flood, PING flood and SETTINGS flood are currently missing and should preferably be added.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-wire-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-reverse-proxy",
+      "name": "Front public endpoints with a load balancer or reverse proxy",
+      "description": "Put public endpoints behind a load balancer / reverse proxy for connection-rate control, slowloris handling, and L7 hardening; do not run bRPC processes as root; use escaping when application HTTP handlers output HTML.",
+      "category": "compensating",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-trusted-proxy-boundary",
+      "name": "Restrict backend access to trusted proxies",
+      "description": "When enabling -http_header_of_user_ip, allow only trusted proxies to access the backend port; bRPC performs no built-in trusted-proxy verification.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-config-files",
+      "name": "Protect configuration and choose trusted backends",
+      "description": "Choose trusted naming-service backends and protect permissions on flagfiles, certificate/key files, and pid files; do not combine an untrusted naming service with client TLS that does not verify the server certificate.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-naming-services"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-streampark",
+      "name": "Apache StreamPark",
+      "description": "Stream processing development management framework that allows users to submit Flink/Spark jobs to remote clusters, where they are executed unconditionally, without any attempt to limit what code can run.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://streampark.apache.org/community/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://streampark.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "streampark"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://streampark.apache.org/community/security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-remote-code-execution-by-design",
+        "name": "Remote code execution through submitted Flink/Spark jobs",
+        "description": "StreamPark allows users to submit Flink/Spark jobs to remote clusters, which are executed unconditionally, without any attempt to limit what code can run. Remote code execution reports against this capability have historically been rejected: it is intentional design, not a security flaw.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-cluster-access"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-restrict-cluster-access",
+      "name": "Restrict access to Flink/Spark cluster infrastructure",
+      "description": "Do not expose Flink/Spark processes to public internet access; corporate and cloud deployments should implement appropriate access restrictions to the Flink and Spark cluster infrastructure.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

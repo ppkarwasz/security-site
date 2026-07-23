@@ -1,0 +1,487 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-tomee",
+      "name": "Apache TomEE",
+      "description": "Jakarta EE and MicroProfile runtime built on Tomcat and OpenEJB, bundling implementations such as CXF, ActiveMQ, MyFaces/Mojarra, OpenJPA, BVal, HSQLDB, and Derby. The security model defines four triage dispositions (VALID, BY-DESIGN, OUT-OF-MODEL, KNOWN-NON-FINDING); TomEE's own attack surface is the bundled webapps, its integration code, TomEE-modified library code, and amplification resource exhaustion in TomEE-owned code.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/tomee/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://tomee.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tomee"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/tomee/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/tomee/main/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-tomee",
+      "name": "TomEE trust zones",
+      "description": "Trust zones defined by the TomEE security model: administrative users and deployed applications are trusted; data received via any TomEE-exposed connector or transport is untrusted; the EJBd transport, embedded network services, and peer-to-peer discovery carry a trusted-network deployment contract.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-openejb-transports",
+          "type": "endpoint",
+          "name": "OpenEJB connectors and transports",
+          "description": "The transports under server/: openejb-ejbd (EJBd binary protocol), openejb-http (remote EJB and REST invocations), openejb-hessian (Hessian RPC), openejb-ssh (SSH admin transport), plus CXF-backed JAX-WS/JAX-RS endpoints exposed by TomEE itself. Data received via any of them is untrusted.",
+          "zone": "zone-tomee"
+        },
+        {
+          "bom-ref": "asset-bundled-webapps",
+          "type": "component",
+          "name": "TomEE-provided web applications",
+          "description": "The web applications shipped in ASF distributions: the TomEE webapp, web console, REST admin endpoints, webaccess, and the plus/plume admin UIs. In-scope attack surface, including CSRF that tricks an administrator.",
+          "zone": "zone-tomee"
+        },
+        {
+          "bom-ref": "asset-embedded-services",
+          "type": "service",
+          "name": "Embedded network services",
+          "description": "Admin-enabled network listeners beyond the main HTTP and EJBd transports: Derby Network Server (openejb-derbynet), HSQLDB Server (openejb-hsql), the embedded ActiveMQ broker (openejb-activemq with a network connector), JMX over RMI, and the SSH admin transport. Each requires a trusted network or explicit authentication when enabled.",
+          "zone": "zone-trusted-network"
+        },
+        {
+          "bom-ref": "asset-discovery",
+          "type": "service",
+          "name": "Service discovery agents",
+          "description": "Peer-to-peer discovery between cluster nodes: multipoint discovery (MultipointDiscoveryAgent/MultipointServer, TCP gossip between known peers) and multicast discovery (MulticastDiscoveryAgent, MulticastPulseAgent, UDP multicast). A trusted network is integral to this feature.",
+          "zone": "zone-trusted-network"
+        },
+        {
+          "bom-ref": "asset-integration-code",
+          "type": "module",
+          "name": "TomEE integration and modified library code",
+          "description": "The wiring that exposes bundled libraries through TomEE's deployment model, configuration, and defaults, plus everything TomEE forks, patches, plants in upstream packages, shades/relocates, or bytecode-transforms at build time via tomee-patch-plugin (including the javax to jakarta migration). This code is TomEE's even when it sits in an upstream package namespace.",
+          "zone": "zone-tomee"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Untrusted network clients",
+          "type": "trust",
+          "description": "All clients, including reverse proxies and remote EJB clients using openejb-client, presenting data over TomEE-exposed connectors; responsible for the consequences of the data they present."
+        },
+        {
+          "bom-ref": "zone-tomee",
+          "name": "TomEE server",
+          "type": "trust",
+          "description": "The TomEE process, its transports, bundled webapps, and integration code."
+        },
+        {
+          "bom-ref": "zone-admin",
+          "name": "Administrative users",
+          "type": "trust",
+          "description": "Always trusted: an attacker with access to bin/ and lib/, configuration (conf/, tomee.xml, system.properties, server.xml, conf.d/, realm and JAAS files), logs/, temp, work, the shipped webapps, the JMX API, the Attach API or debugging interfaces, the apps/ and webapps/ deployment directories, or resource definitions is out of model."
+        },
+        {
+          "bom-ref": "zone-deployed-apps",
+          "name": "Deployed applications",
+          "type": "trust",
+          "description": "WARs, EARs, EJB-JARs, and RARs deployed to TomEE (via webapps/, apps/, the Deployer, tomee-maven-plugin, or tomee-embedded) are trusted, including their JAX-RS/JAX-WS endpoints, JMS clients, JPA entities, and CDI beans."
+        },
+        {
+          "bom-ref": "zone-trusted-network",
+          "name": "Trusted network segment",
+          "type": "trust",
+          "description": "The network expected to host the trusted-network transports: EJBd, SSH admin, embedded brokers and databases, JMX, and discovery. Exposing them to untrusted clients is misuse."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-connectors",
+          "name": "Connector and transport boundary",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-tomee"
+          ]
+        },
+        {
+          "bom-ref": "boundary-trusted-services",
+          "name": "Trusted-network services boundary",
+          "type": "trust",
+          "zones": [
+            "zone-trusted-network",
+            "zone-tomee"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin",
+          "name": "Administrative boundary",
+          "type": "trust",
+          "zones": [
+            "zone-admin",
+            "zone-tomee"
+          ]
+        },
+        {
+          "bom-ref": "boundary-apps",
+          "name": "Deployed application boundary",
+          "type": "trust",
+          "zones": [
+            "zone-deployed-apps",
+            "zone-tomee"
+          ]
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-connector-untrusted-data",
+        "name": "Attacks via data received on a TomEE-exposed connector",
+        "description": "Data received via any TomEE-exposed connector or transport is untrusted regardless of protocol, explicitly covering openejb-ejbd, openejb-http, openejb-hessian, openejb-ssh, and the CXF-backed JAX-WS/JAX-RS endpoints TomEE itself exposes. Vulnerabilities in TomEE's own attack surface exploitable through such data are VALID.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ]
+      },
+      {
+        "bom-ref": "threat-bundled-webapp-vulnerability",
+        "name": "Vulnerability in a TomEE-provided web application",
+        "description": "Findings in the bundled-webapp endpoints shipped in ASF distributions (the TomEE webapp, web console, REST admin endpoints, webaccess, plus/plume admin UIs) are VALID, including CSRF that tricks an administrator into performing an unintended action.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-bundled-webapps"
+        ]
+      },
+      {
+        "bom-ref": "threat-integration-code-vulnerability",
+        "name": "Vulnerability in TomEE integration or TomEE-modified library code",
+        "description": "Findings in TomEE's integration code (the wiring exposing bundled libraries through TomEE's deployment model, configuration, and defaults) and in TomEE-modified library code (forks such as the BCEL ConstantPool fork under openejb.shade.*, classes planted in upstream packages, shaded/relocated libraries, and jars bytecode-transformed by tomee-patch-plugin) are VALID, even when the affected class sits in an upstream package namespace.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-integration-code"
+        ]
+      },
+      {
+        "bom-ref": "threat-amplification-dos",
+        "name": "Amplification resource exhaustion in TomEE-owned code",
+        "description": "A single bounded, well-formed request that triggers disproportionate (super-linear or unbounded) CPU, memory, or thread consumption because of a defect in TomEE-owned code (for example a decompression bomb, entity expansion, or quadratic parsing in TomEE's integration or patched code), on a connector that does not require a trusted network, is in scope. The trusted-network transports are excluded because exposing them to untrusted clients is already misuse.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports",
+          "asset-integration-code"
+        ]
+      },
+      {
+        "bom-ref": "threat-ejbd-deserialization",
+        "name": "EJBd Java-object deserialization by design",
+        "description": "The EJBd protocol deserializes Java objects from clients by design; that is what the protocol is. Exposing EJBd on an untrusted network without authentication and a deserialization filter is misuse, not a TomEE vulnerability. An optional transport flag enables TLS, but the default cipher suite is not authenticated; operators must select authenticated cipher suites and configure a JEP 290 filter when the transport is reachable from untrusted clients. Disposition BY-DESIGN.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ],
+        "mitigations": [
+          "control-ejbd-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-access-compromise",
+        "name": "Attacks requiring administrative access",
+        "description": "Reports where the attacker already has access to or control over TomEE binaries and scripts, configuration, logs, temp, work directories, the shipped webapps, the JMX API, the Attach API or debugging interfaces, the OpenEJB apps/ and webapps/ deployment directories, or resource definitions in tomee.xml/resources.xml are rejected: administrative users are always trusted. Tricking an administrator (CSRF) remains accepted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-application",
+        "name": "Malicious or vulnerable deployed application",
+        "description": "Applications and modules deployed to TomEE (WARs, EARs, EJB-JARs, RARs, however deployed) are trusted; vulnerabilities in application code, including application-provided endpoints, JMS clients, JPA entities, and CDI beans, are application vulnerabilities. Applications enabling self-modification (hot-deploy endpoints, WebDAV, HTTP PUT, custom upload handlers) must secure that functionality themselves.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-embedded-services-exposure",
+        "name": "Exposure of embedded network services to untrusted networks",
+        "description": "Derby Network Server, HSQLDB Server, the embedded ActiveMQ broker, remote JMX over RMI, and the SSH admin transport are admin-enabled services that require a trusted network or explicit authentication when enabled; reports assuming they should be safe to expose on an untrusted network without authentication are rejected.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-embedded-services"
+        ],
+        "mitigations": [
+          "control-trusted-network-services"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-discovery-attack",
+        "name": "Attacks on service discovery over an untrusted network",
+        "description": "Reports against multipoint or multicast discovery that depend on the absence of network-layer protection, including deserialization of cluster traffic, peer impersonation, or message injection, are rejected: a trusted network is part of the deployment contract, and operators running discovery across untrusted networks must provide transport-level protection (VPN, segmentation) themselves.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-discovery"
+        ],
+        "mitigations": [
+          "control-discovery-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-upstream-library-vulnerability",
+        "name": "Vulnerability in a bundled upstream library as released",
+        "description": "Flaws present in the upstream artifact as released, unchanged by TomEE (CXF, ActiveMQ, MyFaces, Mojarra, OpenJPA, BVal, HSQLDB, Derby, MicroProfile implementations, and others), are out of scope and should be reported to the upstream project's security contact; only TomEE's integration code and TomEE-modified code are TomEE's. Uncertain cases can be routed via security@apache.org.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-integration-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-generic-dos",
+        "name": "Generic denial of service",
+        "description": "Request or connection floods, slow-client (Slowloris-style) attacks, large-but-linear payloads, and resource cost inherent to a protocol or to a bundled library as released are not treated as TomEE vulnerabilities; only the specific amplification defect class in TomEE-owned code is in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-disclosure",
+        "name": "Disclosure of security-sensitive information through logs",
+        "description": "With the default configuration, security-sensitive information is not logged apart from anything included in the request URI. Modified logging configurations may log sensitive information, particularly debug logging, raised OpenEJB log levels, CXF request/response logging, JPA SQL logging, or JMS broker trace logging. Default logs are likely to contain PII such as user IP addresses; TomEE is not responsible for log content generated by deployed applications.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-openejb-transports"
+        ],
+        "mitigations": [
+          "control-default-logging"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-connectors",
+        "boundary": "boundary-connectors",
+        "name": "Connector trust boundary",
+        "description": "Data received via any TomEE-exposed connector or transport is untrusted regardless of protocol; all clients, including reverse proxies and remote EJB clients, are responsible for the consequences of the data they present, and impacts to a client from a malformed request processed per the protocol specification are the client's responsibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-connector-untrusted-data",
+          "threat-bundled-webapp-vulnerability",
+          "threat-integration-code-vulnerability",
+          "threat-amplification-dos",
+          "threat-generic-dos"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-trusted-services",
+        "boundary": "boundary-trusted-services",
+        "name": "Trusted-network services boundary",
+        "description": "EJBd, the SSH admin transport, the embedded brokers and databases, JMX, and discovery carry a trusted-network deployment contract; exposing them to untrusted clients at all is misuse.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ejbd-deserialization",
+          "threat-embedded-services-exposure",
+          "threat-discovery-attack"
+        ],
+        "controlsAtBoundary": [
+          "control-ejbd-hardening",
+          "control-trusted-network-services",
+          "control-discovery-protection"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin",
+        "boundary": "boundary-admin",
+        "name": "Administrative trust boundary",
+        "description": "Administrative users are always trusted; attacks requiring their access are rejected, while CSRF against an administrator is accepted.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-admin-access-compromise"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-apps",
+        "boundary": "boundary-apps",
+        "name": "Deployed application boundary",
+        "description": "Deployed applications and modules are trusted; their vulnerabilities are application vulnerabilities.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-application"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-ejbd-hardening",
+      "name": "Harden EJBd for untrusted reachability",
+      "description": "When the EJBd transport is reachable from untrusted clients, enable the TLS transport flag with authenticated cipher suites (the default cipher suite is not authenticated), require authentication, and configure a JEP 290 deserialization filter (-Djdk.serialFilter=...).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-trusted-services"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-network-services",
+      "name": "Bind embedded services to trusted interfaces or authenticate them",
+      "description": "Operators are responsible for binding Derby Network Server and HSQLDB Server to trusted interfaces or enabling their authentication; for the embedded ActiveMQ broker's authentication, authorization, and TLS configuration; and for authentication and TLS on any enabled remote JMX connector.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-embedded-services"
+      ]
+    },
+    {
+      "bom-ref": "control-discovery-protection",
+      "name": "Network-layer protection for discovery",
+      "description": "Operators who need multipoint or multicast discovery across an untrusted network must provide transport-level protection themselves (VPN, network segmentation); a trusted network is integral to the feature.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-discovery"
+      ]
+    },
+    {
+      "bom-ref": "control-default-logging",
+      "name": "Default logging avoids security-sensitive information",
+      "description": "With the default configuration, security-sensitive information is not logged apart from anything included in the request URI; operators modifying logging configurations (debug logging, CXF request/response logging, SQL logging, broker trace logging) accept the risk of sensitive information reaching logs.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-openejb-transports"
+      ]
+    }
+  ]
+}

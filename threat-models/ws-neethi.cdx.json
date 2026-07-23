@@ -1,0 +1,422 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-ws-neethi",
+      "name": "Apache Neethi",
+      "description": "Implementation of the WS-Policy Specification (September 2007): a small in-process Java library that builds an in-memory tree of WS-Policy / WS-PolicyAttachment assertions, normalizes, intersects, merges, and serializes them, with an extension model (AssertionBuilder) for domain-specific assertion vocabularies. Consumed primarily by SOAP stacks (Apache CXF, Apache Axis2) and by Apache WSS4J's ws-security-policy-stax. Neethi is the policy-document parser and policy-algebra evaluator, not the policy enforcer. One prominent characteristic: PolicyReference.normalize() issues a synchronous HTTP(S) GET to dereference policy references not already registered locally. Source document is under maintainer review.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ws-neethi/blob/master/THREAT-MODEL.md",
+          "comment": "Source security threat model; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ws.apache.org/neethi/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ws"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ws-neethi/blob/master/THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ws-neethi/master/THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ws-neethi",
+      "name": "Neethi embedded-library trust structure",
+      "description": "Trust structure described by the threat model: the embedding SOAP stack, the caller-supplied PolicyRegistry and AssertionBuilder implementations, and the JVM classpath are trusted; the producer of the policy bytes is attacker-controllable, and an unresolved wsp:PolicyReference URI triggers a bounded outbound HTTP(S) fetch whose response bytes are parsed as a further policy. Out of model: policy enforcement (the SOAP stack's job), Apache Axiom defects, and test resources.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-policy-parser",
+          "type": "component",
+          "name": "Policy parser and algebra (PolicyEngine, PolicyBuilder, Policy operators)",
+          "description": "Parses WS-Policy XML from InputStream, XMLStreamReader, Axiom OMElement, or W3C Element into the Policy object model, and provides normalization, intersection (PolicyIntersector), and equivalence (PolicyComparator). The InputStream overloads disable DTD and external entities; the pre-parsed overloads inherit the caller's parser posture.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-remote-resolver",
+          "type": "component",
+          "name": "Remote PolicyReference resolver",
+          "description": "PolicyReference.getRemoteReferencedPolicy: on a registry lookup miss during normalize(), opens an HTTP/HTTPS connection to the reference URI with scheme restriction (http/https only), an address-class filter (rejects link-local, multicast, any-local; permits loopback and RFC-1918 / site-local by documented intent), redirects disabled, connect timeout 5 s, read timeout 10 s, and a 64 MiB response byte budget.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-policy-registry",
+          "type": "data-store",
+          "name": "PolicyRegistry",
+          "description": "Caller-supplied lookup table consulted by PolicyReference.normalize() before any network fetch is attempted; its contents are trusted by construction. Pre-populating it is the documented way to keep untrusted policies off the remote-fetch path.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-policy",
+          "name": "Policy byte producers",
+          "type": "trust",
+          "description": "Producers of the policy bytes with full byte control, including the ability to embed wsp:PolicyReference URIs pointing at any HTTP/HTTPS URL."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Embedding application process",
+          "type": "trust",
+          "description": "The embedding SOAP stack, the PolicyRegistry, registered AssertionBuilder implementations, and the JVM classpath (META-INF/services discovery). All trusted by construction."
+        },
+        {
+          "bom-ref": "zone-remote-endpoints",
+          "name": "Remote policy endpoints",
+          "type": "trust",
+          "description": "HTTP(S) endpoints named by absolute PolicyReference URIs: untrusted, bounded by Neethi's scheme restriction and address-class filter; the bytes they return are parsed as policies by recursive call."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-policy-parse",
+          "name": "Policy parsing boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-policy",
+            "zone-application"
+          ]
+        },
+        {
+          "bom-ref": "boundary-remote-fetch",
+          "name": "Remote policy dereference boundary",
+          "type": "trust",
+          "zones": [
+            "zone-application",
+            "zone-remote-endpoints"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Apache Axiom is on the classpath for the OMElement API path; Axiom defects are reported upstream. AssertionBuilder implementations are discovered from META-INF/services on the trusted classpath."
+        },
+        {
+          "description": "The remote-policy fetcher performs one InetAddress.getByName lookup for the address-class check; compromised or rebinding DNS can spoof the address class between the check and the JDK connect."
+        },
+        {
+          "description": "Neethi opens no listening sockets, spawns no child processes, installs no signal handlers, reads no environment variables for security-sensitive choices, and writes only via the caller-supplied XMLStreamWriter (negative claims awaiting maintainer ratification)."
+        },
+        {
+          "description": "In-process callers, the JVM classpath owner, hostile AssertionBuilder or PolicyRegistry implementations, co-tenants in a shared JVM, side-channel observers, and quantum adversaries are out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-xxe-inputstream-path",
+        "name": "XXE / DTD attack through the hardened InputStream parse paths",
+        "description": "The InputStream overloads (PolicyEngine.getPolicy, PolicyBuilder.getPolicy, getPolicyReference) configure their XMLInputFactory with IS_SUPPORTING_EXTERNAL_ENTITIES=false and SUPPORT_DTD=false. An external entity fetch or a DTD-driven expansion completing through these paths violates claimed property P1 and is security-critical (VALID).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-policy-parser"
+        ],
+        "mitigations": [
+          "control-inputstream-xxe-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-policy-resource-exhaustion",
+        "name": "Resource exhaustion via crafted policy documents",
+        "description": "Crafted policies attempt to exceed the documented budgets: parser nesting depth (maxDepth, default 256), parsed element count (maxElements, default 100000), parsed attribute count (maxAttributes, default 10000), remotely fetched policy size (maxPolicyBytes, default 64 MiB), and the hard cap of 10000 normalized policy alternatives during normalization / intersection. A parse or normalization that accepts input beyond a configured or default budget without rejection violates claimed properties P2-P6 (availability-relevant, VALID).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-policy-parser",
+          "asset-remote-resolver"
+        ],
+        "mitigations": [
+          "control-parser-budgets",
+          "control-remote-fetch-guards"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-filter-bypass",
+        "name": "Bypass of the remote PolicyReference SSRF guards",
+        "description": "An unresolved wsp:PolicyReference in attacker-controlled policy bytes triggers an HTTP GET. Claimed guards: only http and https schemes are permitted (P8); link-local (including the 169.254.169.254 cloud IMDS case), multicast, and any-local addresses are rejected (P7); redirects are not followed (P9); and per-fetch connect/read timeouts apply (P10). A fetch reaching a rejected address class, a non-HTTP scheme being dereferenced, or a redirect being followed to a host the filter would have rejected is a security-critical filter bypass (VALID).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-resolver"
+        ],
+        "mitigations": [
+          "control-remote-fetch-guards",
+          "control-populated-registry"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-loopback-rfc1918",
+        "name": "SSRF to loopback and RFC-1918 addresses (permitted by design)",
+        "description": "The address-class filter deliberately permits loopback and RFC-1918 / site-local addresses so that policies on localhost or an internal network can be resolved. An attacker policy with wsp:PolicyReference URI pointing at, for example, a local-bound Consul / memcached / Redis / etcd HTTP endpoint reaches it. Operators whose threat model treats loopback or RFC-1918 as untrusted (multi-tenant cloud) must resolve all references locally via the PolicyRegistry or filter policy bytes; the correct triage disposition is an open maintainer question (Q6, proposed: operator responsibility per the registry guidance).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-resolver"
+        ],
+        "mitigations": [
+          "control-populated-registry"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dns-rebinding",
+        "name": "DNS rebinding between the address-class check and the connect",
+        "description": "The filter resolves the host once via InetAddress.getByName; the JDK's URLConnection.connect may resolve it again, so DNS rebinding between the two lookups could let an external hostname resolve to an address the filter would have rejected. Disclaimed as a best-effort partial defense pending maintainer ruling (Q8).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-resolver"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unbounded-reference-fetches",
+        "name": "Unbounded number and depth of PolicyReference fetches",
+        "description": "There is no bound on the number of PolicyReference URIs Neethi will fetch during a single Policy.normalize() call (a policy with 1000 unresolved references issues 1000 sequential GETs, each bounded only by the 5 s + 10 s timeouts) and no documented limit on transitive fetch-chain depth: a fetched policy can itself reference further URLs, and cycle detection is the caller's responsibility. Disclaimed; capping fetch counts is a caller responsibility (open question Q7 proposes a future maximum-fetches-per-normalize counter).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-resolver"
+        ],
+        "mitigations": [
+          "control-populated-registry",
+          "control-caller-fetch-caps"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-preparsed-input-xxe",
+        "name": "XXE inherited from pre-parsed Element / XMLStreamReader / OMElement input",
+        "description": "The Element, XMLStreamReader, and Axiom OMElement overloads do not apply Neethi's XXE / DTD hardening: the caller's DocumentBuilderFactory, XMLInputFactory, or Axiom StAXParserConfiguration decided the posture, by design. Letting attacker bytes reach these overloads without an XXE-hardened upstream parser is a documented misuse pattern; such reports are out of model (trusted input).",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-policy-parser"
+        ],
+        "mitigations": [
+          "control-harden-upstream-parsers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-extension-abuse",
+        "name": "Hostile AssertionBuilder, poisoned PolicyRegistry, or shared static facade state",
+        "description": "A hostile AssertionBuilder on the classpath can substitute model objects; a PolicyRegistry with a poisoned entry is the embedding application's bug; and the PolicyEngine static facade reuses a static synchronized PolicyBuilder, so an AssertionBuilder registered on one call persists process-wide (a surprise in multi-tenant JVMs). All are trusted-by-construction surfaces outside the adversary model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-policy-registry",
+          "asset-policy-parser"
+        ],
+        "mitigations": [
+          "control-lock-down-classpath"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-policy-parse",
+        "boundary": "boundary-policy-parse",
+        "name": "Policy parsing trust boundary",
+        "description": "Attacker-controllable policy bytes enter through the PolicyEngine / PolicyBuilder entry points. The InputStream overloads are hardened against XXE / DTD and budgeted; the pre-parsed overloads inherit the caller's parser posture.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-xxe-inputstream-path",
+          "threat-policy-resource-exhaustion",
+          "threat-preparsed-input-xxe"
+        ],
+        "controlsAtBoundary": [
+          "control-inputstream-xxe-hardening",
+          "control-parser-budgets",
+          "control-harden-upstream-parsers"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-remote-fetch",
+        "boundary": "boundary-remote-fetch",
+        "name": "Remote policy dereference trust boundary",
+        "description": "On a registry miss, Policy.normalize() falls through to an outbound HTTP(S) GET at an attacker-influenced URI. The fetch is guarded by scheme restriction, an address-class filter that deliberately permits loopback and RFC-1918, disabled redirects, timeouts, and a byte budget; the response bytes are parsed as untrusted policy.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ssrf-filter-bypass",
+          "threat-ssrf-loopback-rfc1918",
+          "threat-dns-rebinding",
+          "threat-unbounded-reference-fetches"
+        ],
+        "controlsAtBoundary": [
+          "control-remote-fetch-guards",
+          "control-populated-registry",
+          "control-caller-fetch-caps"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-inputstream-xxe-hardening",
+      "name": "XXE / DTD disabled on the InputStream parse paths",
+      "description": "The internal XMLInputFactory used by the getPolicy(InputStream) and getPolicyReference(InputStream) paths sets IS_SUPPORTING_EXTERNAL_ENTITIES=false and SUPPORT_DTD=false (hardened by default). Applies only to the InputStream overloads.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-policy-parser",
+        "boundary-policy-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-parser-budgets",
+      "name": "Documented parser and normalization budgets",
+      "description": "System-property-configurable budgets with safe defaults (falling back to the defaults when unset or invalid): org.apache.neethi.parser.maxDepth=256, org.apache.neethi.parser.maxElements=100000, org.apache.neethi.parser.maxAttributes=10000, and a hard cap of 10000 normalized policy alternatives that blocks exponential alternative expansion during normalization / intersection. Operators should keep these at secure values and avoid setting them overly large.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-policy-parser"
+      ]
+    },
+    {
+      "bom-ref": "control-remote-fetch-guards",
+      "name": "Guards on remote PolicyReference dereference",
+      "description": "PolicyReference.getRemoteReferencedPolicy permits only http and https schemes; rejects link-local, multicast, and any-local addresses via an address-class check (loopback and RFC-1918 / site-local are permitted by documented intent); disables redirects (setInstanceFollowRedirects(false)); applies connectTimeout=5000 ms and readTimeout=10000 ms; and bounds the response via org.apache.neethi.remote.maxPolicyBytes (default 64 MiB).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-remote-resolver",
+        "boundary-remote-fetch"
+      ]
+    },
+    {
+      "bom-ref": "control-populated-registry",
+      "name": "Pre-populate the PolicyRegistry to avoid remote fetches",
+      "description": "For any deployment where policy bytes may originate from an untrusted peer, populate the PolicyRegistry ahead of time with all expected policy references so PolicyReference.normalize resolves locally and the remote-fetch path is never reached. If the deployment treats loopback or RFC-1918 as untrusted, install a custom PolicyRegistry that always satisfies references locally, or filter policy bytes for absolute-URI PolicyReference elements before handing them to Neethi.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-policy-registry",
+        "boundary-remote-fetch"
+      ]
+    },
+    {
+      "bom-ref": "control-caller-fetch-caps",
+      "name": "Cap reference fetches and prefer https at the caller",
+      "description": "Cap the number of PolicyReference URIs at the caller layer (Neethi documents no per-normalize fetch-count bound) and prefer https:// policy URIs for any references that survive into the remote-fetch path; the address-class filter does not enforce scheme-vs-host pairing, and a network attacker can substitute plain http:// responses.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-remote-resolver"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-upstream-parsers",
+      "name": "Harden upstream parsers for pre-parsed policy input",
+      "description": "For attacker-controlled policy bytes arriving as a pre-parsed OMElement / Element / XMLStreamReader: for Axiom use StAXParserConfiguration.SOAP or STANDALONE per the Axiom threat model; for DocumentBuilderFactory set disallow-doctype-decl=true and disable external entities; for XMLInputFactory set SUPPORT_DTD=false and IS_SUPPORTING_EXTERNAL_ENTITIES=false.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-policy-parser"
+      ]
+    },
+    {
+      "bom-ref": "control-lock-down-classpath",
+      "name": "Lock down builder discovery and shared state",
+      "description": "Lock down META-INF/services/org.apache.neethi.builders.AssertionBuilder contents at packaging time (a hostile builder on the classpath can substitute model objects); treat the PolicyEngine static facade with caution in shared-state JVMs, since AssertionBuilder registration is process-wide; and do not share PolicyBuilder instances across threads without external synchronization (the threading model is unspecified).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-policy-parser",
+        "asset-policy-registry"
+      ]
+    }
+  ]
+}

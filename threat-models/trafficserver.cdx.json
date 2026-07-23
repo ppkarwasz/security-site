@@ -1,0 +1,102 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-trafficserver",
+      "name": "Apache Traffic Server",
+      "description": "Caching HTTP proxy server. The security policy follows the ASF vulnerability handling process; its security model states that administrative users are trusted, that experimental features (explicitly including HTTP/3 and QUIC support) are not treated as security surfaces, and that plugins shipped with Traffic Server, including those under plugins/experimental/, are in scope for security reporting.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/trafficserver/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://trafficserver.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "trafficserver"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/trafficserver/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/trafficserver/master/SECURITY.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-shipped-plugin-vulnerability",
+        "name": "Vulnerability in a plugin shipped with Traffic Server",
+        "description": "Plugins shipped with Traffic Server, including those under plugins/experimental/, are in scope for security reporting; vulnerabilities in them should be reported through the private security mailing list following the ASF process.",
+        "origin": "adversarial"
+      },
+      {
+        "bom-ref": "threat-admin-access-compromise",
+        "name": "Attacks requiring administrative access",
+        "description": "Administrative users are always considered to be trusted; reports where an attacker already has access to or control over Traffic Server binaries and/or scripts, or Traffic Server configuration files, are rejected.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-experimental-feature-vulnerability",
+        "name": "Vulnerability in an experimental feature (including HTTP/3 and QUIC)",
+        "description": "Experimental features are known unstable and not supposed to be used in production; vulnerabilities in them are not considered security issues. This explicitly includes HTTP/3 and QUIC support, which remain experimental. Such issues may be reported publicly, though the project asks to be contacted privately for serious or uncertain cases.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-disclosure-debug",
+        "name": "Disclosure of security-sensitive information through modified logging",
+        "description": "Security-sensitive information may be logged with modified logging configurations, particularly if debug logging is enabled; this is an operator configuration consequence, not a Traffic Server vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  }
+}

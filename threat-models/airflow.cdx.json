@@ -1,0 +1,493 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:33:27Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-airflow",
+      "name": "Apache Airflow",
+      "description": "Workflow orchestration platform. Dag files written by Dag authors are parsed and executed by Airflow components; a web UI and REST API serve authenticated users; workers execute task code and, since Airflow 3, reach data only through the JWT-authenticated Execution API rather than the metadata database.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://airflow.apache.org/docs/apache-airflow/stable/security/security_model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://airflow.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "airflow"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://airflow.apache.org/docs/apache-airflow/stable/security/security_model.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-airflow",
+      "name": "Airflow deployment",
+      "description": "Deployment architecture described by the Airflow security model: a control plane (scheduler, API server, metadata database) trusted with credentials; workers isolated behind the Execution API; the Dag File Processor and Triggerer which execute Dag-author code but retain database access; and UI/API users with role-based permissions.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-metadata-db",
+          "type": "data-store",
+          "name": "Metadata database",
+          "description": "Airflow metadata database. Direct credentials are limited to control plane components; workers never receive them.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-execution-api",
+          "type": "api",
+          "name": "Execution API",
+          "description": "JWT-authenticated API through which task code on workers reaches data. Tokens are short-lived and intentionally non-revocable. Shared resources (connections, variables, XComs) are reachable without per-Dag authorization.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-workers",
+          "type": "process",
+          "name": "Workers",
+          "description": "Processes executing task code from Dag files. In Airflow 3+ they have no direct database credentials and communicate exclusively via the Execution API.",
+          "zone": "zone-execution"
+        },
+        {
+          "bom-ref": "asset-dag-processor-triggerer",
+          "type": "process",
+          "name": "Dag File Processor and Triggerer",
+          "description": "Components that parse and execute Dag-author code while retaining database access through in-process transport that bypasses JWT validation. Software guards prevent accidental, but not deliberate, database access from Dag code.",
+          "zone": "zone-dag-processing"
+        },
+        {
+          "bom-ref": "asset-webserver",
+          "type": "service",
+          "name": "UI and REST API server",
+          "description": "Serves authenticated UI users with role-based permissions (Admin, Operations, Connection Configuration, Audit Log, Regular, Viewer). Authentication is required by default, with limited exceptions such as health check endpoints and login pages.",
+          "zone": "zone-control-plane"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Control plane",
+          "type": "trust",
+          "description": "Scheduler, API server, and metadata database; holds database credentials, JWT signing keys, and secrets backend credentials."
+        },
+        {
+          "bom-ref": "zone-execution",
+          "name": "Worker execution",
+          "type": "trust",
+          "description": "Workers running arbitrary Dag-author task code without database credentials."
+        },
+        {
+          "bom-ref": "zone-dag-processing",
+          "name": "Dag processing",
+          "type": "trust",
+          "description": "Dag File Processor and Triggerer: execute Dag-author code but retain database access."
+        },
+        {
+          "bom-ref": "zone-users",
+          "name": "UI and API users",
+          "type": "trust",
+          "description": "Authenticated (and in limited cases unauthenticated) clients of the UI and REST API."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-execution-api",
+          "name": "Execution API boundary",
+          "type": "trust",
+          "zones": [
+            "zone-execution",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-dag-processing",
+          "name": "Dag processing boundary",
+          "type": "trust",
+          "zones": [
+            "zone-dag-processing",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-ui-api",
+          "name": "UI and REST API boundary",
+          "type": "trust",
+          "zones": [
+            "zone-users",
+            "zone-control-plane"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-deployment-manager",
+          "party": {
+            "roles": [
+              {
+                "name": "Deployment Manager"
+              }
+            ],
+            "persona": {
+              "description": "Installation administrator with the highest privileges; can access all credentials and makes infrastructure decisions. Fully trusted."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-dag-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Dag Author"
+              }
+            ],
+            "persona": {
+              "description": "Creates and modifies Dag files executed on workers, the Dag File Processor, and the Triggerer; can access execution credentials. Code in Dag files is neither verified, checked nor sand-boxed by Airflow."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-ui-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated UI user"
+              }
+            ],
+            "persona": {
+              "description": "Accesses the UI and API with role-based permissions: Admin, Operations, Connection Configuration, Audit Log, Regular, or Viewer."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-unauthenticated",
+          "party": {
+            "roles": [
+              {
+                "name": "Non-authenticated user"
+              }
+            ],
+            "persona": {
+              "description": "Airflow requires authentication by default; unauthenticated access is limited to endpoints such as health checks and login pages."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-dag-author-credential-theft",
+        "name": "Malicious Dag author retrieves control plane credentials via Dag File Processor or Triggerer",
+        "description": "A deliberately malicious Dag author can retrieve parent process credentials from code running in the Dag File Processor or Triggerer, through environment variable inspection (/proc/<PID>/environ), configuration file access, command-based secrets execution, or secrets manager credential retrieval, because these components retain database access and bypass JWT validation via in-process transport.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dag-processor-triggerer",
+          "asset-metadata-db"
+        ],
+        "mitigations": [
+          "control-code-review",
+          "control-credential-restriction",
+          "control-non-dumpable-processes",
+          "control-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-dag-author-cross-dag",
+        "name": "Dag author modifies other Dags or accesses shared Execution API resources",
+        "description": "Airflow has no per-Dag access controls: a Dag author can modify any Dag in the installation and task code can access shared Execution API resources (connections, variables, XComs) without per-Dag authorization. The experimental [core] multi_team feature isolates only the UI and REST API level; workloads from different teams still share the same Execution API, signing keys, connections, and variables.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-execution-api"
+        ],
+        "mitigations": [
+          "control-code-review",
+          "control-per-team-infrastructure"
+        ]
+      },
+      {
+        "bom-ref": "threat-connection-config-rce",
+        "name": "Connection Configuration user triggers code execution through connection parameters",
+        "description": "Users with connection editing permission can potentially trigger remote code execution through connection parameters. This is a documented capability of that role (which is why it exists as a separate, restricted role with write-only access to sensitive values in Airflow 3+), not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webserver"
+        ],
+        "mitigations": [
+          "control-granular-rbac"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jwt-key-exposure",
+        "name": "Exposure of JWT signing keys or database credentials to workers",
+        "description": "If JWT signing keys or database credentials are distributed to workers, the Airflow 3 worker isolation asymmetry collapses: task code could mint tokens or reach the metadata database directly. Sensitive configuration must be limited to the components that need it (JWT signing key to API Server and Scheduler only; database connection to control plane only; the Fernet key is the only secret all components need).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-workers",
+          "asset-execution-api",
+          "asset-metadata-db"
+        ],
+        "mitigations": [
+          "control-credential-restriction",
+          "control-asymmetric-jwt"
+        ]
+      },
+      {
+        "bom-ref": "threat-dag-code-execution",
+        "name": "Dag authors execute arbitrary code on workers, Dag File Processor, and Triggerer",
+        "description": "Dag authors can execute arbitrary code in these contexts and access execution credentials for external systems. This is a documented capability of the Dag author role, not a vulnerability; code in Dag files is neither verified, checked nor sand-boxed by Airflow. The same applies to Dag code passing unsanitized input to operators without defensive programming.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-workers",
+          "asset-dag-processor-triggerer"
+        ],
+        "mitigations": [
+          "control-code-review",
+          "control-unix-impersonation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-authenticated-dos",
+        "name": "Denial of service by authenticated users",
+        "description": "Denial of service caused by authenticated users is treated as an operational concern, not a security vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webserver"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-misc",
+        "name": "Other explicitly out-of-scope findings",
+        "description": "The security model also excludes: non-revocable short-lived Execution API tokens (intentional design); self-XSS affecting only the injecting user; vulnerabilities in the Simple Auth Manager (a development-only tool); third-party dependency CVEs in Docker images without demonstrated exploitability; automated scanner findings not verified by a human against the security model; and platform-specific bugs on non-Linux platforms (Windows, macOS).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-webserver",
+          "asset-execution-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-execution-api",
+        "boundary": "boundary-execution-api",
+        "name": "Worker to control plane boundary",
+        "description": "Workers have no direct database credentials and reach data only through the JWT-authenticated Execution API; task code is untrusted with respect to the control plane.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-jwt-key-exposure",
+          "threat-dag-author-cross-dag"
+        ],
+        "controlsAtBoundary": [
+          "control-credential-restriction",
+          "control-asymmetric-jwt",
+          "control-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-dag-processing",
+        "boundary": "boundary-dag-processing",
+        "name": "Dag processing to control plane boundary",
+        "description": "The Dag File Processor and Triggerer execute Dag-author code yet retain database access through in-process transport that bypasses JWT validation; this boundary is enforced by software guards against accident, not against deliberate abuse.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-dag-author-credential-theft"
+        ],
+        "controlsAtBoundary": [
+          "control-code-review",
+          "control-non-dumpable-processes",
+          "control-per-team-infrastructure"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-ui-api",
+        "boundary": "boundary-ui-api",
+        "name": "UI and REST API boundary",
+        "description": "Authentication is required by default; role-based permissions bound what each authenticated user can do. Audit permissions can override per-Dag access restrictions.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-connection-config-rce",
+          "threat-authenticated-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-granular-rbac"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-code-review",
+      "name": "Review and control Dag code submission",
+      "description": "Implement pull request reviews and static analysis for suspicious patterns in Dag bundles, and control who can submit Dag code, since Airflow itself does not verify or sandbox it.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-dag-processing"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-restriction",
+      "name": "Restrict sensitive configuration to components that need it",
+      "description": "Distribute the JWT signing key only to the API Server and Scheduler, database credentials only to control plane components, and use worker-specific secrets backends separate from general backends. All components need only the Fernet encryption key.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-workers",
+        "asset-metadata-db"
+      ]
+    },
+    {
+      "bom-ref": "control-asymmetric-jwt",
+      "name": "Use asymmetric JWT keys",
+      "description": "Restrict the private signing key to the Scheduler/Executor; the API Server needs only the public key for validation.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-execution-api"
+      ]
+    },
+    {
+      "bom-ref": "control-non-dumpable-processes",
+      "name": "Mark processes non-dumpable",
+      "description": "Mark Linux processes non-dumpable via prctl(PR_SET_DUMPABLE, 0) to prevent same-UID sibling processes from reading /proc/<pid>/environ.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-dag-processor-triggerer"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Network isolation of workers",
+      "description": "Restrict worker network access to the Execution API only and prevent the Dag File Processor and Triggerer from having unnecessary direct database exposure.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-execution-api"
+      ]
+    },
+    {
+      "bom-ref": "control-granular-rbac",
+      "name": "Configure granular RBAC for UI users",
+      "description": "Assign the narrowest role (Admin, Operations, Connection Configuration, Audit Log, Regular, Viewer) that fits each user, understanding that audit permissions can override per-Dag access restrictions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-ui-api"
+      ]
+    },
+    {
+      "bom-ref": "control-per-team-infrastructure",
+      "name": "Separate infrastructure per team",
+      "description": "Where team isolation is required, run separate Dag File Processor and Triggerer instances (and related infrastructure) per team, since multi_team isolation currently stops at the UI and REST API level.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-dag-processor-triggerer"
+      ]
+    },
+    {
+      "bom-ref": "control-unix-impersonation",
+      "name": "Unix user impersonation for Dag code",
+      "description": "Run Dag code as unprivileged Unix users. Listed by the security model as a future improvement, alongside routing all Dag File Processor and Triggerer database access through the API Server, team-scoped Execution API enforcement, and finer-grained JWT token scopes.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-workers",
+        "asset-dag-processor-triggerer"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-deployment",
+      "name": "Deploy Airflow securely",
+      "description": "Deployment Managers must deploy following organizational security standards: TLS, VPCs and network restrictions, authentication configuration, monitoring, and auditing of Execution API access patterns.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-webserver",
+        "asset-execution-api"
+      ]
+    }
+  ]
+}

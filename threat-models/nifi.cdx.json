@@ -1,0 +1,102 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-nifi",
+      "name": "Apache NiFi",
+      "description": "Framework for building processing pipelines using standard and custom components. The published security page combines a vulnerability reporting policy, a short security model delineating framework versus user responsibilities, CVSS-based severity ratings (critical: arbitrary remote code execution; high: integrity/availability compromise through resource exhaustion; medium: requires special configuration with significant mitigations available; low: minimal impact, difficult exploitation), and the archive of published vulnerabilities.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://nifi.apache.org/documentation/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://nifi.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "nifi"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://nifi.apache.org/documentation/security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-configured-command-execution",
+        "name": "Code execution through operator-configured commands and custom code",
+        "description": "Components such as ExecuteProcess and ExecuteStreamCommand allow operating system command and custom code execution as a feature. Authenticated and authorized users bear responsibility for the security of the operating system commands and custom code they configure; configuring dangerous OS commands or untrusted custom scripts is not considered a project vulnerability subject to remediation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-pipeline-trust-design"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-exposed-process-management",
+        "name": "Exposure of the process management HTTP interface beyond localhost",
+        "description": "Framework process management uses the HTTP protocol and binds to localhost by default. Administrators who change the bind address assume responsibility for implementing additional protection strategies for the exposed interface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-localhost-binding"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-pipeline-trust-design",
+      "name": "Design pipelines for the trust level of their input sources",
+      "description": "Privileged users must design processing pipelines with appropriate security measures based on the trust level of the input sources.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-localhost-binding",
+      "name": "Process management bound to localhost by default",
+      "description": "The framework's HTTP-based process management binds to localhost by default; administrators changing the bind address must add their own protection strategies.",
+      "category": "preventive",
+      "status": "implemented"
+    }
+  ]
+}

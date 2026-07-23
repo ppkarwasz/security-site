@@ -1,0 +1,128 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-velocity",
+      "name": "Apache Velocity",
+      "description": "Java-based template engine (Velocity Engine, plus Velocity Tools for web and non-web applications). Templates written in a simple template language reference objects defined in Java code; Velocity is used for web development in MVC applications and for general text generation (SQL, PostScript, XML, source code, reports). The security model covers template loading and the Velocity context.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://velocity.apache.org/#security-model",
+          "comment": "Source security model document (Security Model section of the project home page); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://velocity.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "velocity"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://velocity.apache.org/#security-model"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-compromised-loader-configuration",
+        "name": "Malicious templates via compromised loader configuration",
+        "description": "Velocity Engine and Velocity Tools rely on the template loaders defined in the velocity.properties configuration file and/or properties defined in the webapp descriptor or web container configuration. If those configurations are compromised, Velocity cannot ensure that templates do not come from a malicious source. This is NOT a Velocity vulnerability: an attacker already in control of the web application configuration files has far more powerful attack vectors than template injection.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-name-ssrf-traversal",
+        "name": "SSRF or path traversal via resource names assumed attacker-controlled",
+        "description": "Resource roots are operator-controlled configuration, and template names passed to URLResourceLoader, FileResourceLoader, etc. are application-controlled; neither is request input under the documented threat model. Reports claiming SSRF or path traversal via these resolvers, on the assumption that the resource name is attacker-controlled, are out of scope: template authorship and resource configuration are privileged operations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-validate-resource-names"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dangerous-context-classes",
+        "name": "Dangerous classes reachable from the Velocity context by template authors",
+        "description": "In a user-facing template editing scenario, objects placed in the Velocity context may expose dangerous classes to template authors. Velocity cannot know in advance how the context is populated and cannot possibly ban all potentially dangerous classes: it is the responsibility of the application authors to audit every object placed in the context to ensure that no dangerous class is accessible to template authors. The VelocityView servlet and the default tools are provided as facilities for developers and should not be assumed safe for third-party templates.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-secure-uberspector",
+          "control-audit-context-objects"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-secure-uberspector",
+      "name": "SecureUberspector helper class",
+      "description": "Velocity Engine provides a SecureUberspector helper class which helps ensure that the Velocity context does not contain any dangerous class in a user-facing template editing scenario. This class and its configuration are provided as a starting point only, not as a complete defense.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-audit-context-objects",
+      "name": "Audit every object placed in the Velocity context",
+      "description": "Application authors must audit every object placed in the context to ensure that no dangerous class is accessible to template authors. When an application opens template authoring to users, it must inspect the tools and other objects in the context one by one; the VelocityView servlet and default tools should not be assumed safe for third-party templates.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-validate-resource-names",
+      "name": "Validate untrusted input threaded into resource names",
+      "description": "Applications that thread untrusted input into resource names must validate that input before passing it to a ResourceLoader; that validation is the application's responsibility, not Velocity's.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

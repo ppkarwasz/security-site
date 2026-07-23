@@ -1,0 +1,103 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-commons-configuration",
+      "name": "Apache Commons Configuration",
+      "description": "Library that reads configuration data from many sources, with variable interpolation via lookups (system properties, environment variables, and others). The general Apache Commons security model specifies that it is unsafe to pass possibly malicious input to Commons libraries; for Commons Configuration 2.x, the library is designed to support processing untrusted configuration files without allowing those to trigger arbitrary code execution or denial of service situations ('denial of service' meaning resource usage disproportionate to the input size).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://commons.apache.org/proper/commons-configuration/security.html",
+          "comment": "Source security page; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://commons.apache.org/proper/commons-configuration/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "commons"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://commons.apache.org/proper/commons-configuration/security.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/commons-configuration/master/src/site/xdoc/security.xml"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-interpolation-code-execution",
+        "name": "Code execution or network access via interpolation of untrusted configuration",
+        "description": "Some of the available variable-interpolation lookups can trigger network access or code execution. This is intended, but an application that includes user input in configuration passed to Commons Configuration without proper sanitization would allow an attacker to trigger those interpolators (CVE-2022-33980, prior to 2.8.0). Unlike Log4Shell (CVE-2021-44228), where interpolation was possible from the commonly untrusted log message body, configuration data is much less likely to come from an untrusted source, and the team was not aware of applications actually impacted before 2.8.0.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-conservative-interpolators",
+          "control-sanitize-untrusted-input",
+          "control-upgrade-fixed-versions"
+        ]
+      },
+      {
+        "bom-ref": "threat-dos-disproportionate-resources",
+        "name": "Denial of service via untrusted configuration input",
+        "description": "Untrusted configuration files must not cause resource usage disproportionate to the input size. Known instances, all fixed: StackOverflowError when adding a property in AbstractListDelimiterHandler.flattenIterator() (CVE-2024-29131, before 2.10.1), StackOverflowError calling ListDelimiterHandler.flatten(Object, int) with a cyclical object tree (CVE-2024-29133, before 2.10.1), and StackOverflowError for YAML input with cycles (CVE-2026-45205, from 2.2 before 2.15.0).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-versions"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-conservative-interpolators",
+      "name": "Conservative default interpolator set",
+      "description": "Since 2.8.0 the list of interpolators enabled by default is more conservative, so that a failure to validate inputs is mitigated and does not give an attacker access to interpolators that can trigger network access or code execution.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-sanitize-untrusted-input",
+      "name": "Validate and sanitize untrusted configuration input",
+      "description": "Applications using Commons Configuration should double-check whether they load configuration files from untrusted sources; updating to 2.8.0 can be a quick workaround, but the recommended solution is to validate and sanitize untrusted input, and users should continue to treat untrusted input with care.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-upgrade-fixed-versions",
+      "name": "Upgrade to fixed versions",
+      "description": "Upgrade to 2.8.0 or later for the interpolation issue (CVE-2022-33980), to 2.10.1 for the out-of-bounds write StackOverflowError issues (CVE-2024-29131, CVE-2024-29133), and to 2.15.0 for the YAML-cycle StackOverflowError (CVE-2026-45205). Binary patches are never provided; source patches are applied using the component's building instructions.",
+      "category": "corrective",
+      "status": "recommended"
+    }
+  ]
+}

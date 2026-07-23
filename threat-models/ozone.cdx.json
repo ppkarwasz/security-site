@@ -1,0 +1,682 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-ozone",
+      "name": "Apache Ozone",
+      "description": "Distributed, scalable object store (S3-compatible plus Hadoop-FS) built on Hadoop Distributed Data Store (HDDS), deployed as a cluster of network services. The Ozone Manager (OM) owns the namespace and metadata and issues delegation and block tokens; the Storage Container Manager (SCM) manages blocks and containers and acts as the cluster's internal Certificate Authority; Datanodes store data in containers, replicate via Ratis (Raft), and enforce block/container tokens when enabled; the S3 Gateway exposes an S3-compatible REST API to potentially internet-facing clients; Recon is a read-only management and monitoring service.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ozone/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document (v1, ratified by the Ozone PMC); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ozone.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ozone"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ozone/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ozone/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ozone",
+      "name": "Ozone secure-mode cluster",
+      "description": "Cluster architecture described by the Ozone threat model in secure mode (ozone.security.enabled=true): untrusted S3 REST and Hadoop RPC clients reach the cluster through the S3 Gateway (AWS SigV4) and the OM/SCM control plane (SASL/Kerberos); Datanodes serve blocks gated by OM-issued block tokens when enabled and replicate via Ratis; SCM is the internal root CA for service identity; the CSI driver and test modules are out of scope.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-s3-gateway",
+          "type": "gateway",
+          "name": "S3 Gateway",
+          "description": "S3-compatible REST API, potentially internet-facing; verifies AWS SigV4 signatures against per-user S3 secrets derived from the user's Kerberos identity. With security enabled, anonymous access is rejected.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-om",
+          "type": "service",
+          "name": "Ozone Manager (OM)",
+          "description": "Owns the namespace, metadata, and ACL checks; issues delegation and block tokens; reached over Hadoop RPC with SASL/Kerberos.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-scm",
+          "type": "service",
+          "name": "Storage Container Manager (SCM)",
+          "description": "Manages blocks and containers and acts as the cluster's internal Certificate Authority, the root of service identity. Compromise of the SCM CA private key collapses all service identity by design.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-datanode",
+          "type": "service",
+          "name": "Datanode",
+          "description": "Stores data in containers, replicates via Ratis (Raft), verifies block/container token signatures before serving blocks when tokens are enabled; the token is the capability, the Datanode does not re-authenticate the user.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-recon",
+          "type": "service",
+          "name": "Recon",
+          "description": "Read-only management and monitoring service for operators; in scope as part of the production cluster.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-external-clients",
+          "name": "External clients",
+          "type": "trust",
+          "description": "S3 REST clients and RPC clients outside the cluster trust boundary; untrusted until authenticated (SigV4, Kerberos, or delegation token). Authenticated users are trusted to authenticate but not trusted to stay within authorization."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Cluster services",
+          "type": "trust",
+          "description": "OM, SCM, Datanodes, S3 Gateway, and Recon; inter-service identity is backed by SCM-issued certificates."
+        },
+        {
+          "bom-ref": "zone-datanode-peers",
+          "name": "Datanode Ratis peers",
+          "type": "trust",
+          "description": "Datanode-to-Datanode Raft replication peers; a peer holds a legitimate SCM-issued certificate but a compromised Datanode is a distinct Byzantine actor."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-s3-gateway",
+          "name": "S3 Gateway boundary",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-rpc-control-plane",
+          "name": "RPC/control-plane boundary",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-block-access",
+          "name": "Block-access boundary",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-ratis",
+          "name": "Ratis replication boundary",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-datanode-peers"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-untrusted-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Untrusted client"
+              }
+            ],
+            "persona": {
+              "description": "S3 REST or RPC client outside the cluster trust boundary; tries to access data, bypass SigV4/Kerberos, or exploit the gateway. In scope."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated user"
+              }
+            ],
+            "persona": {
+              "description": "Kerberos-authenticated principal acting within their granted ACLs; trusted to authenticate, not trusted to stay within authorization. An authenticated user attempting to read another tenant's data is in-model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator/admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted for the deployment: KDC, Ranger policies, SCM CA key, and network."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Service peer / Byzantine Datanode"
+              }
+            ],
+            "persona": {
+              "description": "OM/SCM/Datanode services talking to each other and Datanode Ratis peers, authenticated via SCM-issued certificates. A compromised Datanode holding a legitimate certificate that behaves arbitrarily is in scope up to the Raft honest-majority threshold."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A secure deployment assumes a functioning Kerberos KDC, time synchronization, DNS/rDNS, and a Ranger server if Ranger authorization is enabled."
+        },
+        {
+          "description": "SCM is the root CA; service certificates are issued and rotated by SCM and the CA key's secrecy is assumed."
+        },
+        {
+          "description": "Datanodes trust their local disks; on-disk encryption (TDE) keys come from an external KMS."
+        },
+        {
+          "description": "Admin, Ratis, and datanode service ports are assumed reachable only by the cluster and authorized clients (operator-enforced)."
+        },
+        {
+          "description": "Secure mode (ozone.security.enabled=true) is the supported production posture; non-secure mode performs no authentication and is a development/sandbox posture only."
+        },
+        {
+          "description": "Several controls are off by default even in secure mode and must be explicitly enabled: object ACL checks (ozone.acl.enabled=false, Native ACL default authorizer when enabled, Ranger opt-in), block/container tokens (hdds.block.token.enabled=false, 1 day lifetime when enabled), gRPC TLS (hdds.grpc.tls.enabled=false), and TDE/KMS. Delegation tokens are enabled by default with security (renew every 1d, stop after 7d); token signing keys are SCM-issued HmacSHA256 symmetric keys with 9d expiry and 1d rotation."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-rpc",
+        "name": "Unauthenticated request accepted on OM/SCM/Datanode RPC",
+        "description": "In secure mode, all OM/SCM/Datanode RPC requires Kerberos or a valid delegation token; an unauthenticated request being accepted violates this property. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om",
+          "asset-scm",
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-kerberos-authentication",
+          "control-run-secure-mode"
+        ]
+      },
+      {
+        "bom-ref": "threat-anonymous-s3-access",
+        "name": "Anonymous access accepted at the S3 Gateway in secure mode",
+        "description": "With security enabled, the S3 Gateway rejects anonymous access and there is no plan to support intended anonymous access (HDDS-7961); an unauthenticated S3 request being accepted in secure mode is a valid finding, not a disclaimed mode.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-s3-gateway"
+        ],
+        "mitigations": [
+          "control-sigv4-verification",
+          "control-run-secure-mode"
+        ]
+      },
+      {
+        "bom-ref": "threat-block-access-without-token",
+        "name": "Block or container access without a valid token in a token-enabled deployment",
+        "description": "When block/container tokens are enabled, a Datanode serves protected blocks and containers only on a valid, unexpired, correctly-signed token; block or container read/write without a valid token violates this capability gate. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-block-container-tokens"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authenticated user accesses data outside their ACLs in an ACL-enabled deployment",
+        "description": "When object ACL or Ranger checks are enabled, volume/bucket/key operations are checked against the configured Native ACL or Ranger authorizer; an authenticated user accessing data outside their ACLs violates this property. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om"
+        ],
+        "mitigations": [
+          "control-acl-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-service-impersonation",
+        "name": "Rogue process impersonating a service on a certificate-backed path",
+        "description": "Inter-service identity is backed by SCM-issued certificates; a rogue process impersonating a service on a certificate-backed path violates service identity. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om",
+          "asset-scm",
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-scm-certificates"
+        ]
+      },
+      {
+        "bom-ref": "threat-consensus-divergence",
+        "name": "Consensus safety violation under the honest-majority bound",
+        "description": "Committed metadata or data must not diverge or be silently lost under the Raft honest-majority bound (standard Raft safety, for example 2 of 3 replicas for RATIS THREE; not Byzantine fault tolerant). A fork, divergent replica state, or acknowledged-write loss violates this property. Severity: critical, observable across nodes. Corollary: checksum verification on normal reads plus replica/container checks detect ordinary single-replica corruption.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-ratis-replication",
+          "control-read-checksums"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-transport",
+        "name": "Plaintext on a transport configured for encryption, or unencrypted data when TDE is configured",
+        "description": "Hadoop RPC privacy, gRPC TLS, or HTTPS protect the wire when configured, and TDE protects data at rest for encrypted buckets when enabled with keys in a KMS. Plaintext on a transport configured for encryption, or unencrypted blocks when TDE is configured, violates confidentiality. Severity: high. An on-path network attacker is in scope where the deployment has enabled transport encryption for the relevant protocol.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-om",
+          "asset-scm",
+          "asset-datanode",
+          "asset-s3-gateway"
+        ],
+        "mitigations": [
+          "control-transport-encryption",
+          "control-tde"
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-datanode",
+        "name": "Byzantine Datanode forging data and metadata, or a Byzantine majority",
+        "description": "Ratis is not Byzantine fault tolerant: at or beyond a Byzantine majority of a Ratis ring, divergence is possible and out of scope. There is also no full guarantee against a single Byzantine Datanode that forges both data and metadata on the path it serves; checksum and replica/container checks catch ordinary corruption only.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-read-checksums"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-leaked-bearer-token",
+        "name": "Leaked block token used as a bearer capability",
+        "description": "Block tokens are bearer capabilities: a leaked block token grants access until expiry (default lifetime 1 day when tokens are enabled). The caller and operator must protect tokens in transit with TLS; this protection is a downstream responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-datanode"
+        ],
+        "mitigations": [
+          "control-transport-encryption"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-nonsecure-mode",
+        "name": "Findings that only manifest in non-secure mode",
+        "description": "With ozone.security.enabled=false Ozone performs no authentication at all; this is a development/sandbox posture. Findings that only manifest in non-secure mode, or that assume ACLs, block/container tokens, transport encryption, or TDE are active in a default build where the operator has not enabled them, are out of model (non-default-build).",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-run-secure-mode"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-overbroad-authorization-policy",
+        "name": "Over-broad Ranger policy or world-readable ACL",
+        "description": "Ozone enforces ACLs and Ranger policies as configured; an over-broad Ranger policy or world-permissive ACL is an operator decision, not an Ozone flaw. Ozone does not author the authorization policy.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-least-privilege-policies"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dependency-infrastructure-compromise",
+        "name": "Compromise of the KDC, Ranger, KMS, SCM CA key, or operator host",
+        "description": "The security-providing infrastructure Ozone depends on but does not own (Kerberos KDC, Ranger policy server, KMS and key material, network perimeter) and the SCM CA private key are out of scope; if the CA key is stolen, all service identity collapses by design. Side-channel and co-tenant adversaries against the host are likewise out of scope.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-secure-dependencies"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-integrator-attack-classes",
+        "name": "SSRF, credential relay, and request smuggling at the deployment layer",
+        "description": "Well-known classes left to the operator or integrator: SSRF and credential relay via a misconfigured S3 Gateway, request smuggling at a load balancer in front of the gateway, and authorization-policy errors.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-s3-gateway"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-s3-gateway",
+        "boundary": "boundary-s3-gateway",
+        "name": "S3 Gateway trust boundary",
+        "description": "Outermost boundary: untrusted, potentially internet-facing REST clients authenticated via AWS SigV4 over per-user S3 secrets derived from the user's Kerberos identity.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-anonymous-s3-access",
+          "threat-integrator-attack-classes"
+        ],
+        "controlsAtBoundary": [
+          "control-sigv4-verification",
+          "control-run-secure-mode"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-rpc-control-plane",
+        "boundary": "boundary-rpc-control-plane",
+        "name": "RPC/control-plane trust boundary",
+        "description": "Clients to OM/SCM over Hadoop RPC with SASL; in secure mode authenticated via Kerberos or delegation tokens, with TLS/mTLS for gRPC where configured. Authenticated users are not trusted to stay within authorization.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-rpc",
+          "threat-authorization-bypass",
+          "threat-plaintext-transport"
+        ],
+        "controlsAtBoundary": [
+          "control-kerberos-authentication",
+          "control-acl-authorization",
+          "control-transport-encryption"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-block-access",
+        "boundary": "boundary-block-access",
+        "name": "Block-access trust boundary",
+        "description": "When block/container tokens are enabled, a client obtains a block token from OM and presents it to a Datanode, which verifies the token signature before serving the block; the token is the capability.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-block-access-without-token",
+          "threat-leaked-bearer-token"
+        ],
+        "controlsAtBoundary": [
+          "control-block-container-tokens"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-ratis",
+        "boundary": "boundary-ratis",
+        "name": "Ratis replication trust boundary",
+        "description": "Datanode peers replicate via Raft; a peer holds a legitimate SCM-issued certificate but may behave arbitrarily if compromised. In scope up to the honest-majority threshold; Byzantine-majority divergence is out of scope.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-consensus-divergence",
+          "threat-byzantine-datanode"
+        ],
+        "controlsAtBoundary": [
+          "control-ratis-replication",
+          "control-read-checksums",
+          "control-scm-certificates"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-run-secure-mode",
+      "name": "Run secure mode",
+      "description": "Set ozone.security.enabled=true for any non-sandbox cluster and require authentication on the S3 Gateway; non-secure mode is a development-only posture with no authentication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om",
+        "asset-scm",
+        "asset-datanode",
+        "asset-s3-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-kerberos-authentication",
+      "name": "Kerberos/SASL authentication with delegation tokens on RPC",
+      "description": "In secure mode all OM/SCM/Datanode RPC requires Kerberos or a valid delegation token. Delegation tokens are enabled by default when security is enabled; OM delegation tokens renew every 1 day and stop renewing after 7 days.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-rpc-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-sigv4-verification",
+      "name": "AWS SigV4 verification at the S3 Gateway",
+      "description": "The S3 Gateway verifies the AWS SigV4 signature of each REST request against the user's S3 secret (derived from the user's Kerberos identity / S3 secret store); with security enabled, anonymous access is rejected.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-s3-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-block-container-tokens",
+      "name": "Enable block/container tokens",
+      "description": "Enable hdds.block.token.enabled and hdds.container.token.enabled so that Datanodes verify a valid, unexpired, correctly-signed token before serving blocks/containers (BlockTokenVerifier, ContainerTokenVerifier). Off by default; token lifetime defaults to 1 day, signing keys are SCM-issued HmacSHA256 symmetric keys rotated daily with 9-day expiry.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-block-access"
+      ]
+    },
+    {
+      "bom-ref": "control-acl-authorization",
+      "name": "Enable object ACL or Ranger authorization",
+      "description": "Enable ozone.acl.enabled (off by default); Native ACL is the default authorizer, and the Ranger plugin can be configured instead via ozone.acl.authorizer.class. S3 multi-tenancy setup requires Ranger. The authorization property holds for whichever authorizer is configured.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om"
+      ]
+    },
+    {
+      "bom-ref": "control-scm-certificates",
+      "name": "SCM-issued certificates for service identity",
+      "description": "OM, SCM, and Datanodes use SCM-issued certificates for inter-service identity (CertificateServer/CertificateClient); SCM is the internal CA and issues and rotates service certificates.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-om",
+        "asset-scm",
+        "asset-datanode"
+      ]
+    },
+    {
+      "bom-ref": "control-ratis-replication",
+      "name": "Ratis (Raft) replication with honest-majority safety",
+      "description": "Datanode peers replicate via Raft, providing standard Raft safety under an honest majority (for example 2 of 3 replicas for RATIS THREE); Ratis is not Byzantine fault tolerant.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-ratis"
+      ]
+    },
+    {
+      "bom-ref": "control-read-checksums",
+      "name": "Checksum verification on reads plus replica/container checks",
+      "description": "Checksum verification on normal reads plus replica and container checks detect ordinary single-replica corruption; this does not extend to a Byzantine Datanode that forges both data and metadata on the path it serves.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-datanode"
+      ]
+    },
+    {
+      "bom-ref": "control-transport-encryption",
+      "name": "Enable transport encryption",
+      "description": "Enable the relevant transport encryption (Hadoop RPC privacy, gRPC TLS via hdds.grpc.tls.enabled, and/or HTTPS) so block and delegation tokens and S3 secrets are not sniffable; rotate S3 secrets and review token lifetimes for the deployment. gRPC TLS is off by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-control-plane",
+        "boundary-block-access"
+      ]
+    },
+    {
+      "bom-ref": "control-tde",
+      "name": "Transparent data encryption with an external KMS",
+      "description": "TDE is optional and protects data at rest only for encrypted buckets; it requires a configured KMS (for example via hadoop.security.key.provider.path). Isolate the KMS in a separate, firewalled network segment.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-datanode"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege-policies",
+      "name": "Author least-privilege Ranger/ACL policies",
+      "description": "Author least-privilege Ranger and ACL policies; do not treat native ACLs as sufficient where Ranger fine-grained authorization is needed (or vice versa), and avoid world-permissive policies.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-dependencies",
+      "name": "Secure the operator-owned dependencies and network",
+      "description": "Harden and operate the KDC, protect the SCM CA private key, manage KMS keys, and network-isolate datanode/Ratis/admin ports. Non-secure exposure of these dependencies undermines the model.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-scm"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-metadata-stores",
+      "name": "Protect service metadata stores at rest",
+      "description": "The OM, SCM, and Recon RocksDB stores hold critical credential and identity data; set restrictive file permissions and, ideally, encrypt them on disk.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-om",
+        "asset-scm",
+        "asset-recon"
+      ]
+    }
+  ]
+}

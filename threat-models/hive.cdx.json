@@ -1,0 +1,493 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-hive",
+      "name": "Apache Hive",
+      "description": "SQL data-warehouse layer over Apache Hadoop. In-scope components: HiveServer2 (the SQL front door), the Hive Metastore (a Thrift service holding metadata that external services like Spark reach directly), the query compiler and execution layer (Tez/MapReduce/Spark over HDFS, HBase, object stores), the UDF/SerDe/file-format layer, and the JDBC/ODBC drivers. Hive is not a standalone secured appliance: it is a clustered service behind an operator-controlled perimeter with Hadoop, a metastore RDBMS, an authorization provider (typically Apache Ranger), and a KDC as trusted dependencies. Its security properties are configuration-dependent, not defaults. Per the PMC's 2026-07 review, the in-repo THREAT_MODEL.md is the canonical Hive security model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/hive/blob/master/THREAT_MODEL.md",
+          "comment": "Source threat model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hive.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hive"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/hive/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/hive/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-hive",
+      "name": "Hive deployment",
+      "description": "Deployment described by the threat model: untrusted SQL clients reach HiveServer2 over Thrift/binary or HTTP; external services such as Spark reach the Metastore directly, so HMS enforces caller authorization at the application level; execution runs on the configured engine inside an operator-controlled perimeter with trusted dependencies (Hadoop, metastore RDBMS, Ranger, KDC).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-hiveserver2",
+          "type": "service",
+          "name": "HiveServer2",
+          "description": "The SQL front door: accepts queries over a Thrift/binary or HTTP transport, authenticates the session, compiles, authorizes, and executes. The highest-value untrusted boundary; from its point of view SQL text, JDBC connection properties, and session-configuration overrides are all untrusted.",
+          "zone": "zone-hive-services"
+        },
+        {
+          "bom-ref": "asset-metastore",
+          "type": "service",
+          "name": "Hive Metastore (HMS)",
+          "description": "Thrift service holding table/partition/schema metadata and storage locations. Because external services (e.g. Apache Spark) connect directly, HMS is expected to enforce caller authorization at the application level; network isolation is defense-in-depth, not the primary control.",
+          "zone": "zone-hive-services"
+        },
+        {
+          "bom-ref": "asset-execution",
+          "type": "process",
+          "name": "Query compiler and execution engines",
+          "description": "Parse, plan, and run on Tez/MapReduce/Spark; reads and writes HDFS, HBase, and object stores inside the operator-controlled perimeter.",
+          "zone": "zone-trusted-cluster"
+        },
+        {
+          "bom-ref": "asset-udf-layer",
+          "type": "module",
+          "name": "UDF / SerDe / file-format layer",
+          "description": "User-supplied or built-in functions and (de)serializers invoked during execution; code a principal is authorized to register or invoke runs with the privileges of the execution process (in-JVM code execution, not a sandbox).",
+          "zone": "zone-hive-services"
+        },
+        {
+          "bom-ref": "asset-clients",
+          "type": "component",
+          "name": "JDBC/ODBC drivers and Beeline",
+          "description": "Client-side connectors in the client trust domain.",
+          "zone": "zone-sql-clients"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-sql-clients",
+          "name": "Untrusted clients",
+          "type": "trust",
+          "description": "SQL clients submitting statements to HiveServer2 and clients reaching the Metastore through its supported APIs; in-scope adversaries attempting to exceed their authorization or reach the host through query features."
+        },
+        {
+          "bom-ref": "zone-hive-services",
+          "name": "Hive services",
+          "type": "trust",
+          "description": "HiveServer2, the HS2 Web UI, and the Hive Metastore, enforcing configured authentication and authorization."
+        },
+        {
+          "bom-ref": "zone-trusted-cluster",
+          "name": "Trusted cluster dependencies",
+          "type": "trust",
+          "description": "Hadoop (HDFS, YARN), the execution engines, the metastore RDBMS, the authorization provider (typically Ranger), and the KDC, inside the operator-controlled perimeter and treated as trusted dependencies."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-hs2",
+          "name": "Client to HiveServer2",
+          "type": "trust",
+          "zones": [
+            "zone-sql-clients",
+            "zone-hive-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-client-metastore",
+          "name": "Direct client to Metastore",
+          "type": "trust",
+          "zones": [
+            "zone-sql-clients",
+            "zone-hive-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-services-cluster",
+          "name": "Hive services to execution engine and storage",
+          "type": "trust",
+          "zones": [
+            "zone-hive-services",
+            "zone-trusted-cluster"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Hive is deployed clustered behind an operator-controlled perimeter; Hadoop, the metastore RDBMS, the authorization provider, and the KDC are trusted dependencies whose bugs are reported upstream."
+        },
+        {
+          "description": "The security properties hold when the operator has configured authentication, authorization, and transport protection; they are not defaults. Some defaults prioritize ease of adoption for trusted/local deployments."
+        },
+        {
+          "description": "With hive.server2.enable.doAs=false (the typical/expected configuration under Ranger), HS2 enforces authorization itself rather than pushing it down to per-user HDFS permissions."
+        },
+        {
+          "description": "A network MITM on the client-HS2 or HS2-HMS path is in scope when TLS (or equivalent transport protection) is enabled; the operator is responsible for configuring TLS correctly."
+        },
+        {
+          "description": "Hive is Java, so memory safety on well-formed input holds to the extent the JVM provides it."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-hs2-authorization-bypass",
+        "name": "SQL client exceeding its authorization at the HiveServer2 boundary",
+        "description": "An untrusted SQL client submitting statements to HiveServer2 that read or modify data outside its authorization, or reach the host through query features, despite a configured authentication mechanism and authorization plugin. Authorization decisions are scoped to databases, tables, partitions, columns, functions, and metadata operations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hiveserver2"
+        ],
+        "mitigations": [
+          "control-hs2-authentication",
+          "control-hs2-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-metastore-authorization-bypass",
+        "name": "Direct Metastore client exceeding its authorization",
+        "description": "A client reaching the Hive Metastore through its supported APIs outside its authorization is in-model: because external services such as Spark connect to HMS directly, HMS must enforce caller authorization at the application level, not rely on a network perimeter.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-metastore"
+        ],
+        "mitigations": [
+          "control-metastore-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-config-protection-bypass",
+        "name": "Untrusted user changing security posture or reading secrets via session configuration",
+        "description": "From HS2's point of view session-configuration overrides are untrusted; Hive rejects non-acceptable operations through the authorization plugin or the configured deny lists: hive.conf.restricted.list (settings an untrusted user may not change), hive.conf.locked.list, and hive.conf.hidden.list (secret values an untrusted user may not read). A bypass of these configured lists violates the configuration-protection property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hiveserver2"
+        ],
+        "mitigations": [
+          "control-config-deny-lists"
+        ]
+      },
+      {
+        "bom-ref": "threat-mitm",
+        "name": "Network MITM on the client-HS2 or HS2-HMS path",
+        "description": "A network man-in-the-middle is in scope when TLS or equivalent transport protection is enabled; HiveServer2, the Metastore, and the HS2 Web UI can protect traffic confidentiality and integrity when TLS/SSL is enabled and correctly configured.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hiveserver2",
+          "asset-metastore"
+        ],
+        "mitigations": [
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-codeexec-builtin-udfs",
+        "name": "Code execution via unblocked built-in UDFs",
+        "description": "Built-in UDFs are generally safe, but Hive ships a few that allow arbitrary code execution (reflect, reflect2, java_method, in_file). An administrator must block these via hive.server2.builtin.udf.blacklist (directly or through the authorization plugin; Ranger configures it properly). Reachability only because the operator has not configured the blacklist is operator responsibility; a bypass of a configured blacklist is a valid finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-udf-layer",
+          "asset-hiveserver2"
+        ],
+        "mitigations": [
+          "control-udf-blacklist-transform-hook"
+        ]
+      },
+      {
+        "bom-ref": "threat-udf-code-execution-by-design",
+        "name": "Arbitrary code execution via UDFs, SerDes, custom InputFormats, and TRANSFORM",
+        "description": "Hive provides no sandbox: code a principal is authorized to register or invoke runs with the privileges of the execution process, as a feature. Custom UDF registration must be restricted via access policies; SerDe/InputFormat/OutputFormat jars can only be installed by administrators, whom Hive trusts; TRANSFORM must be prohibited in a secure deployment (DisallowTransformHook in hive.exec.pre.hooks, configured by major authorization plugins). Hive cannot guarantee safety when a trusted user or admin deploys compromised code.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-udf-layer"
+        ],
+        "mitigations": [
+          "control-udf-blacklist-transform-hook",
+          "control-hs2-authorization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-layer-adversary",
+        "name": "Adversary with direct storage, metastore-DB, or cluster-process access",
+        "description": "An operator with root, the Hadoop superuser, or direct HDFS or metastore-database access is not an adversary Hive defends against; anyone who already controls the storage layer or cluster processes is out of model. Hive does not guarantee authorization for callers who bypass Hive and access storage or the metastore database directly; those paths must be protected by HDFS/object-store/IAM/database controls. A trusted admin performing authorized actions, or a new path to a privilege already held, is likewise out of model (equivalent harm).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-execution",
+          "asset-metastore"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-pathological-query-dos",
+        "name": "Resource exhaustion from pathological queries",
+        "description": "Hive accepts arbitrary HiveQL, so bounding the impact of a pathological query is an operator responsibility, not a Hive bug: operators use HiveServer2 limits (e.g. hive.query.max.length), YARN resource pools, and, where stronger isolation is required, separate HS2 instances or separate clusters.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hiveserver2",
+          "asset-execution"
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-secrets-in-config",
+        "name": "Secret exposure from secrets stored in configuration surfaces",
+        "description": "Hive does not guarantee that the content of hive-site.xml, metastore-site.xml, environment variables, or system properties is never exposed; an administrator who stores secrets there has chosen the wrong mechanism. Secrets should be managed through the Hadoop CredentialProviderAPI.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-credential-provider"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dependency-cves",
+        "name": "Dependency-tail CVEs surfaced by scanners",
+        "description": "CVEs in the dependencies Hive orchestrates (Hadoop, Log4j, transitive JARs) surfaced by SCA scanners against Hive's build are triaged upstream unless Hive's own code reaches the vulnerable path with untrusted input.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-hs2",
+        "boundary": "boundary-client-hs2",
+        "name": "Client to HiveServer2 trust boundary",
+        "description": "The primary boundary: in a secure deployment the operator configures authentication (Kerberos/LDAP/PAM/custom) and authorization, and statements are checked by the configured authorizer before execution. SQL text, JDBC connection properties, and session-configuration overrides are untrusted.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-hs2-authorization-bypass",
+          "threat-config-protection-bypass",
+          "threat-codeexec-builtin-udfs",
+          "threat-pathological-query-dos",
+          "threat-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-hs2-authentication",
+          "control-hs2-authorization",
+          "control-config-deny-lists",
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-client-metastore",
+        "boundary": "boundary-client-metastore",
+        "name": "Direct Metastore access trust boundary",
+        "description": "The Metastore is protected at the application level because external services such as Spark talk to it directly; metastore-side authorization is enforced through HiveMetaStoreAuthorizer as a pre-event listener, with server-side result filtering via the metastore filter hook.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-metastore-authorization-bypass"
+        ],
+        "controlsAtBoundary": [
+          "control-metastore-security"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-services-cluster",
+        "boundary": "boundary-services-cluster",
+        "name": "Intra-cluster trust boundary",
+        "description": "The HS2 to execution engine / HDFS path is assumed inside an operator-controlled perimeter; the metastore RDBMS and execution cluster are network-isolated from untrusted networks.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-storage-layer-adversary"
+        ],
+        "controlsAtBoundary": [
+          "control-credential-provider"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-hs2-authentication",
+      "name": "Configure HiveServer2 authentication",
+      "description": "Set hive.server2.authentication and the more-specific hive.server2.authentication.* parameters (Kerberos, LDAP, PAM, custom); the operator is responsible for enabling appropriate authentication on all exposed endpoints, including the HS2 Web UI (SPNEGO, PAM, or LDAP plus TLS) if port 10002 is exposed to untrusted users.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2"
+      ]
+    },
+    {
+      "bom-ref": "control-hs2-authorization",
+      "name": "Configure an authorization manager (typically Apache Ranger)",
+      "description": "Set hive.security.authorization.enabled=true and hive.security.authorization.manager (Apache Ranger is the primary authorization plugin; storage-based and SQL-standard authorization give materially different guarantees). With Ranger, use SessionStateUserAuthenticator to authorize as the HS2 session user, with hive.server2.enable.doAs typically false.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2"
+      ]
+    },
+    {
+      "bom-ref": "control-metastore-security",
+      "name": "Configure Metastore authentication and authorization",
+      "description": "When exposing the Metastore to untrusted users or systems (Spark, Flink): metastore.authentication (KERBEROS or LDAP) plus metastore.sasl.enabled and related parameters; metastore.pre.event.listeners including HiveMetaStoreAuthorizer; metastore.server.filter.enabled=true with metastore.filter.hook set to the same authorizer for server-side result filtering; and metastore.use.SSL for transport.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-metastore"
+      ]
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "Enable TLS on HS2, Metastore, and Web UI endpoints",
+      "description": "hive.server2.use.SSL=true, hive.server2.webui.use.ssl=true, and metastore.use.SSL plus the more-specific TLS parameters; the KDC and LDAP server's own security is also the operator's.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2",
+        "asset-metastore"
+      ]
+    },
+    {
+      "bom-ref": "control-config-deny-lists",
+      "name": "Protect security-related configuration with deny lists",
+      "description": "Administrators should protect security-related settings via hive.conf.restricted.list, hive.conf.locked.list, and hive.conf.hidden.list so untrusted users cannot update sensitive settings or view secret values at runtime.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hiveserver2"
+      ]
+    },
+    {
+      "bom-ref": "control-udf-blacklist-transform-hook",
+      "name": "Block code-execution built-ins and prohibit TRANSFORM",
+      "description": "Set hive.server2.builtin.udf.blacklist to block reflect, reflect2, java_method, and in_file, and add DisallowTransformHook to hive.exec.pre.hooks to prohibit TRANSFORM/script operators; major authorization plugins such as Ranger configure both. Restrict who may add UDF jars or register UDFs via access policies.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-udf-layer"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-provider",
+      "name": "Manage secrets through the Hadoop CredentialProviderAPI",
+      "description": "All credentials and secrets should be managed through the Hadoop CredentialProviderAPI (hadoop.security.credential.provider.path) rather than placed in hive-site.xml, metastore-site.xml, environment variables, or system properties.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Bound query impact with HS2 limits and YARN pools",
+      "description": "Use HiveServer2 limits (e.g. hive.query.max.length) and YARN resource pools; where stronger isolation than HS2 plus YARN can provide is required, run separate HS2 instances or separate Hadoop/YARN clusters.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hiveserver2"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,242 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-ofbiz",
+      "name": "Apache OFBiz",
+      "description": "Enterprise application framework designed to run in controlled environments and administered by trusted operators. The project security page links the security model (SECURITY.md, describing the assumptions and guarantees the project makes with respect to security), the reporting policy, secure configuration and deployment documentation on the wiki (OFBiz Security Permissions; Keeping OFBiz secure), and the list of known vulnerabilities. OFBiz runs as a Java application within a single JVM process owned by a specific operating system user account, and all OFBiz code executes with the privileges granted to that user.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://ofbiz.apache.org/security.html",
+          "comment": "Source security model document; this file is a structured translation of it and of the SECURITY.md security model it links."
+        },
+        {
+          "type": "website",
+          "url": "https://ofbiz.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ofbiz"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://ofbiz.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-malicious-administrator",
+        "name": "Malicious or compromised administrator",
+        "description": "Users granted administrative-level privileges are considered fully trusted; administrative access should be treated as equivalent to full control over the OFBiz runtime, including effective code execution capabilities within the JVM. OFBiz does not sandbox or restrict administrator actions and does not attempt to defend against attackers who have obtained administrative access to the application or high-privilege access to the host system.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-admin-credentials",
+          "control-restrict-os-user"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-information-disclosure",
+        "name": "Information disclosure through log files",
+        "description": "OFBiz log files may contain sensitive information, including user identifiers, request parameters, business data, or internal error details, and OFBiz does not guarantee that log output is free of sensitive data (automatic redaction is an explicit non-goal). Improperly protected logs may result in information disclosure; protecting them is a deployer and operator responsibility.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-protect-logs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unvetted-plugins",
+        "name": "Production deployment of unvetted or non-production plugins",
+        "description": "Some distributed plugins are experimental, intended for testing/demonstration/development, provided as templates or reference implementations, or disabled by default due to incomplete functionality or security assumptions; others are suitable for production only under specific deployment assumptions or after non-default configuration and hardening. Distributed plugins must not be implicitly trusted solely because they are included with OFBiz; the ecommerce component is one example of a plugin provided as a reference implementation rather than a production-ready solution. Providing production-ready functionality for all distributed plugins is an explicit non-goal.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-vet-plugins"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-extensions",
+        "name": "Vulnerable or malicious custom extensions",
+        "description": "Custom components, extensions, scripts, and templates execute with the same privileges as core OFBiz components; customizations, plugins, and extensions are assumed to be trusted code, and OFBiz provides no sandboxing or privilege separation for them. Vulnerabilities or malicious behavior in custom code can compromise the entire application.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-review-extensions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unrestricted-network-exposure",
+        "name": "Unrestricted network exposure of OFBiz interfaces",
+        "description": "OFBiz does not automatically restrict network exposure of its interfaces; deployers are responsible for controlling access to public, internal, and administrative endpoints.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-network-controls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-demo-configuration-in-production",
+        "name": "Production use of the default demonstration configuration",
+        "description": "The default configuration distributed with OFBiz, including the bundled database configuration, exists to simplify evaluation, development, and demonstration; it is not intended for production use. Security reports based solely on the assumption that the default demonstration configuration is used in production may not represent vulnerabilities in OFBiz itself.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-follow-hardening-guidance"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-external-system-compromise",
+        "name": "Compromise of external systems and integrations",
+        "description": "OFBiz commonly integrates with external systems such as databases, payment providers, messaging systems, and identity services; their security and the data they provide are outside OFBiz control, and the hosting infrastructure (operating system, JVM, network, storage) is assumed to be controlled and secured by the deploying organization. Securing infrastructure components outside OFBiz control is an explicit non-goal.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-secure-integrations"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-restrict-admin-credentials",
+      "name": "Grant administrative credentials only to highly trusted individuals",
+      "description": "Administrative access is equivalent to full control over the OFBiz runtime, including effective code execution within the JVM, so administrative credentials must be granted only to highly trusted individuals.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-os-user",
+      "name": "Restrict the OFBiz operating system user",
+      "description": "All OFBiz code executes with the privileges of the operating system user owning the JVM process. Restricting that user's permissions is an important defense-in-depth control that can limit the impact of compromised administrative accounts or vulnerabilities; OFBiz itself does not manage or enforce operating system privilege separation.",
+      "category": "compensating",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-logs",
+      "name": "Protect log files",
+      "description": "Restrict access to log files, prevent exposure of logs via web servers or shared systems, and apply appropriate log retention and protection policies.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-vet-plugins",
+      "name": "Verify and risk-assess plugins before production use",
+      "description": "Deploy distributed plugins, especially those disabled by default, in production only after verification and risk assessment; do not trust them implicitly because they ship with OFBiz.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-review-extensions",
+      "name": "Review, validate, and control custom extensions",
+      "description": "Deployers are responsible for reviewing, validating, and controlling all custom components, extensions, scripts, and templates deployed in production, since they execute with full application privileges.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-network-controls",
+      "name": "Control network access to OFBiz endpoints",
+      "description": "Use firewalls, reverse proxies, network segmentation, and encrypted transport to control access to public, internal, and administrative endpoints.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-secure-integrations",
+      "name": "Secure external integrations",
+      "description": "Secure integrations with databases, payment providers, messaging systems, and identity services independently; validate external inputs and protect credentials.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-follow-hardening-guidance",
+      "name": "Follow the secure configuration and deployment documentation",
+      "description": "The OFBiz wiki provides secure configuration and deployment guidance: 'OFBiz Security Permissions' describes the permissions system and securing instances, and 'Keeping OFBiz secure' describes protection from known exploits and general security hardening; the default demonstration configuration must be replaced for production.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

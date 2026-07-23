@@ -1,0 +1,514 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-shenyu",
+      "name": "Apache ShenYu",
+      "description": "API gateway. The security model separates a control plane (shenyu-admin, managing configuration, plugins, rules, and metadata, trusted internal only) from a data plane (shenyu-bootstrap, the Gateway handling live traffic routing, rate limiting, and auth, exposed to internet-facing or DMZ traffic), synchronized over an intentionally unauthenticated WebSocket channel and backed by a trusted database.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/shenyu/blob/master/SECURITY_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://shenyu.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "shenyu"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/shenyu/blob/master/SECURITY_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/shenyu/master/SECURITY_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-shenyu",
+      "name": "ShenYu control plane / data plane deployment",
+      "description": "Admin (control plane) and Gateway (data plane) are separate trust domains. The Gateway does not trust the Admin implicitly for runtime traffic decisions and enforces its own authentication, rate limiting, and routing rules; compromise of the Admin allows modifying Gateway configuration but does not directly compromise traffic, and compromise of the Gateway does not grant access to the Admin or its database. The WebSocket sync channel is the bridge between these trust domains.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-admin",
+          "type": "service",
+          "name": "shenyu-admin (control plane)",
+          "description": "Manages configuration, plugins, rules, and metadata. Designed to operate within a trusted internal network; the Admin port (default 9095) must not be exposed to the public internet. It binds to 0.0.0.0 by default for convenience in containerized and internal-network deployments, which is not an indication that it is safe for external exposure. Authentication uses Apache Shiro (username/password, LDAP, or other configured mechanisms).",
+          "zone": "zone-internal-network"
+        },
+        {
+          "bom-ref": "asset-gateway",
+          "type": "gateway",
+          "name": "shenyu-bootstrap (data plane Gateway)",
+          "description": "Handles live traffic routing, rate limiting, and auth; exposed to traffic (internet-facing or DMZ). Enforces its own authentication, rate limiting, and routing rules against incoming requests.",
+          "zone": "zone-dmz"
+        },
+        {
+          "bom-ref": "asset-websocket-endpoint",
+          "type": "endpoint",
+          "name": "/websocket sync endpoint",
+          "description": "WebSocket endpoint on the Admin service through which Gateway instances receive real-time configuration updates (plugin, selector, and rule data). Explicitly excluded from Shiro authentication (shenyu.shiro.white-list); anyone who can reach it receives the full configuration state of the Gateway, including plugin rules, upstream service addresses, and authentication keys. This is by design: within the trusted network the Gateway is a legitimate consumer of this data.",
+          "zone": "zone-internal-network"
+        },
+        {
+          "bom-ref": "asset-database",
+          "type": "data-store",
+          "name": "Database",
+          "description": "Stores configuration, user credentials, plugin data, and metadata (H2 for development, MySQL/PostgreSQL for production). Trusted infrastructure: ShenYu assumes it is deployed in a secured environment with independent access controls, that its credentials are protected, and that its network port is not exposed to untrusted networks.",
+          "zone": "zone-infrastructure"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-traffic",
+          "name": "Untrusted traffic",
+          "type": "trust",
+          "description": "Internet or other external clients sending live HTTP traffic through the Gateway."
+        },
+        {
+          "bom-ref": "zone-dmz",
+          "name": "Data plane (DMZ)",
+          "type": "trust",
+          "description": "The Gateway, exposed to internet-facing or DMZ traffic."
+        },
+        {
+          "bom-ref": "zone-internal-network",
+          "name": "Trusted internal network",
+          "type": "trust",
+          "description": "The network where the Admin service and its WebSocket sync endpoint operate; access must be restricted by firewalls, private VPCs, security groups, ingress rules, or VPN."
+        },
+        {
+          "bom-ref": "zone-operators",
+          "name": "Authenticated Admin users",
+          "type": "trust",
+          "description": "All authenticated Admin users are fully trusted operators of the deployment; account provisioning and credential management form the security boundary."
+        },
+        {
+          "bom-ref": "zone-infrastructure",
+          "name": "Trusted infrastructure",
+          "type": "trust",
+          "description": "The database and other third-party infrastructure (LDAP servers, Kubernetes clusters) used alongside ShenYu."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-gateway-traffic",
+          "name": "Gateway request handling",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-traffic",
+            "zone-dmz"
+          ]
+        },
+        {
+          "bom-ref": "boundary-sync-channel",
+          "name": "WebSocket sync channel",
+          "type": "trust",
+          "zones": [
+            "zone-dmz",
+            "zone-internal-network"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin-authentication",
+          "name": "Admin authentication",
+          "type": "trust",
+          "zones": [
+            "zone-operators",
+            "zone-internal-network"
+          ]
+        },
+        {
+          "bom-ref": "boundary-database-access",
+          "name": "Admin to database",
+          "type": "trust",
+          "zones": [
+            "zone-internal-network",
+            "zone-infrastructure"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The Admin service (shenyu-admin) operates within a trusted internal network; the Admin port (default 9095) is not exposed to the public internet."
+        },
+        {
+          "description": "All authenticated Admin users are fully trusted; account provisioning and credential management are the security boundary. If an attacker can authenticate, the deployment is already compromised."
+        },
+        {
+          "description": "The database is deployed in a secured environment with access controls independent of ShenYu, its credentials are protected, and its network port is not exposed to untrusted networks."
+        },
+        {
+          "description": "The /websocket endpoint is only reachable by Gateway instances within the trusted internal network."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-rce",
+        "name": "Unauthenticated remote code execution",
+        "description": "Unauthenticated remote code execution is in scope and should be reported to security@apache.org.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway",
+          "asset-admin"
+        ]
+      },
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass allowing access without valid credentials",
+        "description": "An authentication bypass that allows access without valid credentials violates the model's authentication boundary and is in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-shiro-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-gateway-request-vulns",
+        "name": "Gateway request-handling vulnerabilities via crafted HTTP traffic",
+        "description": "Gateway (bootstrap) request-handling vulnerabilities exploitable through crafted HTTP traffic, and injection attacks (SQL, command, template) reachable through unauthenticated Gateway request paths, are in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-gateway-enforcement"
+        ]
+      },
+      {
+        "bom-ref": "threat-plugin-bypass",
+        "name": "Plugin-level bypass of Gateway-enforced authentication or rate limiting",
+        "description": "Plugin-level vulnerabilities that allow bypassing Gateway-enforced authentication or rate limiting are in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gateway"
+        ],
+        "mitigations": [
+          "control-gateway-enforcement"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-public-exposure",
+        "name": "Exposure of the Admin port to the public internet",
+        "description": "Exposing the Admin port (default 9095) or the WebSocket endpoint to untrusted networks is a deployment misconfiguration, not a vulnerability in ShenYu. The Admin binds to 0.0.0.0 by default for convenience, which is not an indication that it is safe for external exposure.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-admin-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-authenticated-admin-abuse",
+        "name": "Malicious actions by an authenticated Admin user",
+        "description": "All authenticated Admin users are fully trusted; actions performed by an authenticated Admin user (including any user with a valid login) are not security vulnerabilities. If an attacker can authenticate, the deployment is already compromised. The security boundary is account creation, credential management, and protection of credentials stored by ShenYu.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-account-provisioning"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rbac-escalation",
+        "name": "Intentional privilege escalation across the Admin RBAC system",
+        "description": "The @RequiresPermissions RBAC system controls UI feature visibility and prevents accidental misconfiguration; it is not a hard security boundary. It does not protect against a malicious authenticated user intentionally escalating privileges, a user invoking API endpoints outside their assigned role through means other than the Admin UI, or cross-tenant isolation between Admin users. All authenticated Admin users share the same trust domain; misuse of features by an authenticated Admin user is out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-separate-admin-instances"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-websocket-disclosure",
+        "name": "Configuration disclosure through the unauthenticated /websocket endpoint",
+        "description": "The /websocket endpoint is intentionally unauthenticated (excluded from Shiro via shenyu.shiro.white-list) so that Gateway instances can synchronize plugin, selector, and rule data. Anyone who can reach it can receive the full configuration state of the Gateway, including plugin rules, upstream service addresses, and authentication keys. This is by design; the channel's security depends entirely on network isolation and firewall rules.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-websocket-endpoint"
+        ],
+        "mitigations": [
+          "control-websocket-network-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-database-compromise",
+        "name": "Direct database access by an attacker",
+        "description": "If an attacker gains direct access to the database (e.g. via SQL injection in a separate application, stolen credentials, or network misconfiguration), they can read or modify all ShenYu state. Database compromise is an independent, infrastructure-level security event outside ShenYu's software threat model, not a vulnerability in ShenYu's application logic. Vulnerabilities in third-party infrastructure (LDAP servers, databases, Kubernetes clusters) used alongside ShenYu are likewise out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-database"
+        ],
+        "mitigations": [
+          "control-secure-database"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-gateway-traffic",
+        "boundary": "boundary-gateway-traffic",
+        "name": "Gateway traffic boundary",
+        "description": "The Gateway is exposed to live traffic (internet-facing or DMZ) and enforces its own authentication, rate limiting, and routing rules against incoming requests. Request-handling, plugin bypass, and injection findings reachable through this boundary are in scope.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-rce",
+          "threat-gateway-request-vulns",
+          "threat-plugin-bypass"
+        ],
+        "controlsAtBoundary": [
+          "control-gateway-enforcement"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-sync-channel",
+        "boundary": "boundary-sync-channel",
+        "name": "WebSocket sync channel boundary",
+        "description": "The bridge between the control plane and data plane trust domains. Operates without authentication at the application layer; its security depends entirely on network isolation and firewall rules blocking external access to the Admin port.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-websocket-disclosure"
+        ],
+        "controlsAtBoundary": [
+          "control-websocket-network-protection"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin-authentication",
+        "boundary": "boundary-admin-authentication",
+        "name": "Admin authentication boundary",
+        "description": "Once a user is authenticated via Apache Shiro (username/password, LDAP, or other configured mechanisms), they are a fully trusted operator. Account provisioning is the security boundary; RBAC beyond it is UI convenience, not isolation.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authenticated-admin-abuse",
+          "threat-rbac-escalation",
+          "threat-admin-public-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-shiro-authentication",
+          "control-account-provisioning",
+          "control-admin-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-database-access",
+        "boundary": "boundary-database-access",
+        "name": "Database boundary",
+        "description": "The database is trusted infrastructure with access controls independent of ShenYu; direct compromise is outside the software threat model.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-database-compromise"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-database"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-admin-network-isolation",
+      "name": "Network isolation of the Admin service",
+      "description": "Place the Admin service behind a firewall or private VPC, use network-level access controls (security groups, ingress rules, VPN) to restrict access to the Admin port, and optionally bind the Admin server to a specific internal address in production.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-shiro-authentication",
+      "name": "Admin authentication via Apache Shiro",
+      "description": "The Admin service uses Apache Shiro for authentication (username/password, LDAP, or other configured mechanisms); authenticated users are considered trusted operators of the deployment.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-admin-authentication"
+      ]
+    },
+    {
+      "bom-ref": "control-account-provisioning",
+      "name": "Control account provisioning and credential storage",
+      "description": "Only authorized personnel should be able to provision Admin accounts, and passwords and secrets stored by ShenYu (e.g. in the database) must be protected. Account creation and credential management are the security boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-authentication"
+      ]
+    },
+    {
+      "bom-ref": "control-rbac-ui",
+      "name": "RBAC for UI feature visibility",
+      "description": "The @RequiresPermissions role-based access control system simplifies the Admin UI by showing each user only the features relevant to their role and prevents accidental misconfiguration by limiting which users can modify specific resources. It is not a hard security boundary and provides no isolation between authenticated Admin users.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-separate-admin-instances",
+      "name": "Deploy separate Admin instances for strict operator isolation",
+      "description": "All authenticated Admin users share the same trust domain; if strict isolation between operators is required, deploy separate ShenYu Admin instances.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-websocket-network-protection",
+      "name": "Network-level protection of the /websocket endpoint",
+      "description": "The /websocket endpoint must only be reachable by Gateway instances within the trusted internal network; firewall rules blocking external access to the Admin port also protect the WebSocket endpoint.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-websocket-endpoint",
+        "boundary-sync-channel"
+      ]
+    },
+    {
+      "bom-ref": "control-gateway-enforcement",
+      "name": "Gateway-enforced authentication, rate limiting, and routing",
+      "description": "The Gateway does not trust the Admin implicitly for runtime traffic decisions; it enforces its own authentication, rate limiting, and routing rules against incoming requests.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-gateway-traffic"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-database",
+      "name": "Secure the database independently of ShenYu",
+      "description": "Deploy the database in a secured environment with access controls independent of ShenYu, protect the database credentials used by ShenYu, and do not expose the database network port to untrusted networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-database"
+      ]
+    }
+  ]
+}

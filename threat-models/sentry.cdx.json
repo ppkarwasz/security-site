@@ -1,0 +1,41 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-sentry",
+      "name": "Apache Sentry",
+      "description": "System for enforcing fine-grained role-based authorization to data and metadata stored on a Hadoop cluster. The referenced document is a wiki page listing vulnerabilities found in Apache Sentry (CVE-2018-8028 fixed in 2.0.1, CVE-2015-3254 fixed in 1.7.1, CVE-2016-0760 fixed in 1.7.0); it does not document a threat model, threats, or mitigations.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://cwiki.apache.org/confluence/display/SENTRY/Vulnerabilities+found+in+Apache+Sentry",
+          "comment": "Source security model document; this file is a structured translation of it. The page is a list of fixed CVEs only."
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "sentry"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://cwiki.apache.org/confluence/display/SENTRY/Vulnerabilities+found+in+Apache+Sentry"
+      },
+      {
+        "name": "asf:security-model-scope",
+        "value": "published-vulnerabilities-only"
+      }
+    ]
+  },
+  "threats": {}
+}

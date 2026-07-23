@@ -1,0 +1,520 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-kafka",
+      "name": "Apache Kafka",
+      "description": "Distributed event streaming platform: brokers and KRaft controllers exchange records, replication state, and metadata; clients produce and consume over configurable listeners; the Admin API and JMX form a separate control plane. Security (authentication, authorization, transport encryption) is off by default and must be explicitly configured for production.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/kafka/blob/trunk/docs/security/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it. Kafka Connect and Kafka Streams have their own security model pages."
+        },
+        {
+          "type": "website",
+          "url": "https://kafka.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "kafka"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/kafka/blob/trunk/docs/security/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/kafka/trunk/docs/security/security-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-kafka",
+      "name": "Kafka cluster deployment",
+      "description": "Brokers expose one or more listeners with independent security configuration (PLAINTEXT, SSL, SASL_PLAINTEXT, SASL_SSL); dedicated inter-broker and controller listeners carry replication and KRaft traffic and should be firewalled off from clients; JMX is an operators-only interface; log segments are written as plain bytes on trusted disks.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-broker",
+          "type": "broker",
+          "name": "Kafka brokers",
+          "description": "Serve producer/consumer traffic and the Admin API over configured listeners; authorization is performed by the configured authorizer (StandardAuthorizer for KRaft clusters) over (principal, host, operation, resource pattern, permission) ACLs.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-controller",
+          "type": "service",
+          "name": "KRaft controllers",
+          "description": "Exchange metadata with brokers over the controller listeners; the controller listener must never be exposed to client networks.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-listeners",
+          "type": "endpoint",
+          "name": "Client-facing listeners",
+          "description": "Listener protocols selected by listener.security.protocol.map; clients connect to whatever the broker advertises (advertised.listeners) after the initial metadata fetch.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-jmx",
+          "type": "endpoint",
+          "name": "JMX interface",
+          "description": "Operational metrics on brokers, clients, Connect, and Streams; an administrators-only interface, unauthenticated by default.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-log-storage",
+          "type": "data-store",
+          "name": "On-disk log segments and metadata",
+          "description": "Log segments, index files, snapshots, and controller metadata written as plain bytes; at-rest confidentiality is the responsibility of the filesystem, block device, or message-level encryption.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Kafka clients",
+          "type": "trust",
+          "description": "Producers, consumers, Admin API clients, Connect workers, and Streams applications connecting over client-facing listeners."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Broker and controller fleet",
+          "type": "trust",
+          "description": "Brokers and KRaft controllers; any host that can authenticate on the inter-broker or controller listeners is effectively part of the cluster's trust boundary."
+        },
+        {
+          "bom-ref": "zone-operators",
+          "name": "Operators",
+          "type": "trust",
+          "description": "Anyone with shell access to a broker, controller, or the underlying disks can read every topic, forge any principal, and rewrite ACLs; the model assumes a trusted operator."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-listener",
+          "name": "Client listener boundary",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin-plane",
+          "name": "Operator and JMX boundary",
+          "type": "trust",
+          "zones": [
+            "zone-operators",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Kafka trusts its JVM and classpath: JARs on a process's classpath run with that process's full privileges, and the model assumes no hostile JARs are present."
+        },
+        {
+          "description": "Brokers and KRaft controllers form a trusted fleet; inter-broker and controller listeners are kept on dedicated internal listeners firewalled off from clients."
+        },
+        {
+          "description": "The data plane, the Admin API, and JMX have distinct authentication and authorization stories that must be configured independently; securing one does not secure the others."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-insecure-default-cluster",
+        "name": "Unauthenticated, unencrypted access to a default cluster",
+        "description": "Security is off by default: a freshly installed cluster accepts unauthenticated PLAINTEXT connections on every listener and applies no authorization, which is appropriate only for closed test environments. An open PLAINTEXT listener with no authorizer is a deployment choice, not a defect; production deployments must explicitly configure authentication, authorization, and transport encryption before exposure to any untrusted network.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-listeners",
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-configure-authentication",
+          "control-configure-authorizer",
+          "control-tls-in-transit"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-authenticated-without-authorizer",
+        "name": "Authentication configured without an authorizer",
+        "description": "If no authorizer is configured, all authenticated principals have full access: configuring authentication without an authorizer provides identity but no authorization. Similarly, allow.everyone.if.no.acl.found=true reverses the default-deny behaviour for resources with no ACLs and is a transitional aid that should not remain set in steady state, and the super.users list bypasses ACL checks entirely and must be treated like a root password.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-configure-authorizer"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-interception",
+        "name": "Interception or modification of unencrypted listener traffic",
+        "description": "Traffic on PLAINTEXT or SASL_PLAINTEXT listeners is unencrypted; the SASL PLAIN mechanism sends username/password in cleartext over the SASL channel and is acceptable only inside a SASL_SSL listener. The security model protects messages in transit when TLS is configured per listener.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-listeners"
+        ],
+        "mitigations": [
+          "control-tls-in-transit"
+        ]
+      },
+      {
+        "bom-ref": "threat-controller-listener-exposure",
+        "name": "Controller or inter-broker listener reachable from client networks",
+        "description": "Brokers and controllers exchange replication state and metadata over the inter-broker and controller listeners; any host that can authenticate on those listeners is effectively part of the cluster's trust boundary, and a compromise of a client-facing listener must not be able to impersonate a broker. Operators must never expose the controller listener to client networks.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-controller",
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-listener-separation",
+          "control-distinct-keystores"
+        ]
+      },
+      {
+        "bom-ref": "threat-jmx-exposure",
+        "name": "JMX exposed to non-operators",
+        "description": "JMX is an administrators/operators-only interface and must never be exposed to actual users; it is unauthenticated by default and should be disabled, bound to localhost with an exporter alongside, or configured with authentication and TLS.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jmx"
+        ],
+        "mitigations": [
+          "control-jmx-lockdown"
+        ]
+      },
+      {
+        "bom-ref": "threat-secrets-in-config",
+        "name": "Cleartext secrets in configuration files",
+        "description": "Broker, client, and Connect properties files contain keystore passwords, SASL credentials, and similar secrets; embedding them in version-controlled configuration exposes them. For file-based config providers, an unbounded path also lets a malicious or mistaken configuration coerce the provider into reading arbitrary files on the host.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-config-providers",
+          "control-password-encoder"
+        ]
+      },
+      {
+        "bom-ref": "threat-at-rest-disclosure",
+        "name": "Disclosure of data at rest",
+        "description": "Kafka does not encrypt log segments, indexes, snapshots, or controller metadata on disk; at-rest confidentiality is disclaimed and is the responsibility of filesystem/block-device encryption, message-level encryption by producers (the only option protecting records from broker operators), or tiered storage with its own encryption.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-log-storage"
+        ],
+        "mitigations": [
+          "control-at-rest-options"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-operator",
+        "name": "Actions by a trusted operator or broker fleet member",
+        "description": "Anyone with shell access to a broker, controller, or the underlying disks can read every topic, forge any principal, and rewrite ACLs; the security model does not defend brokers from their own administrators, and a trusted principal performing an authorized operation (including super.users entries) is expected behaviour.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-broker",
+          "asset-controller",
+          "asset-log-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-pluggable-code-execution",
+        "name": "Code execution via pluggable interfaces and classpath JARs",
+        "description": "Every Kafka component exposes pluggable interfaces (authorizers, (de)serializers, connectors, transforms, config providers) loaded by class name that run with the host process's privileges; configuring one is equivalent to running its code, and placing code on the classpath is equivalent to trusting it. The model assumes no hostile JARs; only install plugins you fully trust.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dev-tooling",
+        "name": "Findings in development and test tooling",
+        "description": "Trogdor is a test framework that injects faults and runs arbitrary user-supplied commands by design and is intended only for development environments; command execution through Trogdor is not a security issue. The tests/ system-test harness and release/ scripts are developer tooling, not components of a running cluster. Out of scope for the security model.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-docker-image-cves",
+        "name": "Accumulated CVEs in already-released Docker images",
+        "description": "Published Docker images are free of known CVEs on release day, but the project does not rebuild already-released images, so base layers and bundled dependencies accumulate CVEs not specific to Kafka over time; those are out of scope, and operators are expected to rebuild or patch images for long-running deployments. Only currently supported releases and trunk are in scope for security reports.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-listener",
+        "boundary": "boundary-client-listener",
+        "name": "Client listener trust boundary",
+        "description": "Clients cross into the cluster over listeners whose per-listener protocol determines authentication (none, mTLS, SASL) and encryption (none, TLS); authorization by the configured authorizer arbitrates what an authenticated principal may do. Delegation tokens let authenticated clients fan out short-lived credentials to distributed frameworks.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-insecure-default-cluster",
+          "threat-authenticated-without-authorizer",
+          "threat-plaintext-interception",
+          "threat-controller-listener-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-configure-authentication",
+          "control-configure-authorizer",
+          "control-tls-in-transit",
+          "control-listener-separation",
+          "control-delegation-tokens"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin-plane",
+        "boundary": "boundary-admin-plane",
+        "name": "Operator and JMX trust boundary",
+        "description": "The control plane (Admin API, JMX, host shell access) has different exposure than the data plane; JMX must be reserved for operators, and operators themselves are trusted.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-jmx-exposure",
+          "threat-trusted-operator",
+          "threat-secrets-in-config"
+        ],
+        "controlsAtBoundary": [
+          "control-jmx-lockdown",
+          "control-config-providers",
+          "control-audit-logging"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-configure-authentication",
+      "name": "Configure listener authentication (mTLS and/or SASL)",
+      "description": "Use TLS client authentication (ssl.client.auth=required, principal derived via ssl.principal.mapping.rules) and/or SASL per listener (GSSAPI/Kerberos, SCRAM-SHA-256/512, OAUTHBEARER with a production JWKS validator, PLAIN only inside SASL_SSL). mTLS is recommended for broker-to-broker and controller-to-broker traffic.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-configure-authorizer",
+      "name": "Configure an authorizer with least-privilege ACLs",
+      "description": "Set authorizer.class.name (StandardAuthorizer for KRaft); with an authorizer configured, unmatched access is denied. Keep super.users minimal (it bypasses ACL checks; treat it like a root password) and do not leave allow.everyone.if.no.acl.found=true in steady state. ACL management APIs are themselves gated by Cluster-resource ACLs.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-in-transit",
+      "name": "TLS encryption in transit",
+      "description": "Configure ssl.* per listener; disable TLS below 1.2 and prefer 1.3; set ssl.endpoint.identification.algorithm=https on clients (default since 2.0); rotate keystores via dynamic broker configuration to avoid restarts. Connect, MirrorMaker 2, and Streams consume the same ssl.*/sasl.* client configs, so securing the broker is necessary but not sufficient.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-listener-separation",
+      "name": "Separate and firewall internal listeners",
+      "description": "Keep inter.broker.listener.name and controller.listener.names on a dedicated internal listener (SASL_SSL or SSL) firewalled off from clients; bind external listeners only to interfaces reachable by intended clients; treat advertised.listeners as part of the security configuration; never expose the controller listener to client networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-controller",
+        "asset-listeners"
+      ]
+    },
+    {
+      "bom-ref": "control-distinct-keystores",
+      "name": "Distinct keystores for internal and client-facing listeners",
+      "description": "Use distinct keystores for the inter-broker listener and any client-facing listener so a leaked client-facing key cannot impersonate a broker.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker"
+      ]
+    },
+    {
+      "bom-ref": "control-delegation-tokens",
+      "name": "Delegation tokens for distributed frameworks",
+      "description": "Authenticated clients can request short-lived delegation tokens (used as SCRAM credentials) so distributed frameworks fan out to many tasks without distributing the original credential; tokens inherit the requester's principal and ACLs, expire on a fixed schedule, and can be invalidated by the owner.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-jmx-lockdown",
+      "name": "Disable, localhost-bind, or authenticate JMX",
+      "description": "Either disable JMX, bind it to localhost with an exporter alongside, or configure com.sun.management.jmxremote.authenticate=true and TLS; never expose it to actual users.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jmx"
+      ]
+    },
+    {
+      "bom-ref": "control-config-providers",
+      "name": "Indirect secrets via ConfigProvider with allowed.paths",
+      "description": "Use ConfigProvider implementations (FileConfigProvider, DirectoryConfigProvider, or custom) instead of embedding cleartext secrets in version-controlled configuration, and set allowed.paths to the specific secret directories so a malicious or mistaken configuration cannot read arbitrary host files.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker"
+      ]
+    },
+    {
+      "bom-ref": "control-password-encoder",
+      "name": "Encrypt sensitive dynamic configs at rest",
+      "description": "Sensitive dynamic broker configurations are encrypted at rest in the metadata log using password.encoder.secret; rotating that secret requires password.encoder.old.secret and a rolling restart.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-log-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-logging",
+      "name": "Ship authorizer and request logs off-broker",
+      "description": "Authorizer decisions go to the kafka.authorizer.logger log4j logger (INFO records every denied request, DEBUG every allowed one); in regulated environments ship this log to durable, append-only storage off-broker, as there is no built-in tamper-evident audit trail. The kafka.request.logger gives finer per-call detail for forensics but is verbose and off by default.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker"
+      ]
+    },
+    {
+      "bom-ref": "control-at-rest-options",
+      "name": "At-rest confidentiality options",
+      "description": "In increasing order of cost: filesystem or block-device encryption (transparent, protects against disk theft but not broker login); message-level encryption by producers with keys in an external KMS (the only option protecting records from broker operators, but precluding broker-side features that read payloads); or tiered storage with a remote store performing its own encryption.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-log-storage"
+      ]
+    }
+  ]
+}

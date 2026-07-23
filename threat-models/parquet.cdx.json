@@ -1,0 +1,142 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-parquet",
+      "name": "Apache Parquet (parquet-java)",
+      "description": "Java library for reading and writing the Parquet columnar file format, embedded in applications that control its read configuration. Translation modules (parquet-avro, parquet-protobuf, parquet-thrift, and others) convert Parquet data into Java objects, which in the general case requires loading classes named in the file metadata.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/parquet-java/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://parquet.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "parquet"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/parquet-java/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/parquet-java/master/SECURITY.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-untrusted-read-configuration",
+        "name": "Untrusted parties setting the read configuration",
+        "description": "Read configuration (for example the Hadoop configuration) is controlled by applications. If an application allows untrusted parties to set the read configuration arbitrarily, that is a security risk independent of whether a Parquet file is involved, and it is the application's responsibility, not the library's.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-application-controls-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-crafted-file-resource-exhaustion",
+        "name": "Excessive resource consumption from a maliciously crafted file",
+        "description": "Parquet files (their data and metadata) may originate from untrusted sources and the library parses them on a best-effort basis, but a maliciously crafted file can still cause excessive resource consumption, such as large memory allocations or decompression bombs. Applications reading untrusted files are responsible for imposing appropriate resource limits (memory, time, input size) around the library; where appropriate, improvements to resource management in the library are welcome.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-class-loading-via-metadata",
+        "name": "Class loading driven by file metadata in translation layers",
+        "description": "Translation modules load classes named in metadata stored in Parquet files. Arbitrary class loading by itself is not considered a security issue by the library; a security issue must demonstrate further ability to execute arbitrary methods on the instantiated object in such a way that it presents a security risk. When using these translation layers it is the user's responsibility to keep the classpath secure and free of classes that might cause an adverse issue when loaded.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-secure-classpath",
+          "control-direct-read-apis"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-application-controls-configuration",
+      "name": "Keep read configuration under application control",
+      "description": "Do not allow untrusted parties to set the read configuration (for example the Hadoop configuration) arbitrarily.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Impose resource limits when reading untrusted files",
+      "description": "Applications reading untrusted Parquet files must impose appropriate resource limits (memory, time, input size) around the library to contain large allocations and decompression bombs.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-secure-classpath",
+      "name": "Keep the classpath secure when using translation layers",
+      "description": "When using translation layers such as parquet-avro, parquet-protobuf, or parquet-thrift, ensure the classpath does not contain classes that when loaded might cause an adverse issue for the system.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-direct-read-apis",
+      "name": "Use direct read APIs when file-driven class loading is problematic",
+      "description": "If class loading driven by file contents is problematic, end users should use APIs to directly read the data from Parquet instead of relying on translation.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

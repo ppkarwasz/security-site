@@ -1,0 +1,572 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-dubbo",
+      "name": "Apache Dubbo",
+      "description": "High-performance, extensible RPC and microservices framework for Java, embedded as an in-process library. Provides service discovery, load balancing, traffic management, and observability; services are exported and consumed over Triple (HTTP/2, gRPC-compatible), Dubbo TCP, and REST, with pluggable registries (ZooKeeper, Nacos) and configuration centers. Dubbo assumes an internal-network deployment model throughout.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/dubbo/blob/3.3/docs/threat-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://dubbo.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "dubbo"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/dubbo/blob/3.3/docs/threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/dubbo/3.3/docs/threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-dubbo",
+      "name": "Dubbo internal-network deployment",
+      "description": "Architecture described by the Dubbo threat model: consumers invoke providers over the RPC data plane (unauthenticated and cleartext by default), both sides register with and subscribe to a fully trusted registry and configuration center, and each application exposes a QoS management port (22222) restricted to loopback by default. The whole framework assumes a trusted internal network; direct internet exposure is not a supported use case.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-provider",
+          "type": "service",
+          "name": "RPC provider",
+          "description": "Application exporting services over Dubbo TCP (port 20880) or Triple HTTP/2 (port 50051). Deserializes attacker-reachable request bodies; serialization format is chosen by provider-priority negotiation within the provider's declared set.",
+          "zone": "zone-provider"
+        },
+        {
+          "bom-ref": "asset-consumer",
+          "type": "service",
+          "name": "RPC consumer",
+          "description": "Application invoking remote services. Implicitly trusts serialized return values from providers; a compromised provider can attack the consumer through response deserialization.",
+          "zone": "zone-consumer"
+        },
+        {
+          "bom-ref": "asset-registry",
+          "type": "service",
+          "name": "Registry (ZooKeeper, Nacos)",
+          "description": "Stores and distributes provider URLs. Dubbo can only fully trust the data registries push; a compromised registry means total cluster compromise.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-config-center",
+          "type": "service",
+          "name": "Configuration center",
+          "description": "Pushes application configuration that may contain credentials. Trusted input.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-qos-endpoint",
+          "type": "endpoint",
+          "name": "QoS management port (22222)",
+          "description": "Telnet/HTTP management server started by default (qos.enable=true). Accepts only loopback connections by default (acceptForeignIp=false); the historical default anonymousAccessPermissionLevel is PUBLIC. The invoke command (PRIVATE permission) can invoke registered service methods and uses PojoUtils.realize(), which bypasses the SerializeSecurityManager framework.",
+          "zone": "zone-provider"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Any party able to reach RPC ports (20880, 50051) or the QoS port (22222) on the internal network; unauthenticated by default."
+        },
+        {
+          "bom-ref": "zone-consumer",
+          "name": "Consumer application",
+          "type": "trust",
+          "description": "Trusted application process embedding the Dubbo consumer side."
+        },
+        {
+          "bom-ref": "zone-provider",
+          "name": "Provider application",
+          "type": "trust",
+          "description": "Trusted application process embedding the Dubbo provider side and its QoS server."
+        },
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Registry and configuration center",
+          "type": "trust",
+          "description": "Fully trusted control plane; Dubbo has no integrity verification for the data it pushes."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-rpc-data-plane",
+          "name": "RPC data plane",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-consumer",
+            "zone-provider"
+          ]
+        },
+        {
+          "bom-ref": "boundary-control-plane",
+          "name": "Control plane connections",
+          "type": "trust",
+          "zones": [
+            "zone-consumer",
+            "zone-provider",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-qos",
+          "name": "QoS management plane",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-provider"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The entire framework assumes deployment on a trusted internal network (data center or VPC); the defaults (no TLS, no authentication, permissive deserialization) are by design for that model, not a temporary limitation."
+        },
+        {
+          "description": "The registry and configuration center are fully trusted; an attacker cannot write to either. A compromised registry equals cluster compromise."
+        },
+        {
+          "description": "JDK 8 to 21, pure Java with Netty4 for network I/O; DNS is trusted for hostname resolution."
+        },
+        {
+          "description": "When TLS or mTLS is enabled, a proper PKI is assumed; the attacker cannot break TLS."
+        },
+        {
+          "description": "dubbo-demo, dubbo-test, and the dubbo-compatible legacy layer are not covered; Dubbo Admin is a separate project outside the security boundary."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-deserialization-rce",
+        "name": "Remote code execution via RPC payload deserialization",
+        "description": "A crafted serialized request body (or response body) exploits a gadget chain during deserialization. The default serialize.check.status=WARN logs but allows unlisted classes; the built-in blocklist of known gadget classes has been bypassed historically, and Java native serialization remains a supported but dangerous format. When STRICT mode is enabled, a class outside the allowlist that is nonetheless deserialized violates the claimed serialization class checking property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider",
+          "asset-consumer"
+        ],
+        "mitigations": [
+          "control-strict-serialization",
+          "control-deserialization-blocklist",
+          "control-narrow-serialization-declaration"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-invocation",
+        "name": "Unauthorized service invocation on a default (unauthenticated) deployment",
+        "description": "Dubbo ships with auth=false: without explicit configuration, any client that can reach the provider port can invoke any service method. Authentication by default is an explicitly disclaimed property; attacks that only work because authentication was never enabled are by-design findings, not framework vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider"
+        ],
+        "mitigations": [
+          "control-enable-authentication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cleartext-traffic",
+        "name": "Eavesdropping and modification of cleartext RPC traffic",
+        "description": "Dubbo ships with ssl-enabled=false: all RPC traffic, including authentication credentials, is transmitted in cleartext, and a network attacker can observe or modify packets on the wire. Encryption by default is an explicitly disclaimed property; enabling TLS is a downstream responsibility. Basic Auth without TLS exposes credentials, and HMAC-signed requests without TLS can be captured for replay.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider",
+          "asset-consumer"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hmac-replay",
+        "name": "Replay of HMAC-authenticated requests",
+        "description": "The AccessKeyAuthenticator signs a timestamp but the provider does not validate that it is recent, so valid signatures can be replayed indefinitely. Replay protection is not planned; this is by design and an explicitly disclaimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-provider",
+        "name": "Malicious or compromised provider attacks the consumer",
+        "description": "A legitimately registered provider that turns malicious (authenticated-but-Byzantine) can return crafted serialized objects to exploit the consumer's deserialization, slow-read or refuse connections to cause timeouts, or return incorrect results without detection (no result integrity verification). This actor is in scope, but Dubbo provides no defense against it by default: consumers implicitly trust provider return values.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-consumer"
+        ],
+        "mitigations": [
+          "control-strict-serialization",
+          "control-mtls-provider-identity"
+        ]
+      },
+      {
+        "bom-ref": "threat-compromised-registry",
+        "name": "Compromised registry or configuration center",
+        "description": "A compromised registry that pushes malicious provider addresses, or a compromised configuration center, is explicitly not defended against: Dubbo can only fully trust the data registries push, and a compromised registry equals total cluster compromise. Securing the registry and config center is a downstream responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-registry",
+          "asset-config-center"
+        ],
+        "mitigations": [
+          "control-secure-registry"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-qos-command-abuse",
+        "name": "Remote invocation of QoS management commands",
+        "description": "The QoS server (port 22222, enabled by default) accepts telnet/HTTP command text from any client that can reach it. By default only loopback connections are accepted (acceptForeignIp=false) and anonymous users get PUBLIC-level access; the invoke command requires PRIVATE permission and can invoke arbitrary registered service methods via reflection, with argument conversion through PojoUtils.realize() bypassing the SerializeSecurityManager framework. A violation of the loopback restriction, or PRIVATE permission granted to remote users, is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-qos-endpoint"
+        ],
+        "mitigations": [
+          "control-harden-qos"
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Denial of service through unbounded resource consumption",
+        "description": "Dubbo does not enforce request rate limits, connection limits, or payload size limits at the framework level (Netty defaults apply), and no recursion depth limit is enforced for Hessian2 deserialization. Denial of service from unbounded resource consumption is explicitly not defended against; rate limiting is delegated to external tools such as Sentinel.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider"
+        ],
+        "mitigations": [
+          "control-external-rate-limiting"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-cert-manager-fallback",
+        "name": "Certificate manager falls back to accepting any certificate",
+        "description": "DubboCertManager falls back to InsecureTrustManagerFactory when caCertPath is empty, accepting any certificate, and connects to the CA without an auth token when oidcTokenPath is empty. The code explicitly warns about this discouraged configuration; providing the CA certificate and token is the operator's responsibility.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-provider",
+          "asset-consumer"
+        ],
+        "mitigations": [
+          "control-configure-cert-manager"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-internet-exposure",
+        "name": "Attacks enabled by exposing Dubbo ports to the internet",
+        "description": "Direct internet exposure of RPC ports (20880, 50051) or the QoS port (22222) without a reverse proxy, API gateway, or service mesh is not a supported use case: default Dubbo has no authentication and permissive deserialization, and internet-facing Dubbo ports have historically led to remote code execution vulnerabilities. Insider attacks from operators or developers with registry, config center, or QoS access are likewise out of scope.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-provider",
+          "asset-qos-endpoint"
+        ],
+        "mitigations": [
+          "control-gateway-deployment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-rpc-data-plane",
+        "boundary": "boundary-rpc-data-plane",
+        "name": "RPC data plane trust boundary",
+        "description": "Consumer to provider RPC traffic, unauthenticated and cleartext by default. Request bodies, service and method names, attachments, HTTP/2 headers, and gRPC trailers are attacker-controllable; the serialization format is bounded by provider-priority negotiation within the provider's declared set. Response deserialization is the matching boundary in the reverse direction, where the consumer implicitly trusts the provider.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-deserialization-rce",
+          "threat-unauthenticated-invocation",
+          "threat-cleartext-traffic",
+          "threat-hmac-replay",
+          "threat-malicious-provider",
+          "threat-resource-exhaustion",
+          "threat-internet-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-strict-serialization",
+          "control-narrow-serialization-declaration",
+          "control-enable-authentication",
+          "control-enable-tls",
+          "control-gateway-deployment",
+          "control-external-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-control-plane",
+        "boundary": "boundary-control-plane",
+        "name": "Control plane trust boundary",
+        "description": "Application connections to the registry and configuration center. Data pushed from the control plane is trusted input; Dubbo performs no integrity verification on it.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-compromised-registry"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-registry"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-qos",
+        "boundary": "boundary-qos",
+        "name": "QoS management plane trust boundary",
+        "description": "Any host reaching QoS port 22222. Loopback-restricted by default, with the historical default of PUBLIC-level anonymous access.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-qos-command-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-harden-qos"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-strict-serialization",
+      "name": "Enable STRICT serialization class checking",
+      "description": "Set serialize.check.status=STRICT and maintain an application-specific allowlist so that classes not on the allowlist are blocked during deserialization. Applies only to serializers integrated with SerializeSecurityManager (Hessian2, Fastjson2); Java native serialization is not covered. The default is WARN (log but allow); the project intends to change the default to STRICT eventually.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-deserialization-blocklist",
+      "name": "Built-in deserialization blocklist",
+      "description": "Dubbo maintains a blocklist of known gadget chain classes (security/serialize.blockedlist, 195 entries) rejected even in WARN mode. Defense in depth only: it is only as effective as the blocklist is complete, and bypasses have occurred historically.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-provider",
+        "asset-consumer"
+      ]
+    },
+    {
+      "bom-ref": "control-narrow-serialization-declaration",
+      "name": "Declare only intended serialization formats on the provider",
+      "description": "Serialization is chosen by provider-priority negotiation: a network attacker cannot force a format the provider has not declared. Declare only the formats actually needed (for example Hessian2 for Dubbo TCP, Protobuf for Triple) and disable Java native serialization if not needed; declaring all installed formats reduces the protection to the most permissive serializer.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-authentication",
+      "name": "Enable RPC request authentication",
+      "description": "Set auth=true with the accesskey authenticator (HMAC-SHA256 signatures over serviceKey, method, secretKey, and timestamp) or the basic authenticator (username:password, Base64-encoded, requiring TLS to be secure). Credentials are stored in URL parameters; HMAC authentication provides no replay protection.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS for RPC traffic",
+      "description": "Set ssl-enabled=true with user-provided certificates (mTLS supported, via Netty's SslHandler). Without TLS all data and credentials are cleartext; always pair Basic Auth with TLS, and use TLS with HMAC auth to prevent signature capture for replay.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-mtls-provider-identity",
+      "name": "Validate provider identity with mTLS",
+      "description": "In environments with untrusted providers, use mTLS with client certificate verification; a consumer otherwise has no mechanism to verify provider identity beyond registry data.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-consumer"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-qos",
+      "name": "Harden or disable the QoS server",
+      "description": "Keep qos.acceptForeignIp=false, set qos.anonymousAccessPermissionLevel=NONE in production (the historical default is PUBLIC), and disable QoS entirely (qos.enable=false) if the invoke command is not needed.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-qos"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-registry",
+      "name": "Secure the registry and configuration center",
+      "description": "Enable ZooKeeper ACLs or Nacos authentication, authenticate configuration center connections, and keep both off public networks; Dubbo treats their data as trusted input.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-external-rate-limiting",
+      "name": "Use external rate limiting",
+      "description": "Use Sentinel or an equivalent tool for rate limiting and circuit breaking; Dubbo does not provide these at the framework level.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-provider"
+      ]
+    },
+    {
+      "bom-ref": "control-configure-cert-manager",
+      "name": "Configure the certificate manager completely",
+      "description": "Always provide caCertPath and oidcTokenPath when using DubboCertManager; with an empty caCertPath the code falls back to InsecureTrustManagerFactory and accepts any certificate.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-provider",
+        "asset-consumer"
+      ]
+    },
+    {
+      "bom-ref": "control-gateway-deployment",
+      "name": "Keep Dubbo ports off the internet",
+      "description": "Do not expose RPC ports (20880, 50051) or the QoS port to the internet; deploy behind an API gateway, reverse proxy, or service mesh and restrict access to internal networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-rpc-data-plane",
+        "boundary-qos"
+      ]
+    }
+  ]
+}

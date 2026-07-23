@@ -1,0 +1,822 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-cloudstack",
+      "name": "Apache CloudStack",
+      "description": "Open-source Infrastructure-as-a-Service (IaaS) orchestration platform: a central management server (Java servlets backed by MariaDB/MySQL) exposes a signed REST/JSON API to admins, end users, and integrations; runs system VMs (Secondary Storage VM, Console Proxy VM, virtual router); and orchestrates a fleet of agents on hypervisor hosts (KVM, VMware, XenServer/XCP-ng, Hyper-V, baremetal, OVM) over multiple storage backends. Authorization is RBAC plus a multi-tenant domain/account/project hierarchy; the deployment shape is an operator-run private/public cloud control plane. Translated from the draft threat model for apache/cloudstack (commit 7308dad1, 2026-05-29); the four satellite client repositories carry their own delta models.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/cloudstack/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://cloudstack.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "cloudstack"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/cloudstack/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/cloudstack/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-cloudstack",
+      "name": "CloudStack distributed control plane",
+      "description": "One or more management-server instances (single instance or a cluster behind a load balancer), a MariaDB/MySQL database, a usage server, system VMs (SSVM, CPVM, virtual router), and per-hypervisor-host agents. The operator owns the surrounding L2/L3 network with four logical fabrics (management, public, guest, storage); the management network is the trusted control plane and the guest network carries untrusted guest VM traffic. Trust boundaries include the JSON API (B1/B2), the console proxy data path (B3), cluster RPC (B4), management-to-agent RPC (B5), external integrations (B6), agent-to-hypervisor (B7), storage (B8), and operator configuration (B9).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-management-server",
+          "type": "service",
+          "name": "Management server",
+          "description": "Exposes the JSON/XML API and Vue.js Web UI on :8080 (optional HTTPS :8443), cluster RPC on :9090, agent RPC on :8250, and the optional unauthenticated integration API on :8096 (default 0, disabled; set only in test configurations). Hosts the RBAC engine, the Root CA provider, and the JaSypt secret encryption.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-agents",
+          "type": "agent",
+          "name": "Hypervisor agents and system VMs",
+          "description": "cloudstack-agent on KVM/baremetal hosts and the SSVM/CPVM/virtual router system VMs (same trust tier), mutually authenticated to the management server via X.509 client certificates issued by the management server's Root CA; agents drive the hypervisor via libvirt or vendor SDKs.",
+          "zone": "zone-enrolled-peers"
+        },
+        {
+          "bom-ref": "asset-console-proxy",
+          "type": "gateway",
+          "name": "Console proxy data path",
+          "description": "Browser to ConsoleProxyVM to hypervisor VNC/SPICE socket, authorized by a signed, encrypted token issued by the management server and embedded in the URL; the URL is a bearer credential for one VM's console for the token's lifetime.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-secondary-storage-http",
+          "type": "endpoint",
+          "name": "Secondary-storage HTTP download surface",
+          "description": "Template/ISO download links are UUID-named symlinks served by an Apache httpd with no authentication on the link; the UUID format prevents enumeration and the symlinks are removed after a period (timed availability is the mitigation).",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-database",
+          "type": "data-store",
+          "name": "MariaDB/MySQL database",
+          "description": "Trusted store for the management server; application-level secrets are encrypted with JaSypt under security.encryption.key/iv. Sensitive artifacts (JCEKS keystore, Root CA private key, JaSypt key and IV, db.properties) are owned root:cloud with mode 0640.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-guest-vms",
+          "type": "process",
+          "name": "Guest VM workloads",
+          "description": "End-user workloads are an attacker's workload; the model defends against them. CloudStack is responsible for the orchestration that places the guest (VLAN tagging, security-group rules, public IP routing), not for hypervisor-level isolation.",
+          "zone": "zone-guests"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-external-clients",
+          "name": "API clients and browsers",
+          "type": "trust",
+          "description": "Unauthenticated network peers reaching :8080/:8443, authenticated end users and domain admins bounded by RBAC, and browsers holding console-proxy URLs."
+        },
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Management control plane",
+          "type": "trust",
+          "description": "Management server(s), database, usage server, Root CA, console proxy and secondary-storage surfaces on the trusted management network."
+        },
+        {
+          "bom-ref": "zone-enrolled-peers",
+          "name": "Enrolled peers (agents and system VMs)",
+          "type": "trust",
+          "description": "Trusted-once-enrolled peers holding Root-CA-issued X.509 certificates. CloudStack makes no Byzantine-fault-tolerance claim: a compromised peer with a valid cert is unbounded."
+        },
+        {
+          "bom-ref": "zone-guests",
+          "name": "Guest workloads",
+          "type": "trust",
+          "description": "Untrusted end-user VMs on the guest network, mediated by the hypervisor."
+        },
+        {
+          "bom-ref": "zone-external-services",
+          "name": "External integrations",
+          "type": "trust",
+          "description": "Operator-configured LDAP/SAML2/OAuth2 IdPs, SDN controllers (NSX, Tungsten, Netscaler, Palo Alto), storage endpoints and backup providers: trusted control-plane peers whose compromise is out of model."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-api",
+          "name": "B1/B2: API client and Web UI to management server",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-console-proxy",
+          "name": "B3: Browser to ConsoleProxyVM to hypervisor VNC",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-agent-rpc",
+          "name": "B4/B5: Management server to cluster peers and agents",
+          "type": "trust",
+          "zones": [
+            "zone-control-plane",
+            "zone-enrolled-peers"
+          ]
+        },
+        {
+          "bom-ref": "boundary-external-services",
+          "name": "B6: Management server to external services",
+          "type": "trust",
+          "zones": [
+            "zone-control-plane",
+            "zone-external-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-guest",
+          "name": "Guest workload placement",
+          "type": "trust",
+          "zones": [
+            "zone-guests",
+            "zone-enrolled-peers"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "End-user API client / Web UI user"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted but authenticated: identity verified via CloudStack-native password plus HMAC-SHA1 signed request, LDAP, SAML2, OAuth2, or a pluggable APIAuthenticator; bounded by RBAC and domain/account/project ownership."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-domain-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Domain / Project admin"
+              }
+            ],
+            "persona": {
+              "description": "Partial trust within their domain, bounded by RBAC and the domain hierarchy; cross-domain leakage is in scope."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-root-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Root admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted control plane: can change global configuration, upload templates/ISOs, register plugins, and run privileged orchestration. A new way for a root admin to do something they are already authorized to do is not a vulnerability (equivalent harm)."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / cluster admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; OS-level access to management-server hosts, the database, the keystore, and agent hosts. Out of scope as an adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-guest-workload",
+          "party": {
+            "roles": [
+              {
+                "name": "Guest VM workload"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted attacker workload; hypervisor-mediated. In scope for the orchestration that placed it, out of scope for hypervisor isolation bugs and side channels."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Supported platforms: RHEL/CentOS/Rocky, Ubuntu, SUSE with Java 17 for the management server; MariaDB or MySQL-compatible database; JaSypt, Bouncy Castle, JSch and OpenSwan for cryptography."
+        },
+        {
+          "description": "Four logical networks (management, public, guest, storage) must be present for a functional system; the management network is the trusted control-plane network."
+        },
+        {
+          "description": "Signature version 3 enforces an expires parameter on signed API requests, assuming loosely-synchronized clocks between client and management server (operator responsibility)."
+        },
+        {
+          "description": "Sensitive artifacts (JCEKS keystore, Root CA private key, JaSypt key and IV, db.properties) are stored under /etc/cloudstack/management/ owned root:cloud, mode 0640."
+        },
+        {
+          "description": "Each supported hypervisor provides its own guest isolation and a stable admin API; hypervisor bugs are upstream."
+        },
+        {
+          "description": "ca.plugin.root.auth.strictness defaults to true on new setups (client certificate required on :8250 and cluster ports); it is false only after upgrading from a pre-Aug-2017 version, and the upgrade instructions document turning it on. ca.plugin.root.allow.expired.cert defaults to true as an operational concession to cert-rotation lag."
+        },
+        {
+          "description": "The UI server caps request content size at 1 MiB (ServerDaemon.DEFAULT_REQUEST_CONTENT_SIZE); other components rely on upstream component caps. api.throttling.enabled is false by default, and per-account resource limits are the entire DoS-protection surface."
+        },
+        {
+          "description": "CloudStack is not Java-only (ocaml, python, bash on hypervisors; go on the management server); memory-safety claims hold for the JVM components under a conformant JVM."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-api-authentication-bypass",
+        "name": "API or session authentication bypass",
+        "description": "A request executes API commands without a valid apiKey+signature pair (HMAC-SHA1 over the canonical parameter string, with expires enforcement for signature version 3) and without a valid session login (password plus optional 2FA, or SAML/OAuth/LDAP); or a session is created without a valid password, or mandated 2FA is bypassed. Violates properties P1 and P2; security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-signed-requests",
+          "control-2fa",
+          "control-constant-time-compare"
+        ]
+      },
+      {
+        "bom-ref": "threat-signature-timing-leak",
+        "name": "Timing side channel on signature comparison",
+        "description": "Timing-side-channel measurement of the API signature comparison revealing the expected signature byte-by-byte would violate property P3; the comparison uses ConstantTimeComparator.compareStrings. Constant-time comparison is documented only for the API signature path; its absence on login-password, session-cookie and console-token paths is a hardening opportunity, not a by-design decision.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-constant-time-compare"
+        ]
+      },
+      {
+        "bom-ref": "threat-rbac-bypass",
+        "name": "RBAC or domain/account/project scope bypass",
+        "description": "A non-root principal executes an API command not licensed for their role, or operates on a resource outside their domain/account/project scope (violates property P4). Includes confused-deputy between RBAC role and resource ownership, and cross-tenant leakage: a list* response leaking resource IDs/names/metadata outside the principal's RBAC scope violates property P10. Information leaks via error messages, async-job status, or the event log are in-model concerns (regular system logs exempt); note that list* filtering is a per-call authorization view, not an information-flow channel. Mid-job RBAC revocation is not retroactively enforced (TOCTOU accepted).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-uncerted-peer",
+        "name": "Un-certed peer accepted on agent or cluster ports",
+        "description": "A peer without a Root-CA-issued certificate successfully completes a session on :8250 or the cluster port on a setup where strictness is on (violates property P5). On new setups ca.plugin.root.auth.strictness defaults to true; the same symptom on an upgraded pre-Aug-2017 install with the documented upgrade step skipped is a non-default configuration, not a shipped insecure default. Expired client certs are accepted by default (allow.expired.cert=true), so the property covers peer-cert presence and Root-CA chain, not cert freshness.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server",
+          "asset-agents"
+        ],
+        "mitigations": [
+          "control-root-ca-mtls",
+          "control-network-segmentation"
+        ]
+      },
+      {
+        "bom-ref": "threat-forward-header-spoof",
+        "name": "Forward-header spoofing past the proxy trust gate",
+        "description": "A request from a source IP outside proxy.cidr succeeds with an attacker-supplied forward header taking effect (violates property P6). Forward headers are honoured only when proxy.header.verify=true (default false), the header is in proxy.header.names, and the connecting Remote_Addr is in proxy.cidr; a misconfigured wide CIDR is a trust bypass.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-proxy-header-gating"
+        ]
+      },
+      {
+        "bom-ref": "threat-console-token-forgery",
+        "name": "Console-proxy token forgery or decryption",
+        "description": "A third party with no console-access RBAC privilege forges or decrypts a console token to gain console access, or a token remains valid past its declared expiry (violates property P7). The console-proxy URL is a bearer credential: anyone who sees it (logs, proxies, shoulder-surfing) holds the console for the URL's lifetime.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-console-proxy"
+        ],
+        "mitigations": [
+          "control-console-token-encryption",
+          "control-console-url-hygiene"
+        ]
+      },
+      {
+        "bom-ref": "threat-db-secret-recovery",
+        "name": "Recovery of encrypted secrets from a DB-only read",
+        "description": "An attacker with read access to the database but not to the encryption key file recovers plaintext for secrets the model claims are encrypted (external service passwords, encrypted account API secret keys), violating property P8. JaSypt-encrypted columns are not protected against an attacker who obtains both the DB and the key file; reusing security.encryption.key across environments of different trust levels is a documented misuse.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-database"
+        ],
+        "mitigations": [
+          "control-jasypt-encryption",
+          "control-protect-key-files"
+        ]
+      },
+      {
+        "bom-ref": "threat-jvm-memory-safety",
+        "name": "Memory-safety or resource-crash from network input (JVM components)",
+        "description": "Heap corruption, OOM-via-input-size, or JVM-side crashes from a request a normally-RBAC'd user could send on the documented network surfaces (API and agent RPC), violating property P9. Security-critical when reachable from network input; hardening-only when reachable solely by a writer who already controls the bytes.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-request-size-cap"
+        ]
+      },
+      {
+        "bom-ref": "threat-guest-orchestration-error",
+        "name": "Wrong or insecure hypervisor settings applied when placing guests",
+        "description": "The in-model guest-workload case: CloudStack applying a wrong or insecure setting while launching or managing a guest (wrong VLAN, missing security-group rule, wrong public IP routing). Guest side channels, resource exhaustion within allocation, and hypervisor isolation bugs are out of scope.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-guest-vms",
+          "asset-agents"
+        ],
+        "mitigations": [
+          "control-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-adversary",
+        "name": "Operator, hypervisor, or configured external service as attacker",
+        "description": "Out of scope: anyone with root on a management-server or hypervisor host, raw MariaDB credentials, the JCEKS keystore plus encryption keys, or the Root CA private key already has unbounded power; a hostile LDAP/SAML/OAuth IdP, SDN controller, S3 endpoint, Ceph cluster, or backup provider is a trusted control-plane peer; hypervisor bugs (guest escape, libvirt privilege escalation, vSphere SDK vulnerabilities) are upstream; and same-host attackers with a non-cloudstack UID are game-over. Side-channel observers are also out of scope.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-root-admin-equivalent",
+        "name": "Root admin abusing already-authorized power",
+        "description": "CloudStack is not an isolation boundary between an authorized administrator's API call and the management-server process: root admin can change global configuration, upload templates and scripts to system VMs, register arbitrary plugins, and run runCustomAction-style commands. A new way for a root admin to do something they are already authorized to do is dispositioned as equivalent harm, not a vulnerability.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-peer",
+        "name": "Compromised enrolled cluster peer or agent (Byzantine)",
+        "description": "CloudStack is not Byzantine-fault-tolerant: a compromised management-server cluster peer with a valid Root-CA-issued cert can schedule arbitrary work onto the agent fleet, read any guest's data, and hand out console-proxy tokens; a compromised agent host can serve malicious data on the management network and produce wrong status. The cluster trusts its own membership.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-agents",
+          "asset-management-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-template-userdata-sandbox",
+        "name": "Malicious templates, ISOs, or user-data",
+        "description": "No sandbox for templates, ISOs, or user-data scripts: a user-uploaded template is run by the hypervisor with the privileges the system grants, and cloud-init/user-data/metadata is passed through to the guest without semantic parsing (the end user customizing their own guest OS). Decompression/decoding bombs in uploaded templates (pathological QCOW2 images expanding to TBs) are bounded only by per-account resource limits, unless they reach a memory-safety violation.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-guest-vms",
+          "asset-secondary-storage-http"
+        ],
+        "mitigations": [
+          "control-resource-limits",
+          "control-template-quarantine"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-integration-port-exposure",
+        "name": "Open unauthenticated integration API port (:8096)",
+        "description": "The integration API port is unauthenticated by design and disabled by default (0; set only in test configurations); when open it is a complete RBAC bypass on the management server. Exposing it publicly is an operator misconfiguration (non-default configuration), and closing or restricting it is the operator's job.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-server"
+        ],
+        "mitigations": [
+          "control-integration-port-disabled"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unauth-download-link",
+        "name": "Unauthenticated secondary-storage download links",
+        "description": "Template/ISO download links carry no authentication by design: the UUID-named symlink defeats enumeration and the symlink is removed after a period, so timed availability is the mitigation. A link that is not removed after its window, or a guessable non-UUID name, would be a hardening finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-secondary-storage-http"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-api",
+        "boundary": "boundary-api",
+        "name": "API trust boundary (B1/B2)",
+        "description": "Reachable by unauthenticated network peers; command names, parameters, signatures, expires values, forward headers and session cookies are attacker-controllable. CloudStack parses, authenticates, applies RBAC and dispatches; findings requiring an authenticated peer must additionally clear or bypass RBAC.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-api-authentication-bypass",
+          "threat-signature-timing-leak",
+          "threat-rbac-bypass",
+          "threat-forward-header-spoof",
+          "threat-jvm-memory-safety",
+          "threat-integration-port-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-signed-requests",
+          "control-rbac",
+          "control-2fa",
+          "control-proxy-header-gating",
+          "control-tls-termination",
+          "control-request-size-cap"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-console",
+        "boundary": "boundary-console-proxy",
+        "name": "Console proxy trust boundary (B3)",
+        "description": "Reachable by anyone holding a valid signed token; the encrypted token (VM identity, endpoint, duration) is the entire authorization gate.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-console-token-forgery"
+        ],
+        "controlsAtBoundary": [
+          "control-console-token-encryption",
+          "control-console-url-hygiene"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-agent-rpc",
+        "boundary": "boundary-agent-rpc",
+        "name": "Cluster and agent RPC trust boundary (B4/B5)",
+        "description": "Reachable only by peers that cleared the Root CA trust check; NIO plus TLS with mutual authentication when strictness is on (the new-setup default). Peers are trusted-once-enrolled with no Byzantine tolerance.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-uncerted-peer",
+          "threat-byzantine-peer"
+        ],
+        "controlsAtBoundary": [
+          "control-root-ca-mtls",
+          "control-network-segmentation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-external-services",
+        "boundary": "boundary-external-services",
+        "name": "External integration trust boundary (B6)",
+        "description": "Operator-configured IdPs, SDN controllers, storage and backup endpoints are trusted control-plane peers; CloudStack assumes truthful responses, and a hostile configured peer is out of model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-operator-adversary"
+        ],
+        "controlsAtBoundary": []
+      },
+      {
+        "bom-ref": "trust-boundary-guest",
+        "boundary": "boundary-guest",
+        "name": "Guest workload trust boundary",
+        "description": "Guest VMs are untrusted, hypervisor-mediated workloads; CloudStack is in scope only for the orchestration that places them (security groups, VLANs, IP routing) and for serving each guest only its own metadata via the virtual router.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-guest-orchestration-error",
+          "threat-template-userdata-sandbox"
+        ],
+        "controlsAtBoundary": [
+          "control-resource-limits"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-signed-requests",
+      "name": "HMAC-SHA1 signed API requests with expiry",
+      "description": "Per-user API key plus HMAC-SHA1 signature over the canonical query string; signature version 3 enforces an expires parameter, bounded by enforce.post.requests.and.timestamps so a stolen signed URL with a long expiration cannot be used forever. HMAC-SHA1 is not broken for HMAC use. The signature is request integrity, not encryption: transport confidentiality requires TLS.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-constant-time-compare",
+      "name": "Constant-time signature comparison",
+      "description": "The computed API signature is compared with ConstantTimeComparator.compareStrings. Only the API signature path is documented constant-time.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-rbac",
+      "name": "RBAC and domain/account/project scoping",
+      "description": "Static, dynamic and project role-based ACL plugins authorize each API command name for the caller's role and check domain/account/project ownership of named resources; list* responses are filtered to the principal's scope.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-2fa",
+      "name": "Optional two-factor authentication",
+      "description": "Static-pin and TOTP 2FA plugins, controlled by enable.user.2fa and mandate.user.2fa (both default false; a deployment choice). Recommended for administrators and ideally all users.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-root-ca-mtls",
+      "name": "Root-CA mutual TLS for agents and cluster peers",
+      "description": "A self-signed Root CA generated at first management-server boot issues X.509 certificates to agents and system VMs; NIO plus TLS on :8250 and :9090 requires a Root-CA-signed client cert when ca.plugin.root.auth.strictness=true (default on new setups; pre-Aug-2017 upgrades must apply the documented upgrade step). ca.plugin.root.allow.expired.cert=true is an operational concession worth tightening once rotation is reliable. The Root CA is not publicly trusted and its private key resides on the management server.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-agent-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-proxy-header-gating",
+      "name": "Reverse-proxy forward-header gating",
+      "description": "When proxy.header.verify=true, forward headers named in proxy.header.names are honoured only for requests whose Remote_Addr falls within proxy.cidr; leaving proxy.cidr unset means headers are ignored (safe default). Operators must keep proxy.cidr no wider than the actual reverse-proxy CIDR.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-console-token-encryption",
+      "name": "Encrypted, signed console-proxy tokens",
+      "description": "Console access tokens are issued by the management server, encrypted with ConsoleProxyPasswordBasedEncryptor, and include the VM identity, hypervisor endpoint and duration/expiry.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-console-proxy"
+      ]
+    },
+    {
+      "bom-ref": "control-console-url-hygiene",
+      "name": "Console URL hygiene",
+      "description": "Do not log console-proxy URLs, do not embed them in public responses, screenshots, tickets or chat, and set a short token lifetime; tokens are bearer credentials.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-console-proxy"
+      ]
+    },
+    {
+      "bom-ref": "control-jasypt-encryption",
+      "name": "JaSypt application-secret encryption at rest",
+      "description": "security.encryption.key and security.encryption.iv are initialised at first boot and used to encrypt application-level secrets in the database, protecting them against a DB-only read.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-database"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-key-files",
+      "name": "Protect key material and sensitive files",
+      "description": "Protect the security.encryption.key/iv files, the JCEKS keystore, the Root CA private key and db.properties at OS level (root:cloud, 0640); do not reuse the JaSypt key across environments of different trust levels; secure each agent host and its keystore under /etc/cloudstack/agent/.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-database",
+        "asset-agents"
+      ]
+    },
+    {
+      "bom-ref": "control-password-encoders",
+      "name": "Safe password-encoder defaults",
+      "description": "user.password.encoders.order defaults to PBKDF2,SHA256SALT,MD5,LDAP,SAML2,PLAINTEXT and user.password.encoders.exclude to MD5,LDAP,PLAINTEXT, so PBKDF2 hashes new passwords and weak encoders are retained only to verify legacy hashes; the supported greenfield encoder set is PBKDF2,SHA256SALT,SAML2. Do not remove MD5/PLAINTEXT from the exclude list in production.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-termination",
+      "name": "TLS for the API and Web UI",
+      "description": "Terminate TLS on :8443 (https.enable=true) or behind a TLS-terminating reverse proxy; a bare :8080 HTTP API is dev-only, since a wire observer sees the whole request and can replay within the expires window.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-network-segmentation",
+      "name": "Management-network segmentation",
+      "description": "Restrict the management network at L2/L3 so that :8250 (agent), :9090 (cluster) and the MariaDB port are reachable only from intended peers.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-agent-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-integration-port-disabled",
+      "name": "Integration API port disabled by default",
+      "description": "integration.api.port defaults to 0 (disabled); :8096 is set only in test configurations. If needed, limit it to localhost or a management subnet; when open it is an unauthenticated admin surface.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Per-account resource limits and API throttling",
+      "description": "Apply per-account resource limits (vCPU, RAM, volume size, image size) to bound decompression-bomb and orchestration-DoS attacks; API rate limiting via api.throttling.* is enforced at the API access check and disabled by default. These limits, not the engine, are the DoS-protection surface.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-management-server",
+        "asset-guest-vms"
+      ]
+    },
+    {
+      "bom-ref": "control-template-quarantine",
+      "name": "Scan and quarantine uploaded templates",
+      "description": "Treat user-uploaded templates and ISOs as crossing a trust boundary: scan or quarantine before allowing them into the supported-template set.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-secondary-storage-http"
+      ]
+    },
+    {
+      "bom-ref": "control-request-size-cap",
+      "name": "Request content size cap",
+      "description": "The UI server caps request content size at 1 MiB (org.apache.cloudstack.ServerDaemon.DEFAULT_REQUEST_CONTENT_SIZE); other components rely on the caps of the upstream components used.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-and-rotation",
+      "name": "Audit logging and credential rotation",
+      "description": "Audit API call logs via the event-bus plugin for anomalous patterns; rotate per-user API secret keys on personnel change and on suspected compromise; configure storage-layer encryption (Ceph RBD, LUKS, vSphere VM Encryption) where data-at-rest encryption is required, since CloudStack delegates it entirely.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-management-server"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,485 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-flink",
+      "name": "Apache Flink",
+      "description": "Distributed stream and batch processing framework. Clusters expose a REST API, SQL Gateway, and BLOB server on network interfaces that must not be public; authenticated job submitters are fully trusted and their code (JARs, DataStream programs, UDFs) executes unconditionally, since Flink intentionally does not function as a sandbox. The Flink Kubernetes Operator manages clusters via FlinkDeployment and FlinkSessionJob custom resources, with Kubernetes RBAC as the authentication mechanism.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://flink.apache.org/what-is-flink/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://flink.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "flink"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://flink.apache.org/what-is-flink/security/"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-flink",
+      "name": "Flink cluster and Kubernetes Operator deployment",
+      "description": "The security model designates one explicit trust boundary for a Flink cluster: the cluster operator is trusted, and the cluster network interfaces are not public. The primary threat model addresses unauthenticated access to the REST API, SQL Gateway, and BLOB server. For the Flink Kubernetes Operator, Kubernetes RBAC replaces direct cluster access: any principal permitted to apply Flink custom resources receives trust equivalent to an authenticated Flink user.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-rest-api",
+          "type": "api",
+          "name": "REST API",
+          "description": "Cluster REST interface; authentication is disabled by default and mutual TLS for client certificates is supported.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-sql-gateway",
+          "type": "api",
+          "name": "SQL Gateway",
+          "description": "SQL interface to the cluster; authentication is disabled by default, and gateway authentication plus additional security require a reverse proxy.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-blob-server",
+          "type": "service",
+          "name": "BLOB server",
+          "description": "Cluster artifact distribution service; part of the unauthenticated-access threat surface.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-user-jobs",
+          "type": "process",
+          "name": "Submitted user jobs",
+          "description": "User code running on the cluster. It can spawn processes, open connections, read and write files, and perform any OS-permitted operation; Flink intentionally does not function as a sandbox.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-k8s-operator",
+          "type": "service",
+          "name": "Flink Kubernetes Operator",
+          "description": "Operator managing Flink clusters from FlinkDeployment and FlinkSessionJob custom resources, with a cluster-scoped RBAC service account and admission webhooks.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-network",
+          "name": "Untrusted network",
+          "type": "trust",
+          "description": "Unauthenticated parties outside the trusted perimeter; cluster interfaces must never be exposed to them."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Flink cluster",
+          "type": "trust",
+          "description": "Cluster processes and interfaces operated by the trusted cluster operator."
+        },
+        {
+          "bom-ref": "zone-trusted-submitters",
+          "name": "Trusted submitters",
+          "type": "trust",
+          "description": "Authenticated job submitters, and Kubernetes principals with permission to apply Flink custom resources; both receive full trust and unconditional code execution."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-cluster-network",
+          "name": "Cluster network interfaces",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-network",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-job-submission",
+          "name": "Job submission",
+          "type": "trust",
+          "zones": [
+            "zone-trusted-submitters",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The cluster operator is trusted; the cluster network interfaces are not public and are restricted to trusted parties through firewalls, security groups, or VPNs."
+        },
+        {
+          "description": "Authenticated job submitters receive full trust and their code executes unconditionally; Flink intentionally does not function as a sandbox."
+        },
+        {
+          "description": "SSL/TLS, REST API authentication, and SQL Gateway authentication are all disabled by default; production deployments require explicit configuration."
+        },
+        {
+          "description": "External system security remains an operator responsibility; Flink's delegation token framework obtains short-lived tokens, but long-lived credentials require operator management."
+        },
+        {
+          "description": "For the Kubernetes Operator, any principal with permission to apply Flink custom resources (FlinkDeployment, FlinkSessionJob) receives trust equivalent to an authenticated Flink user, enabling arbitrary job submission with full execution privileges."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-rest-access",
+        "name": "Unauthenticated REST API access",
+        "description": "Unauthenticated access to the REST API is in scope as a vulnerability; the REST API supports mutual TLS for client certificates but authentication is disabled by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-api"
+        ],
+        "mitigations": [
+          "control-network-isolation",
+          "control-enable-tls-auth"
+        ]
+      },
+      {
+        "bom-ref": "threat-rest-path-traversal",
+        "name": "Path traversal or unauthorized file access via the REST API",
+        "description": "Path traversal or unauthorized file access through the REST API is in scope as a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-api"
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-sql-gateway-bypass",
+        "name": "SQL injection or authentication bypass via the SQL Gateway",
+        "description": "SQL injection or authentication bypass through the SQL Gateway is in scope as a vulnerability; SQL Gateway authentication requires a reverse proxy deployment.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sql-gateway"
+        ],
+        "mitigations": [
+          "control-network-isolation",
+          "control-reverse-proxy"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-exposure",
+        "name": "Credential or secret exposure in cluster interfaces",
+        "description": "Exposure of credentials or secrets in cluster interfaces is in scope as a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-api",
+          "asset-sql-gateway",
+          "asset-blob-server"
+        ],
+        "mitigations": [
+          "control-delegation-tokens"
+        ]
+      },
+      {
+        "bom-ref": "threat-unsafe-deserialization-rce",
+        "name": "Remote code execution through unsafe deserialization",
+        "description": "Remote code execution through unsafe deserialization is in scope where Flink-level controls could prevent it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-api",
+          "asset-blob-server"
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-submitted-job-code-execution",
+        "name": "Code execution by submitted jobs",
+        "description": "Code execution via submitted JARs, DataStream programs, or UDFs, process spawning or network connections from running jobs, and file operations within executing jobs are all out of scope by design: authenticated job submitters receive full trust and Flink is not a sandbox.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-user-jobs"
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-cr-jobs",
+        "name": "Malicious jobs submitted through Flink custom resources",
+        "description": "Malicious jobs submitted by Kubernetes principals holding custom resource apply permission are out of scope by design: such principals receive trust equivalent to authenticated Flink users, enabling arbitrary job submission with full execution privileges.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-k8s-operator",
+          "asset-user-jobs"
+        ],
+        "mitigations": [
+          "control-restrict-cr-permissions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-privilege-exceed",
+        "name": "Operator API access exceeding the submitting principal's permissions",
+        "description": "For the Kubernetes Operator, API access that exceeds the permissions of the submitting principal is in scope as a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-k8s-operator"
+        ],
+        "mitigations": [
+          "control-least-privilege-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-cr-credential-exposure",
+        "name": "Credential exposure via custom resources, operator logs, or metrics",
+        "description": "Credential exposure through Flink custom resource specifications or status fields, and information disclosure through operator logs or metrics, are in scope as vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-k8s-operator"
+        ],
+        "mitigations": [
+          "control-k8s-secrets"
+        ]
+      },
+      {
+        "bom-ref": "threat-webhook-bypass",
+        "name": "Admission webhook bypass",
+        "description": "A webhook bypass enabling malformed or malicious resource application is in scope as a vulnerability for the Kubernetes Operator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-k8s-operator"
+        ],
+        "mitigations": [
+          "control-webhook-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-rbac-misconfiguration",
+        "name": "RBAC misconfiguration by cluster administrators",
+        "description": "RBAC misconfiguration by cluster administrators is out of scope by design for the Kubernetes Operator.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-k8s-operator"
+        ],
+        "mitigations": [
+          "control-least-privilege-rbac",
+          "control-restrict-cr-permissions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-cluster-network",
+        "boundary": "boundary-cluster-network",
+        "name": "Cluster network trust boundary",
+        "description": "The single explicit trust boundary of the Flink cluster model: cluster network interfaces are not public and must be isolated from the internet; unauthenticated access to the REST API, SQL Gateway, and BLOB server is the primary threat.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-rest-access",
+          "threat-rest-path-traversal",
+          "threat-sql-gateway-bypass",
+          "threat-credential-exposure",
+          "threat-unsafe-deserialization-rce"
+        ],
+        "controlsAtBoundary": [
+          "control-network-isolation",
+          "control-enable-tls-auth",
+          "control-reverse-proxy"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-job-submission",
+        "boundary": "boundary-job-submission",
+        "name": "Job submission trust boundary",
+        "description": "Authenticated job submitters, and Kubernetes principals with custom resource apply permission, are fully trusted; their code executes unconditionally. What such principals do with that trust is out of scope; the operator exceeding a principal's permissions is not.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-submitted-job-code-execution",
+          "threat-malicious-cr-jobs",
+          "threat-operator-privilege-exceed",
+          "threat-rbac-misconfiguration"
+        ],
+        "controlsAtBoundary": [
+          "control-restrict-cr-permissions",
+          "control-least-privilege-rbac"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Isolate cluster network interfaces",
+      "description": "Keep Flink clusters isolated from public internet exposure; restrict all network interfaces to trusted parties through firewalls, security groups, or VPNs.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-cluster-network"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls-auth",
+      "name": "Enable TLS and REST API authentication",
+      "description": "SSL/TLS, REST API authentication, and SQL Gateway authentication are all disabled by default; production deployments require explicit configuration. The REST API supports mutual TLS for client certificates.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-cluster-network"
+      ]
+    },
+    {
+      "bom-ref": "control-reverse-proxy",
+      "name": "Front the SQL Gateway with a reverse proxy",
+      "description": "SQL Gateway authentication and additional security require a reverse proxy deployment.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-sql-gateway"
+      ]
+    },
+    {
+      "bom-ref": "control-delegation-tokens",
+      "name": "Delegation token framework",
+      "description": "Flink's delegation token framework obtains short-lived tokens for external systems; long-lived credentials require operator management, and external system security remains an operator responsibility.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-user-jobs"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege-rbac",
+      "name": "Least-privilege RBAC for the operator",
+      "description": "Apply least-privilege principles to the Flink Kubernetes Operator's cluster-scoped RBAC service account.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-k8s-operator"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-cr-permissions",
+      "name": "Restrict custom resource apply permissions",
+      "description": "Restrict permission to apply Flink custom resources (FlinkDeployment, FlinkSessionJob) to trusted principals, since that permission grants arbitrary job submission with full execution privileges.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-job-submission"
+      ]
+    },
+    {
+      "bom-ref": "control-k8s-secrets",
+      "name": "Manage credentials through Kubernetes secrets",
+      "description": "Credentials within custom resource specifications flow through Kubernetes secrets and require management aligned with organizational policies.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-k8s-operator"
+      ]
+    },
+    {
+      "bom-ref": "control-webhook-tls",
+      "name": "TLS on admission webhooks",
+      "description": "TLS requirements for the operator's admission webhooks are Kubernetes-enforced.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-k8s-operator"
+      ]
+    }
+  ]
+}

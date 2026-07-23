@@ -1,0 +1,677 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-hadoop",
+      "name": "Apache Hadoop",
+      "description": "Distributed storage (HDFS) and compute (YARN, MapReduce) platform. The security model defends a Kerberos-secured cluster running on a trusted operating system, behind a network perimeter, with a valid site configuration; the boundary Hadoop defends is privilege escalation across an authenticated boundary within such a cluster. Findings that only apply outside that model are bugs, not vulnerabilities.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/hadoop/security/policy",
+          "comment": "Source security model document (SECURITY.md); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hadoop.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hadoop"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/hadoop/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/hadoop/trunk/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-hadoop",
+      "name": "Kerberos-secured Hadoop cluster",
+      "description": "The deployment the security model defends: Kerberos authentication, service-level authorization, delegation tokens, and constrained proxy/superuser impersonation, behind a network perimeter that keeps the public internet out (Hadoop clusters are never web-facing). Variants covered by the model: standalone insecure mode (insecure by design, test only), transient cloud deployments (VM/container-supplied credentials are the trust boundary), and client-only deployments.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-hdfs",
+          "type": "service",
+          "name": "HDFS (NameNode, DataNodes)",
+          "description": "Uses Kerberos to authenticate HDFS nodes, other cluster services, and callers; the NameNode issues block tokens granting authenticated principals access to data blocks on DataNodes without further authentication.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-yarn",
+          "type": "service",
+          "name": "YARN and MapReduce",
+          "description": "Executes submitted jobs as the submitter's identity; distributes and renews delegation tokens on an application's behalf so tasks can authenticate to services without holding Kerberos credentials.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-ipc-endpoints",
+          "type": "endpoint",
+          "name": "IPC endpoints",
+          "description": "Hadoop RPC (Writable + protobuf, not Java serialization) used by Hadoop and applications on it. In a secure cluster they support Kerberos authentication/authorization and may support delegation tokens; access is restricted to callers by ACL site configuration. Not exposed to the internet, so full public-facing DoS resilience is not required.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-delegation-tokens",
+          "type": "data",
+          "name": "Delegation and block tokens",
+          "description": "Tokens issued by services (HDFS, HBase, Hive, Knox, ...) with limited lifespan, cancellation, and renewal. Hadoop and applications must safely marshall and store them; publishing them in any form leaks permissions. TokenIdentifier implementations are unmarshalled before callers are authenticated and must resist malicious clients.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-site-configuration",
+          "type": "data",
+          "name": "Site configuration and keytabs",
+          "description": "core-site.xml, hdfs-site.xml, yarn-site.xml, everything in /etc/hadoop/conf, and Kerberos keytab files: expected to be valid, writable only by trusted administrators, and protected by OS file permissions.",
+          "zone": "zone-trusted-infrastructure"
+        },
+        {
+          "bom-ref": "asset-client-libraries",
+          "type": "component",
+          "name": "Hadoop client libraries",
+          "description": "hadoop-client-api/-runtime and friends: shaded, relocated aggregates for client-side use. CVEs a scanner reports in them are almost always against a shaded third-party artifact; server-side vulnerabilities in bundled dependencies are not direct issues for the client libraries.",
+          "zone": "zone-principals"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-public-internet",
+          "name": "Public internet",
+          "type": "trust",
+          "description": "Untrusted. Hadoop clusters are never web-facing; network rules keep the cluster off the public internet. The perimeter does not authenticate callers, Kerberos does that at the service level."
+        },
+        {
+          "bom-ref": "zone-principals",
+          "name": "Authenticated principals",
+          "type": "trust",
+          "description": "Users and client applications inside the perimeter holding Kerberos credentials or delegation tokens; authenticated but not necessarily authorized for every operation."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Cluster services",
+          "type": "trust",
+          "description": "HDFS, YARN, and other cluster services with keytab credentials, enforcing service-level authorization and constrained impersonation."
+        },
+        {
+          "bom-ref": "zone-trusted-infrastructure",
+          "name": "Trusted infrastructure",
+          "type": "trust",
+          "description": "Trusted elements whose compromise is out of scope: cluster administrators, DNS, the Kerberos KDC, the hosting cloud/hardware, the operating system, the site configuration, and the classpath."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-network-perimeter",
+          "name": "Network perimeter",
+          "type": "trust",
+          "zones": [
+            "zone-public-internet",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-authenticated-service",
+          "name": "Authenticated service boundary",
+          "type": "trust",
+          "zones": [
+            "zone-principals",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-infrastructure-trust",
+          "name": "Infrastructure trust boundary",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-trusted-infrastructure"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Cluster administrators, DNS, and the Kerberos authentication infrastructure (KDC, with synchronized clocks) are trusted; authentication failures from clock drift are operational bugs."
+        },
+        {
+          "description": "The network perimeter keeps the public internet out, but the wire is not assumed confidential; wire encryption (RPC privacy QOP, HDFS block-transfer encryption) is optional and controlled by site configuration."
+        },
+        {
+          "description": "The hosting cloud/infrastructure provider, the hardware (even shared multi-tenant hardware), and the operating system are trusted; hypervisor escape and cross-tenant side channels (speculative execution, Rowhammer) are the provider's responsibility."
+        },
+        {
+          "description": "The site configuration is valid and writable only by trusted administrators, and the classpath contains no malicious JARs; attacks requiring either are out of scope."
+        },
+        {
+          "description": "In transient cloud deployments, the cloud credentials supplied by the hosting infrastructure (e.g. IAM roles) are the trust boundary, and network rules must isolate the cluster from the public internet."
+        },
+        {
+          "description": "In client-only deployments, the OS, principal, host administrator, application classpath, and client-side configuration/CLI arguments are trusted; network trust (DNS, mandatory wire encryption) is a matter of client configuration and out of scope."
+        },
+        {
+          "description": "Logs are expected to be kept private, with access restricted so non-administrator principals cannot read other principals' application logs or service logs."
+        },
+        {
+          "description": "Development and CI are explicitly in scope: the compiler, release docker images, build tools, and other ASF projects are trusted, while all inputs from external pull requests are untrusted."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-impersonation-escalation",
+        "name": "A user acting as another user, a service, or a superuser without authorization",
+        "description": "The core in-scope issue: privilege escalation across an authenticated boundary within a Kerberos-secured cluster, including defeating the constraints on proxy/superuser impersonation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hdfs",
+          "asset-yarn"
+        ],
+        "mitigations": [
+          "control-kerberos-secure-mode",
+          "control-service-level-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-service-authz-bypass",
+        "name": "Bypassing service-level authorization or ACLs",
+        "description": "In a secure cluster, access to service endpoints is restricted to callers by ACL site configuration; bypassing service-level authorization or these ACLs is in scope. For YARN-launched application services, authentication should be restricted to the submitting principal.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ipc-endpoints"
+        ],
+        "mitigations": [
+          "control-service-level-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-delegation-token-abuse",
+        "name": "Forging, leaking, or improperly reusing delegation tokens",
+        "description": "Delegation tokens have limited lifespans, must be rejected once cancelled, and must be safely marshalled and stored; forging, leaking, or improper reuse is in scope. Any exposure of a secret or delegated credential to a new audience is a higher-confidence finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-delegation-tokens"
+        ],
+        "mitigations": [
+          "control-delegation-token-lifecycle"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-identifier-attack",
+        "name": "Denial of service or authentication bypass via TokenIdentifier unmarshalling",
+        "description": "Hadoop tokens authenticate IPC channels and are unmarshalled (via Writable) before callers are authenticated; TokenIdentifier implementations in production code must be resilient so malicious clients can neither mount denial-of-service attacks nor bypass or spoof authentication. (For any Writable-related CVE, a submitter must show a valid exploit chain with extant gadgets; implementing new Writable classes as part of an exploit does not count.)",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ipc-endpoints",
+          "asset-delegation-tokens"
+        ]
+      },
+      {
+        "bom-ref": "threat-client-mitm",
+        "name": "Client failure to detect and reject malicious service endpoints or MITM",
+        "description": "Failure of clients to detect and reject malicious service endpoints or MITM attacks is in scope; TLS certificate validation, including hostname and full-chain verification, is in scope (certificate management is not). If a malicious remote service can trigger RCE on a client, that is a CVE; mere lack of resilience to malformed responses is a bug.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-client-libraries"
+        ],
+        "mitigations": [
+          "control-wire-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-encryption-failure",
+        "name": "Failure of enabled wire or at-rest encryption to protect data",
+        "description": "Running without encryption is by design and not a vulnerability, but when wire encryption is enabled, a failure to actually protect traffic (no-op encryption, silent downgrade, MITM bypass) is in scope; likewise, where HDFS transparent encryption has been configured, a failure of the code to actually encrypt persisted data is a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hdfs",
+          "asset-ipc-endpoints"
+        ],
+        "mitigations": [
+          "control-wire-encryption",
+          "control-hdfs-transparent-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-temp-file-race",
+        "name": "Non-atomic temporary file creation windows",
+        "description": "Temporary data goes to local-filesystem temp directories secured by the trusted OS, but code creating temp files and directories must create them and set their permissions atomically; creating with permissive defaults and narrowing later leaves a window in which another local principal can act on the file. Such failures are issues and should be reported.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-atomic-temp-creation"
+        ]
+      },
+      {
+        "bom-ref": "threat-secret-logging",
+        "name": "Secrets inserted into logs",
+        "description": "CWE-532: persistent secrets, long-lived credentials, and encryption secrets must never be logged at any level; transient secrets (short-lived tokens) must not be logged at INFO/WARN/ERROR and should not be logged at DEBUG/TRACE. CI build output is publicly visible, so unobfuscated logging of cloud credentials or other secrets provided to CI runs is in scope, as are test resources like auth-keys.xml being printed or committed.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-log-protection",
+          "control-credential-providers"
+        ]
+      },
+      {
+        "bom-ref": "threat-restricted-config-resolution",
+        "name": "Restricted Configuration instances resolving system properties",
+        "description": "org.apache.hadoop.conf.Configuration can restrict resolution of system properties and environment variables (setRestrictSystemProperties / setRestrictSystemPropertiesDefault), used by services to keep specific jobs/users from learning about the deployed system. If ${} or ${env.} references resolve within a restricted Configuration instance, that is a security vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-site-configuration"
+        ],
+        "mitigations": [
+          "control-restricted-configuration"
+        ]
+      },
+      {
+        "bom-ref": "threat-amplification-dos",
+        "name": "Resource-exhaustion amplification from a single low-cost request",
+        "description": "General resource consumption issues are bugs, but rapid resource exhaustion triggered on HDFS and YARN services by remote requests from non-administrative callers is a special case: where a single low-cost request forces a disproportionate resource cost and degrades service for other users (an amplification attack), it is a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hdfs",
+          "asset-yarn"
+        ]
+      },
+      {
+        "bom-ref": "threat-native-code-failures",
+        "name": "Failures in Hadoop's own native code",
+        "description": "Anything triggering failures in Hadoop's own native code on supported operating systems is considered for CVEs: pointer/memory/stack issues, OS calls, process launch and cross-process IPC, and JNI binding. Issues in third-party native libraries such as libssl are out of scope unless Hadoop's invocation is at fault. Race conditions leading to privilege escalation within the security model are also CVEs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-deserialization-gadgets",
+        "name": "Java deserialization gadget chains reaching internal ObjectInputStream uses",
+        "description": "Java serialization persists some internal state (NodeManager recovery store, aggregated log index files in HDFS, ResourceManager configuration stores); the project catalogs these and wants notification if a gadget chain on service classpaths becomes attackable from untrusted network sources not guarded by HDFS or local filesystem permissions, or if a non-shaded org.apache.hadoop class can serve as a gadget in downstream deserialization attacks. Hadoop IPC itself uses Writable and protobuf, not Java serialization.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-serialization-filters"
+        ]
+      },
+      {
+        "bom-ref": "threat-ci-supply-chain",
+        "name": "Attacks on development and CI systems",
+        "description": "Development and CI are explicitly in scope: untrusted external-PR inputs (titles, comments, author metadata, code) reaching shell commands unsanitized; supply-chain subversion of non-ASF upstream dependencies; Maven plugins and third-party libraries executing code on developer/CI systems; IDE trust mechanisms (PRs adding code-execution files are rejected); and workflows granting unrestricted tokens to PR triggers.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-ci-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-mode-attacks",
+        "name": "Attacks against the default insecure (non-Kerberos) mode",
+        "description": "In standalone configuration Hadoop performs no real authentication; anyone with network access has full access. This mode is insecure by design, intended only for network-isolated development/test hosts: \"the unsecured cluster has no security\" is not a vulnerability, and arbitrary data access against a non-Kerberos cluster is inherent in security being disabled.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-hdfs",
+          "asset-yarn"
+        ],
+        "mitigations": [
+          "control-kerberos-secure-mode",
+          "control-network-perimeter"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-job-submission-code-execution",
+        "name": "Job submission executing user-supplied code",
+        "description": "Submitting work to YARN or MapReduce executes the submitter's code as the submitter's identity: that is the product, not a vulnerability. A CVE report including a job-submission step on a kerberized cluster running the work as the submitting principal is immediately rejected, as is any attack against cloud storage using the credentials supplied to the VM/container the code runs in.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-yarn"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dos-at-scale",
+        "name": "Denial of service or resource exhaustion at scale from authenticated use",
+        "description": "A large Hadoop cluster exists to execute jobs at scale and authenticated users can exhaust resources; resource exhaustion and performance degradation from legitimate authenticated use are out of scope (except for the single-request amplification special case). Decompression bombs are bugs, not security issues; performance regressions are normal bugs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-element-compromise",
+        "name": "Attacks requiring compromise of trusted elements",
+        "description": "Vulnerabilities requiring compromise of trusted elements are outside the model: attacks needing operator edits to site configuration, malicious libraries on the classpath, malicious arguments to own command invocations, existing cluster/remote-store credentials or local disk access, a misconfigured or compromised OS, download and execution of external binaries, or capabilities the client already holds through its credentials (equivalent harm).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-site-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dependency-cves",
+        "name": "Transitive CVEs in dependencies without a Hadoop reproducer",
+        "description": "Published CVEs in Hadoop dependencies are handled as public improvements in JIRA, not confidential security reports; raw scanner output without a reproducer against current trunk is rejected. CVEs reported against the shaded hadoop-client-* artifacts are almost always against bundled third-party code, remedied by dependency upgrades, not Hadoop CVEs. Bugs in third-party modules belong upstream. (Advance warning of a critical CVE in a bundled library is welcomed confidentially.)",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-client-libraries"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-network-perimeter",
+        "boundary": "boundary-network-perimeter",
+        "name": "Network perimeter trust boundary",
+        "description": "The perimeter's job is to keep the cluster off the public internet; it does not authenticate callers. A report assuming a cluster directly exposed to the public internet is out of scope, and IPC endpoints need not resist the full scope of public-facing DoS attacks.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-insecure-mode-attacks"
+        ],
+        "controlsAtBoundary": [
+          "control-network-perimeter"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-authenticated-service",
+        "boundary": "boundary-authenticated-service",
+        "name": "Authenticated service trust boundary",
+        "description": "The boundary Hadoop defends: privilege escalation across an authenticated boundary within a Kerberos-secured cluster. Key IPC threats are unauthorized access (log and reject), privilege escalation (log and reject), and service vulnerability to malformed messages (logging and rejection is correct handling).",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-impersonation-escalation",
+          "threat-service-authz-bypass",
+          "threat-delegation-token-abuse",
+          "threat-token-identifier-attack",
+          "threat-amplification-dos",
+          "threat-job-submission-code-execution",
+          "threat-dos-at-scale"
+        ],
+        "controlsAtBoundary": [
+          "control-kerberos-secure-mode",
+          "control-service-level-authorization",
+          "control-delegation-token-lifecycle",
+          "control-wire-encryption"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-infrastructure",
+        "boundary": "boundary-infrastructure-trust",
+        "name": "Infrastructure trust boundary",
+        "description": "Administrators, DNS, the KDC, the OS, hardware/cloud providers, the site configuration, and the classpath are trusted; vulnerabilities requiring their compromise are outside the model's scope.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-trusted-element-compromise",
+          "threat-temp-file-race"
+        ],
+        "controlsAtBoundary": [
+          "control-atomic-temp-creation",
+          "control-credential-providers"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-kerberos-secure-mode",
+      "name": "Deploy in secure (Kerberos) mode for production",
+      "description": "Use a trusted Kerberos system to authenticate principals, issue services keytab credentials secured by OS file permissions, and authenticate all cluster users and inter-service communication via Kerberos; the insecure standalone mode is for firewalled development/test only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-authenticated-service"
+      ]
+    },
+    {
+      "bom-ref": "control-service-level-authorization",
+      "name": "Service-level authorization and ACLs",
+      "description": "Restrict access to service endpoints to authorized callers via ACL site configuration (Service Level Authorization) and constrain proxy/superuser impersonation per the Superusers documentation.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ipc-endpoints"
+      ]
+    },
+    {
+      "bom-ref": "control-delegation-token-lifecycle",
+      "name": "Delegation token lifecycle enforcement",
+      "description": "Delegation tokens have a limited lifespan of hours, can be cancelled (the issuing service must then reject them), and can be renewed before expiry; YARN distributes and renews tokens for applications so tasks need not hold Kerberos credentials.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-delegation-tokens"
+      ]
+    },
+    {
+      "bom-ref": "control-network-perimeter",
+      "name": "Keep clusters off the public internet",
+      "description": "Deploy behind a network perimeter with rules that keep the public internet out; Hadoop clusters (including transient cloud clusters) must not be deployed without network rules isolating them.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-network-perimeter"
+      ]
+    },
+    {
+      "bom-ref": "control-wire-encryption",
+      "name": "Optional wire encryption and TLS validation",
+      "description": "Enable RPC privacy QOP and HDFS block-transfer encryption where confidentiality on the wire is needed; Hadoop services support TLS on service endpoints, and clients must validate certificates including hostname and the entire chain (certificate management itself is out of scope).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ipc-endpoints"
+      ]
+    },
+    {
+      "bom-ref": "control-hdfs-transparent-encryption",
+      "name": "HDFS transparent encryption for data at rest",
+      "description": "Persisting cluster-filesystem data encrypted requires configuring HDFS transparent encryption; temporary local data is secured (and where required encrypted) by the trusted OS.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hdfs"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-providers",
+      "name": "Store secrets in credential providers, not configuration files",
+      "description": "Secrets such as cloud credentials belong in JCEKS files or another credential provider service, not in shared XML configuration (where they become visible to all readers); application code must read secrets via Configuration.getPassword(). An administrator explicitly embedding secrets in configuration is their choice, not a vulnerability.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-site-configuration"
+      ]
+    },
+    {
+      "bom-ref": "control-atomic-temp-creation",
+      "name": "Atomic creation and permission-setting of temporary files",
+      "description": "Code that creates temporary files and directories must create them and set their permissions atomically, never creating with permissive defaults and narrowing afterwards.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-log-protection",
+      "name": "Restrict log access and never log secrets",
+      "description": "Services must restrict access to logs (non-administrators must not read other principals' application logs or service logs); persistent secrets must never be logged and transient secrets not at INFO/WARN/ERROR; default log configurations should define size-limiting rollover, and services should provide specific logs for authentication failures and privilege rejections to assist central security logging.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restricted-configuration",
+      "name": "Restricted Configuration property resolution",
+      "description": "Configuration.setRestrictSystemProperties(true) (and the static default setter) prevents system-property and environment-variable references from resolving in configuration strings loaded for specific jobs/users, keeping deployment details from untrusted parties.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-site-configuration"
+      ]
+    },
+    {
+      "bom-ref": "control-serialization-filters",
+      "name": "Guarded internal deserialization and Java serialization filters",
+      "description": "Internal Java-serialization readers are cataloged; the ResourceManager ZK configuration store already uses an allow-listing ValidatingObjectInputStream, and deployments can restrict or block class deserialization via Java serialization filters (jdk.serialFilter, e.g. -Djdk.serialFilter=!*).",
+      "category": "compensating",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-ci-hardening",
+      "name": "CI and workflow hardening",
+      "description": "Treat all external-PR inputs as untrusted and never feed them to shell commands unsanitized; observe a cooldown before adopting new non-ASF dependencies; evaluate Maven plugins and compile-time libraries before adoption; pin GitHub Actions by commit SHA; forbid pull_request_target/workflow_run/issue_comment triggers that grant unrestricted tokens; follow GitHub secure-use guidelines and audit workflows with Zizmor; report CI-pipeline vulnerabilities to security@infra.apache.org.",
+      "category": "preventive",
+      "status": "implemented"
+    }
+  ]
+}

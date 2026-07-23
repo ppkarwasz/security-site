@@ -1,0 +1,566 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-superset-operator",
+      "name": "Apache Superset Kubernetes Operator",
+      "description": "Kubernetes operator that reconciles a single public custom resource, Superset, into component Deployments, Services, ConfigMaps, ServiceAccounts, Jobs, HPAs, PDBs, networking, and monitoring resources. It enforces a strict separation between hardened modes (Production, the default, and Staging) and Development mode, transports secrets exclusively via Kubernetes Secret references resolved by the kubelet, and runs with least-privilege RBAC (no Kubernetes Secret read or write permissions).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/superset-kubernetes-operator/blob/main/docs/reference/security.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://superset.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "superset"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/superset-kubernetes-operator/blob/main/docs/reference/security.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/superset-kubernetes-operator/main/docs/reference/security.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-superset-operator",
+      "name": "Superset operator deployment",
+      "description": "The operator operates across three trust levels: the cluster admin installs the operator and manages its RBAC and namespace (full trust); the namespace admin creates and modifies Superset CRs in their namespace (trusted, can deploy arbitrary workloads); the Superset end-user accesses the Superset web UI and API (untrusted, no operator interaction). Granting create or update on the Superset CRD is equivalent to granting the ability to create the full set of managed workload resources, including choosing container images, commands, environment variables, volumes, and ServiceAccount references; this is inherent to the Kubernetes operator pattern.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-operator-manager",
+          "type": "service",
+          "name": "Operator manager",
+          "description": "The controller reconciling Superset CRs. Runs as non-root with a read-only root filesystem, all capabilities dropped, and seccompProfile RuntimeDefault, satisfying the restricted Pod Security Standard. Supports cluster-scoped and namespace-scoped install modes.",
+          "zone": "zone-operator"
+        },
+        {
+          "bom-ref": "asset-superset-crd",
+          "type": "api",
+          "name": "Superset custom resource and CRD validation",
+          "description": "The single public custom resource. All validation is enforced via CEL rules embedded in the CRD schema (x-kubernetes-validations); no admission webhooks are used, so validation is always active regardless of how the operator is deployed.",
+          "zone": "zone-namespace"
+        },
+        {
+          "bom-ref": "asset-managed-workloads",
+          "type": "system",
+          "name": "Managed Superset workloads",
+          "description": "Parent-owned Deployments, Services, ConfigMaps, ServiceAccounts, lifecycle task Jobs, Ingresses/HTTPRoutes, NetworkPolicies, HPAs, PDBs, and ServiceMonitors reconciled at deterministic names derived from the Superset name.",
+          "zone": "zone-namespace"
+        },
+        {
+          "bom-ref": "asset-secrets",
+          "type": "data",
+          "name": "Operator-managed secret references",
+          "description": "Secret material referenced via secretKeyFrom, previousSecretKeyFrom, metastore.uriFrom, metastore.passwordFrom, valkey.passwordFrom, lifecycle.seed.source.passwordFrom, and websocketServer.configFrom. Values are resolved by the kubelet at pod startup (env var secretKeyRef or mounted Secret file); the operator never reads, logs, writes, or stores secret values in ConfigMaps, CRD status fields, or Events, and needs no Kubernetes Secret permissions.",
+          "zone": "zone-namespace"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operator control plane",
+          "type": "trust",
+          "description": "The operator manager, its RBAC, and its namespace, administered by the cluster admin (full trust)."
+        },
+        {
+          "bom-ref": "zone-namespace",
+          "name": "Tenant namespace",
+          "type": "trust",
+          "description": "Superset CRs and the workloads reconciled from them; namespace admins who can write Superset CRs are trusted namespace operators who can effectively deploy arbitrary workloads."
+        },
+        {
+          "bom-ref": "zone-end-users",
+          "name": "Superset end-users",
+          "type": "trust",
+          "description": "Users of the Superset web UI and API; untrusted, with no operator interaction."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-cr-api",
+          "name": "Superset CR reconciliation boundary",
+          "type": "trust",
+          "zones": [
+            "zone-namespace",
+            "zone-operator"
+          ]
+        },
+        {
+          "bom-ref": "boundary-end-user",
+          "name": "End-user to workload boundary",
+          "type": "trust",
+          "zones": [
+            "zone-end-users",
+            "zone-namespace"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-cluster-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Cluster admin"
+              }
+            ],
+            "persona": {
+              "description": "Installs the operator, manages its RBAC and namespace. Full trust. CRD installation always needs cluster-admin because CRDs are cluster-scoped."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-namespace-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Namespace admin (CR author)"
+              }
+            ],
+            "persona": {
+              "description": "Creates and modifies Superset CRs in their namespace. Trusted, can deploy arbitrary workloads: CR write access is equivalent to creating Pods with chosen images, commands, env vars, volumes, and any existing ServiceAccount in the namespace (including cloud IAM/workload-identity ServiceAccounts), plus arbitrary Python via spec.config."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Superset end-user"
+              }
+            ],
+            "persona": {
+              "description": "Accesses the Superset web UI and API. Untrusted; no operator interaction."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Granting create or update on the Superset CRD is equivalent to granting the ability to run workloads under any ServiceAccount in the namespace; restrict access to the supersets resource, and ServiceAccount distribution, using Kubernetes RBAC."
+        },
+        {
+          "description": "Supervised upgrade approval via the superset.apache.org/approve-upgrade annotation is not a separate authorization boundary from Superset write access: anyone who can patch the CR can approve an image change. Clusters needing a distinct approver role must enforce that separation with an external admission policy or a separate approval API."
+        },
+        {
+          "description": "Development mode is intentionally less secure (inline secrets, adminUser, loadExamples allowed) and exists for local development with Kind or Minikube where secret management infrastructure is not available; Production is the enforced default."
+        },
+        {
+          "description": "The built-in NetworkPolicy provides baseline ingress segmentation between Superset instances; egress is intentionally unrestricted so workloads can reach the metastore, Valkey, SMTP, object stores, and other user-configured dependencies."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-secret-leak",
+        "name": "Secrets leaking into ConfigMaps, Events, logs, or CRD status",
+        "description": "In Staging or Production mode, operator-managed secret references must never appear in ConfigMaps, Events, logs, or status. The generated superset_config.py renders SECRET_KEY from an environment variable so the value never appears in the ConfigMap. Known caveat: when a task Job fails, a truncated failure message (max 256 characters) from the task container's own output is recorded in status and Events, which may include sensitive data if the task command writes credentials to its failure output; this applies only to task output, not to operator-managed secret references. User-authored fields (spec.config, component config, bootstrapScript, podTemplate.container.env) are trusted input and outside the guarantee.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-secrets"
+        ],
+        "mitigations": [
+          "control-secret-references",
+          "control-cel-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-rbac-privilege-escalation",
+        "name": "Privilege escalation via the operator's RBAC permissions",
+        "description": "Abuse of the operator's ClusterRole to gain privileges beyond reconciling Superset resources. The operator does not request wildcard permissions, impersonation, RBAC management, cluster-admin, or Kubernetes Secret read/write; supersets patch permission is used only to consume the target-bound supervised-upgrade approval annotation, since Kubernetes RBAC is not field-scoped.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-manager"
+        ],
+        "mitigations": [
+          "control-least-privilege-rbac",
+          "control-namespace-scoped-install"
+        ]
+      },
+      {
+        "bom-ref": "threat-cel-validation-bypass",
+        "name": "CRD validation bypass",
+        "description": "Crafting a Superset CR that evades the CEL validation rules, for example sneaking inline secrets past the Production/Staging rejection rules, using lifecycle.seed outside Development/Staging, or violating the mutual-exclusivity and dependency rules (ingress requires webServer, gateway requires a routable component, monitoring requires webServer).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-superset-crd"
+        ],
+        "mitigations": [
+          "control-cel-validation",
+          "control-policy-engine"
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-container-compromise",
+        "name": "Compromise of the operator container",
+        "description": "Vulnerabilities in the operator binary itself or weaknesses in the operator container's security posture are in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-manager"
+        ],
+        "mitigations": [
+          "control-hardened-manager-container",
+          "control-pod-security-admission",
+          "control-vulnerability-scanning"
+        ]
+      },
+      {
+        "bom-ref": "threat-supply-chain",
+        "name": "Supply chain compromise of the build and release pipeline",
+        "description": "Tampering with the operator's build and release pipeline, base images, dependencies, or published artifacts. Residual accepted exposure: digest updates for floating tags are applied without the 7-day version soak (minimumReleaseAge gates versions, not digests), bounded by the minimal distroless base and keyless Cosign signing.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-manager"
+        ],
+        "mitigations": [
+          "control-signed-supply-chain",
+          "control-vulnerability-scanning"
+        ]
+      },
+      {
+        "bom-ref": "threat-stale-upgrade-approval",
+        "name": "Stale or replayed supervised-upgrade approval",
+        "description": "A previously granted upgrade approval authorizing a later, different image change. The approval token is derived from the observed source and target image refs, so a later spec update changes the token and requires a separate approval; after lifecycle completion the operator deletes the annotation so a stale approval cannot authorize a later image change.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-superset-crd"
+        ],
+        "mitigations": [
+          "control-consumed-approval-token"
+        ]
+      },
+      {
+        "bom-ref": "threat-permissive-metrics-tls",
+        "name": "Permissive TLS default on the metrics endpoint",
+        "description": "The bundled ServiceMonitor defaults to insecureSkipVerify: true against the manager's self-signed serving certificate so Prometheus can scrape out-of-the-box on clusters without cert-manager. Authentication and authorization are still enforced via bearer tokens validated by TokenReview/SubjectAccessReview, so the endpoint is not anonymously accessible.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-manager"
+        ],
+        "mitigations": [
+          "control-metrics-cert-manager"
+        ]
+      },
+      {
+        "bom-ref": "threat-cr-author-arbitrary-workloads",
+        "name": "CR authors deploying arbitrary workloads and code",
+        "description": "Creating or updating a Superset CR is equivalent to creating Pods with chosen images, commands, env vars, volumes, and ServiceAccounts (including cloud IAM/workload-identity ServiceAccounts via serviceAccount.name with create: false); spec.config accepts arbitrary Python by design (Superset configuration is Python-based); the lifecycle.seed task runs whatever image and command the author configures. Since CR creators can already deploy arbitrary containers, none of these expand the attack surface. This is inherent to the Kubernetes operator pattern and the expected trust model, not a vulnerability.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-superset-crd",
+          "asset-managed-workloads"
+        ],
+        "mitigations": [
+          "control-restrict-cr-rbac"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-development-mode-secrets",
+        "name": "Inline secrets and admin credentials in Development mode",
+        "description": "Development mode allows inline secrets, and lifecycle.init.adminUser stores admin credentials as plain-text environment variables on the CR and task Pod spec (visible to anyone with read access in the namespace; the password also appears in process arguments via shell expansion). Inline websocketServer.config is written to a ConfigMap in Development mode. This is intentional and documented for local development; Staging and Production reject these fields via CRD validation.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-secrets"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-workload-pod-security",
+        "name": "Unhardened Superset workload pods",
+        "description": "The operator does not enforce default security contexts on Superset workload pods; it propagates whatever the user configures via podTemplate.podSecurityContext and podTemplate.container.securityContext. Workload pod security is the user's responsibility; the production sample shows recommended settings.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-managed-workloads"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-websocket-experimental",
+        "name": "Experimental websocket server gaps",
+        "description": "The websocketServer component is not yet well supported and may exhibit gaps, either in the operator (e.g. unvalidated gateway/ingress routing) or upstream in the community-maintained Node.js websocket image. Its guarantees are best-effort until hardening completes; avoid enabling it in production.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-managed-workloads"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-infrastructure",
+        "name": "Out-of-scope surrounding infrastructure",
+        "description": "Superset application vulnerabilities (report to the Apache Superset project), database or cache security (PostgreSQL and Valkey are not managed by the operator), Kubernetes control plane vulnerabilities (report to the Kubernetes security team), Superset container image contents, network-level attacks (MITM, DNS spoofing), and missing features without a concrete security regression. Reports are still welcome when they show the operator changes the expected trust boundary, weakens Kubernetes controls, leaks operator-managed secrets, or makes one of these conditions materially worse.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-cr-api",
+        "boundary": "boundary-cr-api",
+        "name": "Superset CR write boundary",
+        "description": "CR authors are trusted namespace operators; CR write access is workload-deployment-equivalent. The operator's obligations at this boundary are CEL validation, secret-reference transport that keeps secrets out of ConfigMaps/status/Events, and least-privilege reconciliation.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-cel-validation-bypass",
+          "threat-secret-leak",
+          "threat-stale-upgrade-approval",
+          "threat-cr-author-arbitrary-workloads"
+        ],
+        "controlsAtBoundary": [
+          "control-cel-validation",
+          "control-secret-references",
+          "control-consumed-approval-token",
+          "control-restrict-cr-rbac",
+          "control-policy-engine"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-end-user",
+        "boundary": "boundary-end-user",
+        "name": "Superset end-user boundary",
+        "description": "End-users of the Superset web UI and API are untrusted and have no operator interaction; application-level vulnerabilities on this surface belong to the Apache Superset project. The operator's built-in NetworkPolicy provides baseline ingress segmentation for user-facing components.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-websocket-experimental",
+          "threat-out-of-scope-infrastructure"
+        ],
+        "controlsAtBoundary": [
+          "control-networkpolicy-ingress"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-secret-references",
+      "name": "Secret-reference transport",
+      "description": "In Staging and Production, secrets are referenced from Kubernetes Secrets via *From fields; the operator wires them as valueFrom.secretKeyRef env vars or mounted Secret files, resolved by the kubelet at pod startup. The generated superset_config.py resolves SECRET_KEY from the environment at Python runtime so it never appears in the ConfigMap. The operator needs no Kubernetes Secret read permissions and never reads, logs, writes, or stores secret values.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-secrets"
+      ]
+    },
+    {
+      "bom-ref": "control-cel-validation",
+      "name": "CEL validation rules in the CRD schema",
+      "description": "Always-active validation without admission webhooks: Production/Staging rejection of inline secrets, the Staging-only seed boundary (destructive target database drop), mutual-exclusivity rules, ingress/gateway/monitoring dependency rules, gatewayPath restricted to ^/[a-zA-Z0-9/_.-]+$ (preventing shell metacharacter injection into Flower's --url_prefix expansion), and defaulting of environment to Production.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-superset-crd"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege-rbac",
+      "name": "Least-privilege operator RBAC",
+      "description": "Every ClusterRole permission is justified per resource; the operator does not request wildcards, impersonation, RBAC management, cluster-admin, or Kubernetes Secret read/write. ServiceAccounts not owned by a Superset CR are refused for adoption; controller-owner semantics prevent adopting resources controlled by another controller.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-hardened-manager-container",
+      "name": "Hardened manager container",
+      "description": "The operator manager Pod satisfies the restricted Pod Security Standard: non-root, read-only root filesystem, all capabilities dropped, seccompProfile RuntimeDefault, allowPrivilegeEscalation false; the runtime image is distroless static:nonroot pinned by digest.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-pod-security-admission",
+      "name": "Enforce restricted Pod Security Admission on the operator namespace",
+      "description": "For defense in depth, label the operator's namespace with pod-security.kubernetes.io/enforce: restricted so the apiserver rejects any Pod that drifts from the hardened baseline.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-policy-engine",
+      "name": "Layer an admission policy engine over CRD validation",
+      "description": "Cluster operators wanting defense in depth (restricting allowed image.repository values, forbidding environment: Development outside specific namespaces, requiring labels) can layer Kyverno, OPA Gatekeeper, or the Validating Admission Policy API on top of the CRD-level CEL rules; an external admission policy is also the way to create a distinct upgrade-approver role.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-superset-crd"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-cr-rbac",
+      "name": "Restrict Superset CR access via Kubernetes RBAC",
+      "description": "Treat 'can create Superset CRs' as equivalent to 'can run workloads under any ServiceAccount in this namespace'; restrict access to the supersets resource and ServiceAccount distribution accordingly. The bundled superset-editor/admin/viewer roles only need permissions on the supersets resource and its status subresource.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-cr-api"
+      ]
+    },
+    {
+      "bom-ref": "control-consumed-approval-token",
+      "name": "Consumed, target-bound upgrade approval token",
+      "description": "Supervised upgrades are gated on the approve-upgrade annotation matching a token derived from the observed source and target image refs; a later spec update changes the token, and the operator deletes the annotation after lifecycle completion so stale approvals cannot be replayed.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-superset-crd"
+      ]
+    },
+    {
+      "bom-ref": "control-signed-supply-chain",
+      "name": "Signed, attested, pinned supply chain",
+      "description": "Digest-pinned base images (fully-qualified Go patch tag, distroless static:nonroot) kept current by Renovate with a 7-day version soak; Cosign keyless signing of the manager image and Helm chart via GitHub Actions OIDC; per-platform SPDX SBOMs and SLSA build provenance attached as in-toto attestations for linux/amd64 and linux/arm64.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-vulnerability-scanning",
+      "name": "Continuous vulnerability scanning and static analysis",
+      "description": "CI runs govulncheck against the Go source, Trivy against the built image, and CodeQL static analysis, with results uploaded to GitHub code scanning; an OpenSSF Scorecard workflow publishes the project's supply-chain posture score.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-networkpolicy-ingress",
+      "name": "Built-in NetworkPolicy ingress segmentation",
+      "description": "When enabled, the operator installs policies that isolate ingress between Superset instances and allow external clients to reach user-facing components (web, websocket, flower, MCP). Egress is intentionally unrestricted; users requiring strict egress isolation should disable the built-in policy and author their own.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-managed-workloads",
+        "boundary-end-user"
+      ]
+    },
+    {
+      "bom-ref": "control-metrics-cert-manager",
+      "name": "Use cert-manager certificates for metrics in production",
+      "description": "Production deployments should switch the metrics endpoint to cert-manager-issued certificates and set insecureSkipVerify: false; charts/superset-operator/values.yaml documents the flip.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    },
+    {
+      "bom-ref": "control-namespace-scoped-install",
+      "name": "Namespace-scoped install mode",
+      "description": "For restricted clusters or single-tenant installs wanting a tighter blast radius, the manager can watch only the namespaces listed in WATCH_NAMESPACE. The Helm namespaces mode creates only per-namespace Roles/RoleBindings (no manager ClusterRole); CRD installation still needs cluster-admin and secure metrics auth still needs cluster-scoped RBAC (disable metrics where ClusterRole is forbidden). Changing the watched-namespace list requires a manager restart, and CRs in unwatched namespaces are silently ignored.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-operator-manager"
+      ]
+    }
+  ]
+}

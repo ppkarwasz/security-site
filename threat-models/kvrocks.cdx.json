@@ -1,0 +1,578 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-kvrocks",
+      "name": "Apache Kvrocks",
+      "description": "Distributed key-value NoSQL database using RocksDB as its storage engine, compatible with the Redis (RESP) protocol, adding namespace-token multi-tenancy, binlog-based async replication, Redis-Sentinel failover, and a proxyless centralized cluster mode. Clients speak RESP over TCP (default port 6666, default bind 127.0.0.1); the requirepass value is the admin token, and each namespace is gated by its own token.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/kvrocks/blob/unstable/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is a v0 draft by the ASF Security team, reviewed by the Kvrocks PMC (PragmaTwice) with all open questions resolved."
+        },
+        {
+          "type": "website",
+          "url": "https://kvrocks.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "kvrocks"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/kvrocks/blob/unstable/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/kvrocks/unstable/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-kvrocks",
+      "name": "Kvrocks server deployment",
+      "description": "The trust boundary is the TCP connection plus the token presented on it: a connection's identity (unauthenticated, namespace, admin) determines which commands and which keyspace it may touch. Replication ships a binlog from master to replica; replication and cluster peers are operator-provisioned and trusted.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-server",
+          "type": "service",
+          "name": "Kvrocks server (RESP command layer)",
+          "description": "TCP listener, RESP command dispatch, authentication and namespace isolation, and the admin command surface (config, slaveof, bgsave, namespace, cluster, debug).",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-lua",
+          "type": "component",
+          "name": "Lua scripting sandbox",
+          "description": "EVAL/FUNCTION scripts execute in the embedded LuaJIT sandbox, confined to the caller's namespace with no host access.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-rocksdb",
+          "type": "data-store",
+          "name": "RocksDB storage",
+          "description": "All namespaces share one RocksDB instance on local disk; data at rest is not encrypted by Kvrocks and no per-namespace encryption is claimed.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-replication",
+          "type": "stream",
+          "name": "Replication and cluster channel",
+          "description": "Binlog stream from master to replica and proxyless cluster coordination (slot migration); peers are mutually trusted within the topology.",
+          "zone": "zone-peers"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "TCP clients",
+          "type": "trust",
+          "description": "Redis-protocol clients: unauthenticated until a valid token is presented, then confined to a namespace or granted admin control."
+        },
+        {
+          "bom-ref": "zone-server",
+          "name": "Kvrocks server process",
+          "type": "trust",
+          "description": "The server, its Lua sandbox, and its RocksDB data directory on an operator-trusted host."
+        },
+        {
+          "bom-ref": "zone-peers",
+          "name": "Replication and cluster peers",
+          "type": "trust",
+          "description": "Other Kvrocks nodes in the same topology, operator-provisioned on a trusted network; trusted, so a malicious peer is out of the adversary model."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-tcp",
+          "name": "Client TCP connection",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-replication",
+          "name": "Master to replica/cluster link",
+          "type": "trust",
+          "zones": [
+            "zone-server",
+            "zone-peers"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-unauthenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Unauthenticated client"
+              }
+            ],
+            "persona": {
+              "description": "A TCP peer that has not presented a valid token; untrusted. With tokens configured, commands beyond AUTH are refused."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-namespace-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Namespace client"
+              }
+            ],
+            "persona": {
+              "description": "Authenticated with a namespace token; trusted only within that namespace's keyspace and denied admin/namespace/cluster commands. The namespace token is a shared per-namespace secret, not a per-user credential."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-admin-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Admin client"
+              }
+            ],
+            "persona": {
+              "description": "Authenticated with the requirepass admin token; trusted for the instance. requirepass is the admin token, root-equivalent, not a low-privilege password."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / deployer"
+              }
+            ],
+            "persona": {
+              "description": "Controls kvrocks.conf, the data directory, TLS material, and network exposure; fully trusted, out of model as an adversary."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A POSIX host with a trusted local filesystem for the RocksDB data directory; the operator controls who can reach the listening port, and the default bind 127.0.0.1 limits exposure to localhost until changed."
+        },
+        {
+          "description": "Replication and cluster peers are provisioned by the operator on a trusted network."
+        },
+        {
+          "description": "The server binds a TCP port, reads/writes its data directory and kvrocks.conf, opens outbound connections to masters/peers, and may write RDB/backup files on bgsave; it is not assumed to spawn shells or read arbitrary files outside its data dir (Lua sandbox permitting)."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-namespace-isolation-bypass",
+        "name": "Cross-namespace read or write by a namespace client",
+        "description": "A connection authenticated with a namespace token accesses another namespace's keyspace or namespace metadata (which is admin-only). Strict per-namespace keyspace confinement is a claimed, PMC-confirmed property; a bypass (excluding the documented pub/sub limitation) is critical. Isolation is logical, not cryptographic: all namespaces share one RocksDB instance.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server",
+          "asset-rocksdb"
+        ],
+        "mitigations": [
+          "control-namespace-confinement"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-command-escalation",
+        "name": "Admin command executed without the admin token",
+        "description": "A namespace-authenticated or unauthenticated client runs a sensitive admin command (config, slaveof, bgsave, namespace management, cluster operations) that only the requirepass admin token may run. Critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-admin-token-gating"
+        ]
+      },
+      {
+        "bom-ref": "threat-preauth-access",
+        "name": "Pre-authentication data access",
+        "description": "With requirepass or namespace tokens configured, commands beyond AUTH must be refused on an unauthenticated connection; pre-auth data access is critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-auth-gate"
+        ]
+      },
+      {
+        "bom-ref": "threat-lua-sandbox-escape",
+        "name": "Lua sandbox escape",
+        "description": "A script permitted to a non-admin caller breaks the LuaJIT sandbox to reach host resources or another namespace. Scripting is confined to the caller's namespace with no host or file access; an escape is critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-lua"
+        ],
+        "mitigations": [
+          "control-lua-sandbox"
+        ]
+      },
+      {
+        "bom-ref": "threat-resp-memory-corruption",
+        "name": "Memory corruption from crafted RESP input",
+        "description": "Well-formed or malformed RESP input causing out-of-bounds read/write or a crash from crafted input on supported platforms would violate the memory-safety property. Critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ]
+      },
+      {
+        "bom-ref": "threat-crossnamespace-pubsub",
+        "name": "Pub/sub channels cross namespaces (known limitation)",
+        "description": "Namespace keyspace confinement is strict for keys, but pub/sub channels are not currently namespaced: a namespace client can publish and subscribe across the instance. A documented current limitation rather than a property breach; a report matching exactly this behaviour is a known non-finding, and namespacing pub/sub is desirable hardening.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-default",
+        "name": "Unauthenticated admin-level access when requirepass is unset",
+        "description": "requirepass ships unset (commented), so no authentication exists by default and all clients are effectively admin; the bind 127.0.0.1 default mitigates this until changed. When requirepass is unset, operators are responsible for restricting access to trusted personnel only; an unauthenticated-access report against a routable, no-requirepass deployment is operator responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-bind-localhost",
+          "control-set-requirepass"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-wire",
+        "name": "Token and data sniffing or MITM on an unencrypted wire",
+        "description": "TLS is opt-in (off by default); on an untrusted network the auth token and all data are observable and modifiable. As with requirepass, when TLS is off operators are responsible for restricting access to trusted personnel only.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Resource exhaustion beyond configured limits",
+        "description": "Expensive commands (KEYS, large MGET, huge values, deep pipelines) and adversarial Lua can exhaust CPU/memory/disk; there is no intrinsic DoS guarantee beyond configured limits. The operator's contract is to configure maxclients and size limits; a hang/OOM/disk-fill is a property breach only if a configured limit is bypassed.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-peer",
+        "name": "Malicious replication or cluster peer",
+        "description": "A peer holding valid topology credentials that behaves maliciously is out of the adversary model: replication and cluster peers are operator-provisioned and trusted. Peer authenticity on the wire is a network/TLS concern for the operator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-replication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-timing",
+        "name": "Non-constant-time AUTH token comparison",
+        "description": "A constant-time token compare in AUTH is desirable hardening, not a property breach; brute-force throttling is operator/network responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-tcp",
+        "boundary": "boundary-client-tcp",
+        "name": "Client TCP trust boundary",
+        "description": "Connect then AUTH: a new connection is unauthenticated and, once tokens are configured, commands are refused until a valid token is presented; a namespace token confines the connection to its keyspace, the admin token grants full control.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-preauth-access",
+          "threat-namespace-isolation-bypass",
+          "threat-admin-command-escalation",
+          "threat-lua-sandbox-escape",
+          "threat-resp-memory-corruption",
+          "threat-unauthenticated-default",
+          "threat-plaintext-wire",
+          "threat-resource-exhaustion",
+          "threat-crossnamespace-pubsub"
+        ],
+        "controlsAtBoundary": [
+          "control-auth-gate",
+          "control-namespace-confinement",
+          "control-admin-token-gating",
+          "control-lua-sandbox",
+          "control-bind-localhost",
+          "control-set-requirepass",
+          "control-enable-tls",
+          "control-resource-limits"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-replication",
+        "boundary": "boundary-replication",
+        "name": "Replication and cluster trust boundary",
+        "description": "The master streams a binlog to replicas which apply it; peers are mutually trusted within the topology, so this boundary is operator-provisioned trust, not an adversarial surface.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-peer"
+        ],
+        "controlsAtBoundary": [
+          "control-trusted-peer-network"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-auth-gate",
+      "name": "Authentication gate on unauthenticated connections",
+      "description": "With requirepass or namespace tokens configured, commands beyond AUTH are refused on an unauthenticated connection.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-tcp"
+      ]
+    },
+    {
+      "bom-ref": "control-namespace-confinement",
+      "name": "Strict per-namespace keyspace confinement",
+      "description": "A namespace-authenticated connection can access only that namespace's keyspace; namespace metadata is admin-only. Pub/sub is the one documented cross-namespace exception.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-token-gating",
+      "name": "Admin-token-only sensitive commands",
+      "description": "Only the requirepass admin token may run namespace management and sensitive admin commands (config, slaveof, bgsave, cluster operations); treat the admin token as root-equivalent, distribute only namespace tokens to tenants, and rotate on exposure.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-lua-sandbox",
+      "name": "LuaJIT sandbox confinement",
+      "description": "EVAL/FUNCTION scripts run in a constrained LuaJIT environment without arbitrary host or file access, confined to the caller's namespace.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-lua"
+      ]
+    },
+    {
+      "bom-ref": "control-bind-localhost",
+      "name": "Default bind 127.0.0.1",
+      "description": "The default bind of 127.0.0.1 limits exposure to localhost until the operator changes it; a safe default, so reports requiring a routable bind plus no auth are operator misconfiguration.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-set-requirepass",
+      "name": "Set requirepass and namespace tokens before non-localhost binding",
+      "description": "Set requirepass (and namespace tokens) before binding to any non-localhost interface; if requirepass is left unset, restrict access to trusted personnel only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS on untrusted networks",
+      "description": "Enable TLS (tls-port, certificates, tls-auth-clients) on untrusted networks, or keep traffic on a trusted/segmented network; when TLS is off, restrict access to trusted personnel only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-tcp"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Configure resource limits",
+      "description": "Configure maxclients, value/proto size, and related limits for the deployment's risk profile; there is no intrinsic DoS guarantee beyond these.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-peer-network",
+      "name": "Run peers on a trusted network",
+      "description": "Run replication and cluster peers on a trusted network (and/or with TLS); peers are trusted, so the operator must provision them.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-replication"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-data-dir",
+      "name": "Protect the data directory and backups",
+      "description": "Protect the RocksDB data directory and RDB/backup files at the filesystem layer; data at rest is not encrypted by Kvrocks and no per-namespace encryption is claimed.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rocksdb"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,572 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-directory",
+      "name": "Apache Directory",
+      "description": "Family of identity-infrastructure components: the ApacheDS LDAP v3 directory server, the LDAP API client/codec library, the Kerby Kerberos implementation (KDC plus token/PKINIT preauth), the Fortress RBAC/ARBAC authorization system (core, REST endpoint, web console, container realm), the SCIMple SCIM 2.0 provisioning implementation, the Mavibot MVCC B-tree storage engine, and the Studio desktop LDAP client. The umbrella threat model (DRAFT v0, not yet reviewed by the Directory PMC) captures the shared trust shape: a network service that authenticates a remote principal and then authorizes its requests over a wire protocol (LDAP, Kerberos, SCIM/HTTP, Fortress REST).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/directory-server/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://directory.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "directory"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/directory-server/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/directory-server/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-directory",
+      "name": "Directory identity stack",
+      "description": "Shared architecture described by the umbrella: server-side identity components exposing wire-protocol listeners to untrusted network clients, with the trust transition at authentication plus authorization, backed by operator-managed configuration, schema, ACIs, Kerberos realm/keytabs, RBAC policy, TLS material, and trusted backing storage.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-apacheds",
+          "type": "service",
+          "name": "ApacheDS LDAP server",
+          "description": "LDAP v3 server (bind, search, modify, ACI), embedding Kerberos/DNS; host of the umbrella model. The BER/ASN.1 decoder is the first thing untrusted bytes hit; after a bind establishes identity (simple/SASL), ACIs authorize each operation.",
+          "zone": "zone-identity-services"
+        },
+        {
+          "bom-ref": "asset-ldap-api",
+          "type": "component",
+          "name": "LDAP API codec",
+          "description": "LDAP protocol API and ASN.1/BER codec used on both client and server sides; parses untrusted LDAP PDUs in both directions.",
+          "zone": "zone-identity-services"
+        },
+        {
+          "bom-ref": "asset-kerby",
+          "type": "service",
+          "name": "Kerby Kerberos KDC",
+          "description": "Kerberos KDC (AS/TGS), client, crypto, and PKINIT/token preauth. AS-REQ/TGS-REQ from any network peer reach the KDC; pre-authentication, ticket issuance, and encryption-type negotiation are the trust transitions; the KDC master key and per-principal keys are the crown jewels.",
+          "zone": "zone-identity-services"
+        },
+        {
+          "bom-ref": "asset-fortress",
+          "type": "service",
+          "name": "Fortress RBAC stack",
+          "description": "RBAC/ARBAC policy engine over LDAP (fortress-core) plus the REST service (enmasse), web admin console (commander), and container security realm. Policy decisions are the boundary; the REST and web tiers add HTTP auth, CSRF, and injection surfaces.",
+          "zone": "zone-identity-services"
+        },
+        {
+          "bom-ref": "asset-scimple",
+          "type": "service",
+          "name": "SCIMple SCIM 2.0 endpoint",
+          "description": "SCIM 2.0 provisioning implementation over HTTP/JSON; provisioning requests must be authenticated and authorized, and the filter/PATCH parsers are an injection/DoS surface.",
+          "zone": "zone-identity-services"
+        },
+        {
+          "bom-ref": "asset-mavibot",
+          "type": "data-store",
+          "name": "Mavibot MVCC storage engine",
+          "description": "MVCC B-tree storage backend. Its trust input is the on-disk B-tree and the records the trusted server layer hands it: corruption resistance and bounds, not a network boundary.",
+          "zone": "zone-storage"
+        },
+        {
+          "bom-ref": "asset-studio",
+          "type": "tool",
+          "name": "Directory Studio desktop client",
+          "description": "Eclipse-based desktop LDAP client, modelled lightly as a client: its in-model surface is parsing untrusted responses from a directory it connects to, not serving requests.",
+          "zone": "zone-identity-services"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Peers speaking LDAP, Kerberos, SCIM/HTTP, or Fortress REST/HTTP before authenticating; untrusted. Authenticated principals are trusted up to their directory/RBAC permissions."
+        },
+        {
+          "bom-ref": "zone-identity-services",
+          "name": "Identity services",
+          "type": "trust",
+          "description": "The server-side components and their operator-managed configuration, schema, ACIs, Kerberos realm/keytabs, RBAC policy, and TLS material."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Backing storage",
+          "type": "trust",
+          "description": "Data partitions (Mavibot or another backend), the policy LDAP for Fortress, and keytabs, on trusted disk protected at the filesystem layer."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-wire-protocol",
+          "name": "Wire-protocol listeners",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-identity-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-storage",
+          "name": "Server to backing storage",
+          "type": "trust",
+          "zones": [
+            "zone-identity-services",
+            "zone-storage"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-unauthenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Unauthenticated network client"
+              }
+            ],
+            "persona": {
+              "description": "A peer speaking LDAP/Kerberos/HTTP before authenticating; untrusted. The primary adversary of the model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-principal",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated principal"
+              }
+            ],
+            "persona": {
+              "description": "Bound LDAP user, Kerberos principal, or authenticated SCIM/REST caller; trusted up to its directory/RBAC permissions. As an under-privileged principal attempting to exceed its ACIs or RBAC roles it is the secondary adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Administrator"
+              }
+            ],
+            "persona": {
+              "description": "A principal with directory-admin, Kerberos-admin, or Fortress-superuser rights; trusted, and an authorized admin action is not a finding."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / deployer"
+              }
+            ],
+            "persona": {
+              "description": "Controls server config, schema, ACIs, the Kerberos realm and keytabs, the RBAC policy data, TLS material, and the backing store. Trusted; out of model as adversary."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "JVM services with operator-managed configuration, schema, ACIs, Kerberos realm/keytabs, RBAC policy, and TLS material; backing storage is on trusted disk."
+        },
+        {
+          "description": "Clocks are synchronized within the Kerberos skew window; TLS/StartTLS, SASL, and Kerberos crypto are available and operator-configured."
+        },
+        {
+          "description": "The stack binds protocol ports, reads/writes its data partitions and keytabs, performs crypto, and the Fortress tiers open HTTP listeners and bind to a backing LDAP; it is not assumed to execute host commands."
+        },
+        {
+          "description": "Cryptographic-primitive internals (the JCE provider) are out of scope except as the components select and use them; examples, samples, integration-test harnesses, and build tooling across all repos are out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass at a listener",
+        "description": "A privileged operation performed without the bind, Kerberos preauth, or SCIM/REST authentication verifying the principal violates the shared authentication-integrity property. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-apacheds",
+          "asset-kerby",
+          "asset-fortress",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-authentication",
+          "control-ldap-hardening",
+          "control-kerberos-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-escalation",
+        "name": "Authorization bypass or privilege escalation by an under-privileged principal",
+        "description": "An authenticated principal reads or modifies directory entries, Kerberos principals, or RBAC policy beyond its authorization, or escalates roles/permissions, including SoD/DSD policy bypass in RBAC. LDAP ACIs, Fortress RBAC/ARBAC, and SCIM authorization confine a principal to permitted operations; note the false friend that an RBAC role assignment is not active permission until the session activates the role.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-apacheds",
+          "asset-fortress",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-authorization",
+          "control-fortress-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-protocol-parser-dos",
+        "name": "Parser crash or DoS from malformed wire-protocol input",
+        "description": "The LDAP BER codec, Kerberos ASN.1 parser, and SCIM JSON/filter parsers are expected to reject malformed or oversized input cleanly rather than crashing, hanging, reading out of bounds, or corrupting memory. Attack classes named: ASN.1/BER parser DoS, XXE/JSON-bomb in SCIM/REST, and search-filter complexity abuse.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-apacheds",
+          "asset-ldap-api",
+          "asset-kerby",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-robust-parsing",
+          "control-ldap-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-kerberos-ticket-attacks",
+        "name": "Kerberos ticket forgery, replay, or enctype downgrade",
+        "description": "Forged or replayed Kerberos tickets, downgrade to weak encryption types (RC4/DES) the realm still permits, Kerberoasting of weak service keys, and PKINIT/token-preauth edge cases. Tickets are bound to the issuing key and protected by timestamps and replay caches; weak enctypes are restrictable. The false friend: Kerberos 'encryption' of a ticket is integrity/authenticity, not a guarantee against a permitted weak enctype.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-kerby"
+        ],
+        "mitigations": [
+          "control-kerberos-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-web-tier-attacks",
+        "name": "CSRF, XSS, and injection in the Fortress and SCIM web tiers",
+        "description": "The Fortress REST endpoint and web console and the SCIM endpoint add HTTP surfaces: CSRF and XSS in the console, and injection payloads (LDAP filter, SCIM filter, SQL/LDAP injection via the management tiers).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fortress",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-fortress-hardening",
+          "control-scim-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-transport-mitm",
+        "name": "MITM or downgrade where transport protection was expected",
+        "description": "TLS/StartTLS and SASL provide confidentiality and integrity when configured; a MITM or downgrade where protection was expected violates the transport-security-support property. High severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-apacheds",
+          "asset-fortress",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-corruption",
+        "name": "Storage inconsistency or corruption in Mavibot",
+        "description": "A reader seeing torn or inconsistent state, or corruption from concurrent writes or crash, would violate the storage-integrity property of Mavibot's MVCC design. Internal invariants not reachable from server-accepted input are out of the input surface.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-mavibot"
+        ],
+        "mitigations": [
+          "control-protect-storage"
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-server-response",
+        "name": "Hostile directory server responses parsed by Studio or the LDAP API client",
+        "description": "A malicious LDAP server versus a Studio or ldap-api client: the client components do not protect the user against a hostile server they chose to connect to beyond robust parsing. Findings requiring a malicious server the user connected to are low-priority client-side hardening, not server-side VALID findings.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-studio",
+          "asset-ldap-api"
+        ],
+        "mitigations": [
+          "control-robust-parsing"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-misconfiguration",
+        "name": "Operator misconfiguration and no-security-without-configuration exposures",
+        "description": "Pure misconfiguration is out of model: weak ACIs, an open anonymous bind left enabled, a Kerberos realm with weak crypto enabled, RBAC policy mistakes, TLS disabled, or an unauthenticated Fortress REST endpoint or console. Anonymous LDAP, weak enctypes, or an unauthenticated REST/console expose the service to the extent the operator left them open; whether the insecure posture is a shipped default is an open wave-1 maintainer question. The operator, and anyone holding the KDC master key, admin DN, Fortress superuser, keytabs, or filesystem access, is out of model as adversary.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-apacheds",
+          "asset-kerby",
+          "asset-fortress",
+          "asset-scimple"
+        ],
+        "mitigations": [
+          "control-ldap-hardening",
+          "control-kerberos-hardening",
+          "control-fortress-hardening",
+          "control-scim-hardening",
+          "control-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-downstream-filter-injection",
+        "name": "LDAP/SCIM filter injection in a downstream application",
+        "description": "An LDAP search filter is a query language, not inert data: filter injection via unsanitized input concatenated by a downstream application is the LDAP analogue of SQL injection, but it is that application's bug, not a server bug.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-wire-protocol",
+        "boundary": "boundary-wire-protocol",
+        "name": "Wire-protocol trust boundary",
+        "description": "The shared boundary is the wire-protocol request before authentication and authorization complete. A finding is in-model on a server inbound path if reachable from an unauthenticated or under-privileged remote principal before the component's auth/authorization gate; a finding requiring admin rights or a misconfiguration is out of model.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authorization-escalation",
+          "threat-protocol-parser-dos",
+          "threat-kerberos-ticket-attacks",
+          "threat-web-tier-attacks",
+          "threat-transport-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication",
+          "control-authorization",
+          "control-robust-parsing",
+          "control-tls",
+          "control-ldap-hardening",
+          "control-kerberos-hardening",
+          "control-fortress-hardening",
+          "control-scim-hardening"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-storage",
+        "boundary": "boundary-storage",
+        "name": "Backing storage trust boundary",
+        "description": "Mavibot consumes data from the trusted server layer; backing storage (data partitions, policy LDAP, keytabs) sits on trusted disk protected at the filesystem layer by the operator.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-storage-corruption"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-storage"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication",
+      "name": "Authenticate principals before privileged operations",
+      "description": "LDAP bind (simple/SASL), Kerberos pre-authentication, and SCIM/REST authentication verify the principal before privileged operations across the stack.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-wire-protocol"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization",
+      "name": "Authorization enforcement (ACIs, RBAC/ARBAC, SCIM authz)",
+      "description": "LDAP ACIs, Fortress RBAC/ARBAC decisions (including role activation and SoD/DSD constraints), and SCIM authorization confine each principal to permitted operations.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-wire-protocol"
+      ]
+    },
+    {
+      "bom-ref": "control-robust-parsing",
+      "name": "Robust protocol parsing",
+      "description": "The LDAP BER codec, Kerberos ASN.1 parser, and SCIM JSON/filter parsers reject malformed or oversized input cleanly rather than crashing or corrupting memory (the model records the hardening bounds as an open maintainer question).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-ldap-api",
+        "asset-apacheds",
+        "asset-kerby",
+        "asset-scimple"
+      ]
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "Enforce TLS/StartTLS and SASL protection",
+      "description": "Enforce TLS/StartTLS (and SASL confidentiality/integrity) on all protocols; transport protection is operator-configured.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire-protocol"
+      ]
+    },
+    {
+      "bom-ref": "control-ldap-hardening",
+      "name": "LDAP operator hardening",
+      "description": "Disable anonymous/unauthenticated access unless intended, set restrictive ACIs and admin limits, enforce TLS/StartTLS, and bound search-filter complexity and result sizes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-apacheds"
+      ]
+    },
+    {
+      "bom-ref": "control-kerberos-hardening",
+      "name": "Kerberos operator hardening",
+      "description": "Disable weak enctypes (RC4/DES), require preauth, protect the KDC master key and keytabs, keep clocks synced, and keep the replay cache on.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-kerby"
+      ]
+    },
+    {
+      "bom-ref": "control-fortress-hardening",
+      "name": "Fortress operator hardening",
+      "description": "Authenticate and TLS-protect the REST endpoint and web console, protect the policy LDAP, and configure SoD/DSD constraints deliberately.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fortress"
+      ]
+    },
+    {
+      "bom-ref": "control-scim-hardening",
+      "name": "SCIM operator hardening",
+      "description": "Require authentication and authorization on every SCIM endpoint, and bound filter, PATCH, and JSON sizes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-scimple"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-storage",
+      "name": "Protect storage at the filesystem layer",
+      "description": "Protect the data partitions and keytabs at the filesystem layer, and back up.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-mavibot",
+        "boundary-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-track-advisories",
+      "name": "Track advisories and stay on supported lines",
+      "description": "Track ASF advisories and stay on supported release lines.",
+      "category": "corrective",
+      "status": "recommended"
+    }
+  ]
+}

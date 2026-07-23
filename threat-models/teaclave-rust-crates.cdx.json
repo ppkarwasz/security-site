@@ -1,0 +1,176 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-teaclave-crates",
+      "name": "Apache Teaclave (Rust Crates)",
+      "description": "Repository of Rust dependency crates ported for Trusted Execution Environments and published to crates.io under the teaclave-* namespace (for example teaclave-ring). It is not an application and contains no trust boundary of its own (no ECALL/OCALL edge or Normal/Secure-world split); every crate is intended to be linked into the trusted side of TEE applications built with the Teaclave SGX SDK and TrustZone SDK, so its security model is about what gets pulled into someone else's Trusted Computing Base and about provenance, the integrity of each port relative to its upstream. Crates are hosted either as patch bundles (pinned upstream snapshot plus adaptation patches, e.g. libc, the Rust std library for OP-TEE) or as full imports whose history preserves the pristine upstream source (e.g. ring, getrandom). The review unit is the diff from upstream, not the whole crate.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/teaclave-crates/blob/main/docs/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://teaclave.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "teaclave"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/teaclave-crates/blob/main/docs/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/teaclave-crates/main/docs/security-model.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-tcb-crate-compromise",
+        "name": "Bug or backdoor in a ported crate executing inside the TEE",
+        "description": "There is no privilege separation between these crates and the secrets of the enclave/TA that links them: a bug or backdoor in any crate here executes inside the TEE with access to keys, sealing/attestation material, and plaintext data, and a single weakness propagates to every downstream application that depends on the affected teaclave-* crate. The adversary is inherited from the downstream SDK: for SGX consumers the untrusted host controls all OCALL results and untrusted memory; for TrustZone consumers the Normal World controls all parameters and shared memory crossing into the TA.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-diff-focused-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-weakened-security-primitive",
+        "name": "A TEE port weakening a target-dependent security primitive",
+        "description": "The seams where a port can go wrong because the upstream assumed a normal OS: randomness must come from the TEE/hardware RNG (a getrandom port falling back to a host syscall, /dev/urandom via an untrusted FS, a fixed seed, or a non-CSPRNG is a critical vulnerability that silently undermines every key and nonce generated in the TEE); the host filesystem is untrusted, so file contents must not be treated as trusted; time from the untrusted world is attacker-controlled and must not be a security oracle; each syscall added to the libc surface crosses into the untrusted world, so return values, errno, and buffers are untrusted input; and a panic/unwind path that leaks state to the untrusted side or fails open is a security concern. The auditor's question for each: does the TEE adaptation preserve the security property the upstream crate guarantees on a normal OS, or does it weaken it? A removed check, relaxed default, stubbed-out verification, or cfg-gated branch behaving differently on the TEE target are where real findings concentrate.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-diff-focused-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-supply-chain-tamper",
+        "name": "Supply-chain compromise of ported source, patches, or published artifacts",
+        "description": "Anyone able to influence the ported source, a patch, a pinned upstream snapshot, a build script, or a prebuilt binary artifact can compromise every consumer. For a patch bundle, security depends on the pinned Base-Commit snapshot being authentic and the patch being exactly what was reviewed; the published teaclave-* artifact on crates.io must correspond to the reviewed source in this repository, and a mismatch is a supply-chain break.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-provenance-verification",
+          "control-publish-provenance"
+        ]
+      },
+      {
+        "bom-ref": "threat-upstream-fix-drift",
+        "name": "Stale ports silently retaining fixed upstream vulnerabilities",
+        "description": "The repository holds only the latest ported version of each crate. When upstream issues a security fix (a RUSTSEC advisory for ring, libc, or getrandom, or a Rust std soundness fix), the port must be re-based and re-published; stale ports silently retain fixed vulnerabilities.",
+        "origin": "structural",
+        "mitigations": [
+          "control-track-rustsec"
+        ]
+      },
+      {
+        "bom-ref": "threat-binary-artifacts-in-tcb",
+        "name": "Unreviewable binary artifacts and build-time code in the TCB",
+        "description": "Prebuilt objects and assembly (e.g. ring's pregenerated .S/.asm files and a checked-in .o object) and build scripts (ring's roughly 1000-line build.rs) execute or link into the enclave/TA and cannot be fully source-reviewed; build.rs and proc-macros run on the build/CI host and determine the binary that is measured (MRENCLAVE) or signed (TA), making the build host and CI part of the trust chain. Treat these as high-trust artifacts: confirm they match their asm sources and the named upstream, and flag any that cannot be reproduced from source.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-reproducible-artifacts",
+          "control-provenance-verification"
+        ]
+      },
+      {
+        "bom-ref": "threat-platform-level-attacks",
+        "name": "Platform-level threats outside this repository's scope",
+        "description": "Exactly as in the SDKs, microarchitectural/speculative side channels, availability/DoS, and rollback of data persisted outside the TEE are out of scope; a finding that depends only on those is not a bug in this repository. Likewise, bugs in unmodified upstream code (including ordinary unchanged upstream unsafe/FFI) are out of scope for this repository's review and should be reported upstream.",
+        "origin": "environmental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-diff-focused-review",
+      "name": "Security review focused on the diff from upstream",
+      "description": "Each crate undergoes a security review focused on diffs from the upstream. For a patch bundle the .patch file is the review (against the authentic Base-Commit snapshot); for a full import the delta against the pristine upstream preserved in the 'Download <crate> <version> from crates.io' commit is reviewed (git diff <download-commit> HEAD -- <crate-dir>/, cross-checking .cargo_vcs_info.json against the upstream release). The bulk of a vendored crate is unmodified, already-reviewed upstream code; new crates are classified by which upstream security primitive the port touches and whether the adaptation preserves or weakens it.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-provenance-verification",
+      "name": "Record and verify upstream provenance",
+      "description": "Record and verify the upstream version / Base-Commit for every crate, verify the upstream commit hash before reviewing a patch, and keep the adaptation diff minimal and reviewable.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-track-rustsec",
+      "name": "Track RUSTSEC advisories and re-port promptly",
+      "description": "Track RUSTSEC advisories for every upstream and re-port promptly; consider cargo audit / cargo deny in CI. Check ported versions against the latest upstream advisories.",
+      "category": "detective",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-reproducible-artifacts",
+      "name": "Prefer reproducible-from-source artifacts",
+      "description": "Prefer reproducible-from-source artifacts over checked-in binaries; where a prebuilt artifact is unavoidable, document how to regenerate and verify it.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-publish-provenance",
+      "name": "Verifiable publish trail to crates.io",
+      "description": "Ensure the published teaclave-* crate is built from this repository with a verifiable trail; a mismatch between the published crate and the repository is a supply-chain break.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,621 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-polaris",
+      "name": "Apache Polaris",
+      "description": "Catalog service for managing Apache Iceberg catalogs, namespaces, tables, views, principals, roles, policies, and related metadata. Polaris accepts requests from clients, authenticates callers through configured mechanisms (internal principals or external OIDC), authorizes operations against roles, privileges, policies, and catalog metadata (internal RBAC, external policy decision points, Ranger, or OPA), persists metadata through the configured persistence backend, and vends scoped delegated storage credentials.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/polaris/blob/main/SECURITY-THREAT-MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://polaris.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "polaris"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/polaris/blob/main/SECURITY-THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/polaris/main/SECURITY-THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-polaris",
+      "name": "Polaris deployment",
+      "description": "Deployment shape described by the Polaris threat model: untrusted network callers reach the Polaris server's management-plane and catalog data-plane APIs; the server integrates with external systems (identity providers, object stores, policy decision points, persistence backends) that are trusted only for their configured purpose; the admin tool and Python CLI handle credentials and metadata on operator machines.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-polaris-server",
+          "type": "service",
+          "name": "Polaris server and runtime",
+          "description": "Long-running service exposing management APIs and catalog APIs; in scope for authentication, authorization, metadata, persistence, storage, policy, and credential-handling decisions.",
+          "zone": "zone-polaris"
+        },
+        {
+          "bom-ref": "asset-admin-tool",
+          "type": "tool",
+          "name": "Polaris admin tool",
+          "description": "Administrative CLI commands and generated local profiles; in scope when handling credentials, configuration, administration, logs, or generated artifacts.",
+          "zone": "zone-polaris"
+        },
+        {
+          "bom-ref": "asset-python-cli",
+          "type": "tool",
+          "name": "Python CLI (client/python)",
+          "description": "User or operator CLI; in scope when handling credentials, tokens, catalog metadata, local profiles, logs, or generated artifacts.",
+          "zone": "zone-clients"
+        },
+        {
+          "bom-ref": "asset-catalog-metadata",
+          "type": "data",
+          "name": "Catalog metadata and protected assets",
+          "description": "Principal, role, privilege, and policy metadata; catalog, namespace, table, and view metadata governed by Polaris authorization; storage locations and URI-bearing metadata; audit-relevant request identity and authorization context.",
+          "zone": "zone-polaris"
+        },
+        {
+          "bom-ref": "asset-credentials",
+          "type": "data",
+          "name": "Credentials, tokens, and delegated storage credentials",
+          "description": "Authentication credentials, bearer tokens, client secrets, signing keys, refresh tokens, temporary or delegated storage credentials, scoped storage policies, credential access boundaries, session policies, and provider-specific policy expressions.",
+          "zone": "zone-polaris"
+        },
+        {
+          "bom-ref": "asset-external-backends",
+          "type": "system",
+          "name": "External backends (persistence, identity provider, policy decision point, object stores)",
+          "description": "Configured database or storage systems, external identity providers, external policy decision points, object stores, metastores, and federation targets; trusted only for the configured purpose.",
+          "zone": "zone-backends"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Network callers",
+          "type": "trust",
+          "description": "Untrusted until authenticated; authenticated principals are not inherently trusted to access resources, and every protected operation must pass authorization."
+        },
+        {
+          "bom-ref": "zone-polaris",
+          "name": "Polaris service",
+          "type": "trust",
+          "description": "Polaris server, runtime, and project tools making authentication, authorization, and trust decisions."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "External backends",
+          "type": "trust",
+          "description": "Persistence backends, identity providers, policy decision points, object stores, and federation targets, trusted only for the configured purpose."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-api",
+          "name": "Client to Polaris API boundary",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-polaris"
+          ]
+        },
+        {
+          "bom-ref": "boundary-external-integrations",
+          "name": "Polaris to external integrations boundary",
+          "type": "trust",
+          "zones": [
+            "zone-polaris",
+            "zone-backends"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-anonymous-caller",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous caller"
+              }
+            ],
+            "persona": {
+              "description": "A caller without valid authentication."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-principal",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated principal"
+              }
+            ],
+            "persona": {
+              "description": "A valid user or service principal known to Polaris."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-catalog-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Catalog user"
+              }
+            ],
+            "persona": {
+              "description": "An authenticated principal with privileges on one or more catalog resources."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-catalog-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Catalog administrator"
+              }
+            ],
+            "persona": {
+              "description": "A principal with administrative privileges over a catalog."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-realm-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Realm administrator"
+              }
+            ],
+            "persona": {
+              "description": "A principal with administrative privileges over the Polaris realm."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-deployment-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Deployment operator"
+              }
+            ],
+            "persona": {
+              "description": "A person or system with access to deploy, configure, or operate Polaris infrastructure; trusted with configuration and infrastructure-level secrets."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Identity-provider claims are trusted only after token validation according to the configured authentication mechanism; external policy decisions are trusted only according to the configured policy integration and the request context Polaris supplies."
+        },
+        {
+          "description": "Request-provided identifiers (catalog, namespace, table, view, role, policy, and principal names) are untrusted input; caller-supplied storage locations are untrusted until validated against the effective storage policy."
+        },
+        {
+          "description": "Persistence backends are trusted to store and return data, but internal persistence-layer access is not by itself proof that data may be returned to an external caller; authorization must be enforced before protected data is exposed or protected state is changed."
+        },
+        {
+          "description": "Externally configured endpoints, federation targets, identity-provider metadata, object-store endpoints, and catalog backends are trusted only for the configured purpose and must not silently redirect secrets or privileged requests outside that trust relationship."
+        },
+        {
+          "description": "Security invariants must hold consistently across supported persistence, authentication, and authorization variants unless a variant-specific limitation is explicitly documented; runtime assumptions from different variants must not be freely combined."
+        },
+        {
+          "description": "Related tools published from apache/polaris-tools have their own audiences, deployment models, and trust boundaries; a finding in a related tool is not automatically a Polaris server vulnerability."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass",
+        "description": "A caller performs protected API operations without valid authentication. Protected operations require authentication unless explicitly documented as public, and internal or administrative APIs must not be exposed as public unauthenticated APIs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-polaris-server"
+        ],
+        "mitigations": [
+          "control-authentication-required"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authorization bypass, privilege escalation, or cross-catalog/cross-realm access",
+        "description": "An authenticated principal obtains privileges direct checks would reject, via indirect role creation, self-grants, role nesting, privilege delegation, or other second-order effects; role, privilege, or policy changes bypass scope restrictions; or realm, catalog, namespace, table, and view identifiers allow access across authorization boundaries. Includes unauthorized mutation of catalog metadata, roles, policies, or principals and mismatches where internal and external authorization paths disagree in a way that grants broader access than the configured policy intends.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-polaris-server",
+          "asset-catalog-metadata"
+        ],
+        "mitigations": [
+          "control-authorization-checks",
+          "control-grant-authority"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-exposure",
+        "name": "Exposure of credentials, tokens, secrets, or sensitive configuration",
+        "description": "Secrets exposed through client-visible properties, configuration responses, logs, local profiles, command output, browser storage, generated artifacts, API responses, or error messages. Tokens, credentials, and secrets must not be logged, returned in API responses, or persisted in plaintext unless explicitly required and protected by deployment controls; error messages must not disclose secrets or unauthorized metadata.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credentials",
+          "asset-polaris-server",
+          "asset-admin-tool",
+          "asset-python-cli"
+        ],
+        "mitigations": [
+          "control-secret-handling"
+        ]
+      },
+      {
+        "bom-ref": "threat-overbroad-credential-vending",
+        "name": "Over-broad credential vending or storage-location validation bypass",
+        "description": "Credential-vending behavior that grants broader storage access than the caller's authorized operation or effective storage boundary; vending before location, authorization, and scope checks complete; unvalidated URI-bearing table metadata; reused or overlapping storage locations creating an unintended authorization bypass within the applicable realm and configured storage-policy scope; and provider-policy documents that fail to safely encode caller-controlled identifiers, paths, or property values.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credentials",
+          "asset-catalog-metadata"
+        ],
+        "mitigations": [
+          "control-storage-location-validation",
+          "control-scoped-credential-vending"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-lifecycle",
+        "name": "Token or credential lifecycle boundary violations",
+        "description": "Token issuance, token exchange, credential reset, or credential rotation failing to preserve the intended principal, realm, role scope, expiration, or revocation semantics, allowing access to continue beyond the intended reset, rotation, revocation, realm, or scope boundary; configuration changes that leave stale credentials or orphaned secrets with unintended access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credentials"
+        ],
+        "mitigations": [
+          "control-secret-handling"
+        ]
+      },
+      {
+        "bom-ref": "threat-injection",
+        "name": "Injection reachable through untrusted input",
+        "description": "SQL injection, command injection, unsafe deserialization, server-side request forgery, path traversal, or template injection reachable through untrusted input; user-controlled input must not be used to construct SQL, filesystem paths, object-store paths, URLs, or process commands without appropriate validation or safe APIs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-polaris-server"
+        ],
+        "mitigations": [
+          "control-input-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-endpoint-redirection",
+        "name": "Unsafe use of externally configured endpoints",
+        "description": "Unsafe use of externally configured endpoints, federation targets, identity-provider metadata, object-store endpoints, or catalog backends that can redirect privileged traffic, credentials, tokens, metadata, or storage requests outside the intended trust relationship.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-external-backends",
+          "asset-credentials"
+        ],
+        "mitigations": [
+          "control-endpoint-trust"
+        ]
+      },
+      {
+        "bom-ref": "threat-existence-disclosure",
+        "name": "Unauthorized disclosure of entity existence",
+        "description": "Unauthorized disclosure of identity, role, policy, catalog, namespace, table, or view existence, names, or relationships when that existence is itself sensitive; existence, names, and relationships must not be disclosed to unauthorized callers unless the disclosure is explicitly documented and accepted. Compare not-found and forbidden behavior when triaging.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-catalog-metadata"
+        ],
+        "mitigations": [
+          "control-authorization-checks"
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-defaults",
+        "name": "Insecure defaults and weakened packaging",
+        "description": "Insecure defaults that expose protected APIs or disable required security checks; use of weak cryptographic validation for authentication or authorization decisions; optional build features, extensions, and distribution-specific packaging weakening authentication, authorization, credential handling, or metadata isolation without explicit configuration and documentation.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-polaris-server"
+        ],
+        "mitigations": [
+          "control-secure-deployment"
+        ]
+      },
+      {
+        "bom-ref": "threat-infrastructure-compromise",
+        "name": "Compromise of deployment infrastructure or administrators",
+        "description": "A compromised database, object store, Kubernetes cluster, host operating system, identity provider, external policy decision point, or administrator workstation, and a compromised administrator using legitimate administrative privileges, are not normally treated as Polaris vulnerabilities; Polaris does not provide protection after such compromise.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-external-backends"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-misconfiguration",
+        "name": "Operator misconfiguration and deployment responsibilities",
+        "description": "A deployment operator choosing weak credentials or exposing the service publicly without required network controls; production use of local-development defaults, sample credentials, test fixtures, or example configuration; secret management outside Polaris-controlled mechanisms; and storage-provider limitations that are accurately documented. Polaris does not itself provide network isolation, TLS termination, firewalling, ingress policy, or cloud-account isolation beyond what the deployment provides.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-secure-deployment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Denial of service from sizing or missing rate limiting",
+        "description": "Denial of service caused solely by insufficient infrastructure sizing, and lack of rate limiting unless it enables a concrete security impact beyond resource exhaustion, are out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unreachable-dependency-advisories",
+        "name": "Dependency advisories without a reachable Polaris path",
+        "description": "Bugs in third-party dependencies are out of scope unless Polaris exposes them through unsafe configuration or usage. A dependency vulnerability is a Polaris issue only when the vulnerable code is present in a supported artifact, reachable through Polaris, and exploitation crosses a Polaris trust boundary. Test-only code, local development defaults, and downstream-only packaging findings are likewise not automatically Polaris vulnerabilities.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-api",
+        "boundary": "boundary-client-api",
+        "name": "Client API trust boundary",
+        "description": "Network callers are untrusted until authenticated; authenticated principals must still pass authorization for every protected operation; request-provided identifiers and caller-supplied storage locations are untrusted input. Management-plane APIs, catalog data-plane APIs, admin tools, and client tools may expose different metadata and require separate authorization checks; properties can cross from management-plane configuration into data-plane client-visible responses and must be classified by intended visibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authorization-bypass",
+          "threat-injection",
+          "threat-existence-disclosure",
+          "threat-credential-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication-required",
+          "control-authorization-checks",
+          "control-grant-authority",
+          "control-input-validation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-external-integrations",
+        "boundary": "boundary-external-integrations",
+        "name": "External integration trust boundary",
+        "description": "Credential vending crosses from Polaris authorization into object-store or external-system authorization; storage locations cross from Polaris metadata into object stores and external catalogs; identity-provider claims and external policy decisions are trusted only after validation and per configured integration; provider-specific policy expressions are security boundaries that must safely encode caller-controlled material.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-overbroad-credential-vending",
+          "threat-endpoint-redirection",
+          "threat-token-lifecycle",
+          "threat-infrastructure-compromise"
+        ],
+        "controlsAtBoundary": [
+          "control-storage-location-validation",
+          "control-scoped-credential-vending",
+          "control-endpoint-trust"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication-required",
+      "name": "Authentication required for protected operations",
+      "description": "Protected API operations require authentication unless explicitly documented as public; internal and administrative APIs are not exposed as public unauthenticated APIs.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-api"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization-checks",
+      "name": "Authorization checks before exposing or mutating protected metadata",
+      "description": "Authorization checks are performed before returning or mutating protected catalog metadata; persistence-layer access by internal callsites is not by itself proof that data may be returned to an external caller.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-api",
+        "asset-catalog-metadata"
+      ]
+    },
+    {
+      "bom-ref": "control-grant-authority",
+      "name": "Grant authority enforcement without second-order escalation",
+      "description": "Grant and role-management operations enforce the intended grant authority defined by Polaris authorization rules; a principal must not obtain privileges that direct checks would reject via indirect role creation, self-grants, role nesting, privilege delegation, or other second-order effects, and role, privilege, and policy changes must not bypass scope restrictions.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-polaris-server"
+      ]
+    },
+    {
+      "bom-ref": "control-storage-location-validation",
+      "name": "Storage-location validation against effective policy boundaries",
+      "description": "Storage locations and URI-bearing metadata are validated against the effective catalog, namespace, table, and storage-policy boundaries before they are persisted, used to access storage, or used to mint delegated credentials; reused, overlapping, or ambiguous locations must not create an unintended authorization bypass within the applicable realm and configured scope.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-catalog-metadata",
+        "boundary-external-integrations"
+      ]
+    },
+    {
+      "bom-ref": "control-scoped-credential-vending",
+      "name": "Narrowly scoped credential vending after checks complete",
+      "description": "Credential vending does not occur before the relevant location, authorization, and scope checks have completed; temporary storage credentials are scoped as narrowly as the configured storage provider and documented mode allow, delegated credentials are scoped to the authorized actor, operation, and storage locations, and provider-specific limitations that broaden scope must be explicit to operators.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-credentials",
+        "boundary-external-integrations"
+      ]
+    },
+    {
+      "bom-ref": "control-secret-handling",
+      "name": "Secret handling and lifecycle invariants",
+      "description": "Tokens, credentials, and secrets are not logged, returned in API responses, or persisted in plaintext unless explicitly required and protected; client-visible properties and configuration values are not used as a secret store; token issuance, exchange, reset, and rotation preserve the intended principal, realm, role scope, expiration, and revocation semantics; credential-affecting configuration changes are authorized and leave no stale or orphaned secrets.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-credentials"
+      ]
+    },
+    {
+      "bom-ref": "control-input-validation",
+      "name": "Validation of untrusted input in sensitive constructions",
+      "description": "User-controlled input is not used to construct SQL, filesystem paths, object-store paths, URLs, or process commands without appropriate validation or safe APIs; provider policy documents and expressions escape or safely encode caller-controlled identifiers, paths, and property values; error messages do not disclose secrets or unauthorized metadata.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-api"
+      ]
+    },
+    {
+      "bom-ref": "control-endpoint-trust",
+      "name": "Externally configured endpoints trusted only for their configured purpose",
+      "description": "Externally configured endpoints, federation targets, identity-provider metadata, object-store endpoints, and catalog backends must not silently redirect secrets or privileged requests outside the configured trust relationship; external authorization integrations receive enough request context to make the intended decision and fail according to documented fail-open or fail-closed behavior.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-external-integrations"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-deployment",
+      "name": "Operator deployment responsibilities",
+      "description": "Deployment operators protect service credentials, signing keys, client secrets, object-store credentials, identity-provider configuration, and local CLI or admin-tool profiles; configure TLS, network exposure, ingress, firewalls, service accounts, Kubernetes permissions, cloud IAM, object-store policy, and persistence-backend access; choose production-appropriate settings before exposing Polaris to untrusted clients; avoid production use of development defaults and sample credentials; rotate and revoke credentials; and protect logs, generated configuration, profiles, backups, and snapshots.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-polaris-server",
+        "asset-admin-tool",
+        "asset-python-cli"
+      ]
+    }
+  ]
+}

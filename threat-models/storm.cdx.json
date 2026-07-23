@@ -1,0 +1,571 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-storm",
+      "name": "Apache Storm",
+      "description": "Distributed realtime computation system. A cluster consists of Nimbus, Supervisors, Workers, ZooKeeper, the Storm UI, the Logviewer, and optional DRPC services. The security model's fundamental assumption is that the cluster runs on a private network not directly accessible from the public internet, and that the storm.yaml configuration file (along with multitenant-scheduler.yaml, JAAS configurations, and DRPC ACL files) is completely trusted.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://storm.apache.org/security-model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://storm.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "storm"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://storm.apache.org/security-model.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-storm",
+      "name": "Storm cluster deployment",
+      "description": "Architecture described by the Storm security model: the whole cluster (Nimbus, Supervisors, Workers, ZooKeeper, UI, Logviewer, DRPC) runs on a private network; users (topology submitters and UI/API users) access it through authenticated channels when security is configured; the public internet must never reach the internal HTTP services directly.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-nimbus",
+          "type": "service",
+          "name": "Nimbus",
+          "description": "Cluster master receiving topology submissions over Thrift RPC; access is restricted via Kerberos authentication, SimpleACLAuthorizer, nimbus.users and nimbus.groups.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-supervisors-workers",
+          "type": "process",
+          "name": "Supervisors and Workers",
+          "description": "Supervisors launch worker processes that execute topology code submitted by users; worker-to-worker messaging runs over Netty.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-ui-logviewer-drpc",
+          "type": "endpoint",
+          "name": "Storm UI, Logviewer, and DRPC HTTP services",
+          "description": "Internal HTTP services that must never be exposed to the public internet. The UI has no authentication by default, no built-in CSRF protection, and defaults to permissive CORS headers (Access-Control-Allow-Origin: *), acceptable only within trusted networks.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-zookeeper",
+          "type": "infrastructure",
+          "name": "ZooKeeper",
+          "description": "Cluster coordination store; Storm-to-ZooKeeper SSL hostname verification is disabled by default (storm.zookeeper.ssl.hostnameVerification: false).",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-config-files",
+          "type": "data",
+          "name": "Configuration files (storm.yaml and related)",
+          "description": "storm.yaml, multitenant-scheduler.yaml, JAAS configurations, and DRPC ACL files are completely trusted; write access to them equals effective administrative control. Their filesystem protection falls to operational staff, not runtime protections.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-logs",
+          "type": "data",
+          "name": "Logs",
+          "description": "Logs may contain sensitive data including stack traces, internal paths, class names, configuration values, and credentials passed through tuple data.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Private cluster network",
+          "type": "trust",
+          "description": "The cluster, including Nimbus, Supervisors, Workers, ZooKeeper, the Storm UI, and the Logviewer, is expected to run on a private network not directly accessible from the public internet."
+        },
+        {
+          "bom-ref": "zone-users",
+          "name": "Cluster users",
+          "type": "trust",
+          "description": "Topology submitters and UI/API users reaching the cluster from trusted hosts; authenticated and authorized when security is configured."
+        },
+        {
+          "bom-ref": "zone-public",
+          "name": "Public internet",
+          "type": "trust",
+          "description": "Untrusted networks that must never reach the UI, Logviewer, DRPC, or other cluster services directly."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-user-access",
+          "name": "User access to the cluster",
+          "type": "trust",
+          "zones": [
+            "zone-users",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-public-edge",
+          "name": "Public internet to cluster edge",
+          "type": "trust",
+          "zones": [
+            "zone-public",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-deployment-manager",
+          "party": {
+            "roles": [
+              {
+                "name": "Deployment Manager / Cluster Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Highest access: installs and configures Storm, makes authentication and authorization decisions, and bears responsibility for securing configuration files and restricting network access."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-topology-submitter",
+          "party": {
+            "roles": [
+              {
+                "name": "Topology Submitter"
+              }
+            ],
+            "persona": {
+              "description": "Executes arbitrary code on worker processes, which inherently grants trust. Multi-tenant deployments employ the multi-tenant scheduler and supervisor.run.worker.as.user for OS-level isolation, but submitters remain authorized users."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-ui-user",
+          "party": {
+            "roles": [
+              {
+                "name": "UI / API user"
+              }
+            ],
+            "persona": {
+              "description": "Views cluster state and may perform state-changing operations depending on authorization levels. The system does not protect against actions initiated by authenticated users themselves."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The cluster, including Nimbus, Supervisors, Workers, ZooKeeper, the Storm UI, and the Logviewer, runs on a private network that is not directly accessible from the public internet."
+        },
+        {
+          "description": "The storm.yaml configuration file receives complete trust; any actor gaining write access acquires effective administrative control. This applies equally to multitenant-scheduler.yaml, JAAS configurations, and DRPC ACL files."
+        },
+        {
+          "description": "Kerberos/SASL authentication and SimpleACLAuthorizer authorization both default to disabled, appropriate only for fully trusted single-tenant environments."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-auth-authz-bypass",
+        "name": "Authentication/authorization bypass or privilege escalation on a secured cluster",
+        "description": "Genuine vulnerabilities per the model's classification: authentication or authorization bypass absent trusted configuration access, privilege escalation within the authorization models, remote code execution through untrusted input (excluding trusted topology submissions), and issues compromising clusters deployed per the documented recommendations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nimbus",
+          "asset-ui-logviewer-drpc"
+        ],
+        "mitigations": [
+          "control-kerberos-acl"
+        ]
+      },
+      {
+        "bom-ref": "threat-unrestricted-impersonation",
+        "name": "Unrestricted user impersonation",
+        "description": "Without nimbus.impersonation.authorizer configured, any authenticated user can impersonate any other user. Secured clusters must configure this setting alongside nimbus.authorizer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nimbus"
+        ],
+        "mitigations": [
+          "control-impersonation-authorizer"
+        ]
+      },
+      {
+        "bom-ref": "threat-java-deserialization",
+        "name": "Arbitrary code execution via Java serialization fallback",
+        "description": "Kryo handles tuple serialization with explicit class registration as the safe default. Production environments must never set topology.fall.back.on.java.serialization: true, as Java deserialization exposes an arbitrary code execution vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-supervisors-workers"
+        ],
+        "mitigations": [
+          "control-kryo-registration"
+        ]
+      },
+      {
+        "bom-ref": "threat-zookeeper-mitm",
+        "name": "Man-in-the-middle on ZooKeeper communication",
+        "description": "Storm-to-ZooKeeper SSL hostname verification defaults to disabled (storm.zookeeper.ssl.hostnameVerification: false); a man-in-the-middle attacker possessing any valid CA-signed certificate could intercept communication. Production deployments should enable verification.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-zookeeper"
+        ],
+        "mitigations": [
+          "control-zk-hostname-verification"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-transport",
+        "name": "Interception of cluster traffic on untrusted network segments",
+        "description": "TLS supports Thrift RPC (Nimbus, Supervisors) and Netty messaging (worker-to-worker) via mTLS; deployments traversing untrusted network segments should enable encryption. The deprecated BlowfishTupleSerializer employs vulnerable 64-bit block ciphers.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nimbus",
+          "asset-supervisors-workers"
+        ],
+        "mitigations": [
+          "control-transport-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-log-disclosure",
+        "name": "Information disclosure through logs",
+        "description": "Logs may contain sensitive data including stack traces, internal paths, class names, configuration values, and credentials passed through tuple data. Access restriction through logs.users, logs.groups, Logviewer authentication filters, and network controls remains essential.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-logs"
+        ],
+        "mitigations": [
+          "control-restrict-log-access"
+        ]
+      },
+      {
+        "bom-ref": "threat-config-file-write",
+        "name": "Attacks requiring write access to trusted configuration files",
+        "description": "Any actor gaining write access to storm.yaml acquires effective administrative control: reconfiguring components, modifying authentication/authorization settings, altering network bindings, and disabling security entirely. Issues requiring storm.yaml write access are not considered vulnerabilities; filesystem protection falls to operational staff. The same reasoning covers test/development classes (such as TestingFilter) shipped in production JARs and enableable through configuration: since storm.yaml is trusted, enabling them is equivalent to any administrator change, not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-config-files"
+        ],
+        "mitigations": [
+          "control-protect-config-files"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-topology-code-execution",
+        "name": "Arbitrary code execution by topology submitters",
+        "description": "Topology submitters execute arbitrary code on worker processes, which inherently grants trust; submitters remain authorized users. Remote code execution through trusted topology submissions is excluded from the genuine-vulnerability classes, and the system does not protect against actions initiated by authenticated users themselves.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-supervisors-workers"
+        ],
+        "mitigations": [
+          "control-multitenant-isolation",
+          "control-kerberos-acl"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-internet-exposed-http-services",
+        "name": "Attacks on internet-exposed UI, Logviewer, or DRPC services",
+        "description": "The UI, Logviewer, and DRPC HTTP services must never be exposed to the public internet. By default the UI lacks authentication, has no built-in CSRF protection, and serves permissive CORS headers (Access-Control-Allow-Origin: *), acceptable within trusted networks. Issues requiring internet exposure of these services, permissive CORS headers on internal services, absent CSRF protection behind network controls, information disclosure through restricted endpoints, and version disclosure on internal endpoints are not considered vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-logviewer-drpc"
+        ],
+        "mitigations": [
+          "control-private-network",
+          "control-reverse-proxy",
+          "control-ui-auth-filters"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-brute-force",
+        "name": "Brute-force and account enumeration attacks",
+        "description": "Storm provides no brute-force or account enumeration protections; these require infrastructure-level implementations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-logviewer-drpc"
+        ],
+        "mitigations": [
+          "control-reverse-proxy"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-user-access",
+        "boundary": "boundary-user-access",
+        "name": "User access trust boundary",
+        "description": "Topology submitters and UI/API users cross into the cluster; Kerberos/SASL authentication and SimpleACLAuthorizer authorization (both disabled by default) gate this boundary on secured clusters.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-auth-authz-bypass",
+          "threat-unrestricted-impersonation",
+          "threat-topology-code-execution"
+        ],
+        "controlsAtBoundary": [
+          "control-kerberos-acl",
+          "control-impersonation-authorizer",
+          "control-multitenant-isolation",
+          "control-ui-auth-filters"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-public-edge",
+        "boundary": "boundary-public-edge",
+        "name": "Public internet trust boundary",
+        "description": "The cluster runs on a private network; the public internet must never reach the internal HTTP services directly. Operators enforce firewall rules and place reverse proxies at this edge.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-internet-exposed-http-services",
+          "threat-brute-force"
+        ],
+        "controlsAtBoundary": [
+          "control-private-network",
+          "control-reverse-proxy"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-private-network",
+      "name": "Run the cluster on a private network",
+      "description": "Run Nimbus, Supervisors, Workers, ZooKeeper, the UI, and the Logviewer on a private network not directly accessible from the public internet, and enforce firewall rules limiting connections to trusted hosts.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-public-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-config-files",
+      "name": "Protect trusted configuration files",
+      "description": "Secure storm.yaml, multitenant-scheduler.yaml, JAAS configurations, and DRPC ACL files at the filesystem level; write access to them equals administrative control and their protection falls to operational staff.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-config-files"
+      ]
+    },
+    {
+      "bom-ref": "control-reverse-proxy",
+      "name": "Place UI/Logviewer/DRPC behind a reverse proxy",
+      "description": "Production deployments require reverse proxy placement (Apache httpd or nginx) providing TLS termination, CSRF validation, security headers (X-Frame-Options, X-Content-Type-Options, Content-Security-Policy, Strict-Transport-Security), rate limiting, and centralized logging. CORS restrictions can also be configured at the reverse proxy layer.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ui-logviewer-drpc"
+      ]
+    },
+    {
+      "bom-ref": "control-kerberos-acl",
+      "name": "Enable Kerberos authentication and ACL authorization",
+      "description": "Kerberos/SASL enables pluggable authentication and SimpleACLAuthorizer provides pluggable authorization; both default to disabled, appropriate only for fully trusted single-tenant environments. Multi-tenant or security-sensitive deployments must enable Kerberos, configure SimpleACLAuthorizer on Nimbus, restrict topology submission via nimbus.users and nimbus.groups, and enable BlobStore ACL validation via storm.blobstore.acl.validation.enabled: true.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-user-access"
+      ]
+    },
+    {
+      "bom-ref": "control-impersonation-authorizer",
+      "name": "Configure the impersonation authorizer",
+      "description": "Secured clusters must configure nimbus.impersonation.authorizer alongside nimbus.authorizer (and enable ImpersonationAuthorizer if impersonation occurs); otherwise any authenticated user can impersonate any other user.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-nimbus"
+      ]
+    },
+    {
+      "bom-ref": "control-ui-auth-filters",
+      "name": "Configure UI authentication filters",
+      "description": "By default the UI lacks authentication; operators must configure servlet filters (such as Kerberos/SPNEGO) or rely on reverse proxy authentication. Operators needing additional CSRF protection should configure reverse proxies or custom servlet filters via ui.filter.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ui-logviewer-drpc"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-log-access",
+      "name": "Restrict log access",
+      "description": "Restrict access to logs through logs.users, logs.groups, Logviewer authentication filters, and network controls.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-logs"
+      ]
+    },
+    {
+      "bom-ref": "control-kryo-registration",
+      "name": "Keep Kryo explicit class registration",
+      "description": "Explicit Kryo class registration is the safe default for tuple serialization; never set topology.fall.back.on.java.serialization: true in production, as Java deserialization exposes arbitrary code execution.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-supervisors-workers"
+      ]
+    },
+    {
+      "bom-ref": "control-zk-hostname-verification",
+      "name": "Enable ZooKeeper SSL hostname verification",
+      "description": "Enable storm.zookeeper.ssl.hostnameVerification in production; it defaults to false, allowing a man-in-the-middle attacker with any valid CA-signed certificate to intercept communication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-zookeeper"
+      ]
+    },
+    {
+      "bom-ref": "control-transport-encryption",
+      "name": "Encrypt Thrift RPC and Netty messaging",
+      "description": "Enable TLS for Thrift RPC (Nimbus, Supervisors) and mTLS for Netty worker-to-worker messaging when traffic traverses untrusted network segments; avoid the deprecated BlowfishTupleSerializer with its vulnerable 64-bit block ciphers.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-nimbus",
+        "asset-supervisors-workers"
+      ]
+    },
+    {
+      "bom-ref": "control-multitenant-isolation",
+      "name": "Multi-tenant OS-level isolation",
+      "description": "Multi-tenant deployments employ the multi-tenant scheduler and supervisor.run.worker.as.user for OS-level isolation of topology code.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-supervisors-workers"
+      ]
+    }
+  ]
+}

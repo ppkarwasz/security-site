@@ -1,0 +1,435 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-zookeeper",
+      "name": "Apache ZooKeeper",
+      "description": "Open-source coordination service for distributed applications (naming, synchronization, group services). ZooKeeper is intended for use inside a trusted network, not exposed directly to the Internet: the Admin Guide states that a ZooKeeper ensemble is expected to operate in a trusted computing environment and recommends deploying behind a firewall. A fresh ensemble ships with no transport encryption, no peer authentication, and world-readable/writable znodes; hardening is a shared responsibility between the project and the operator, and the documented security controls are opt-in.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://zookeeper.apache.org/security.html",
+          "comment": "Source security page (security model, opt-in controls, scope, and vulnerability reports); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://zookeeper.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "zookeeper"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://zookeeper.apache.org/security.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-zookeeper",
+      "name": "ZooKeeper ensemble deployment",
+      "description": "Deployment shape implied by the security model: an ensemble of ZooKeeper servers operating in a trusted computing environment behind a firewall; clients (and the Java client library) connect to the client port; ensemble members exchange quorum and election traffic; the AdminServer exposes an HTTP administration interface. Security support covers the core server, the Java client library, and the AdminServer published to Maven Central under org.apache.zookeeper.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-server",
+          "type": "service",
+          "name": "ZooKeeper server",
+          "description": "The core coordination server holding the znode data tree and serving client requests; supports opt-in TLS, opt-in client authentication (digest, SASL/Kerberos, x509/mTLS), and per-znode ACLs.",
+          "zone": "zone-ensemble"
+        },
+        {
+          "bom-ref": "asset-data-tree",
+          "type": "data-store",
+          "name": "Znode data tree and ACLs",
+          "description": "Hierarchical znodes protected by per-znode ACLs using the world, auth, digest, sasl, ip, or x509 schemes. ACLs are not applied automatically and are not recursive; unless the application sets a restrictive ACL, nodes are commonly created with the wide-open OPEN_ACL_UNSAFE (world:anyone with all permissions).",
+          "zone": "zone-ensemble"
+        },
+        {
+          "bom-ref": "asset-adminserver",
+          "type": "endpoint",
+          "name": "AdminServer",
+          "description": "HTTP administration interface. Its default client IP detection honors the X-Forwarded-For header, which can be forged to bypass IP-based access controls (CVE-2024-51504); operators exposing it should configure a trusted proxy or restrict access at the network layer.",
+          "zone": "zone-ensemble"
+        },
+        {
+          "bom-ref": "asset-client-library",
+          "type": "component",
+          "name": "Java client library",
+          "description": "The supported client library published under org.apache.zookeeper; in scope for security reports. The C CLI example shells (cli_st, cli_mt) are sample code, not production tools.",
+          "zone": "zone-clients"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Applications and administrators connecting to the client port and the AdminServer from within the trusted network the ensemble is expected to operate in."
+        },
+        {
+          "bom-ref": "zone-ensemble",
+          "name": "ZooKeeper ensemble",
+          "type": "trust",
+          "description": "The ZooKeeper servers, their data tree, and the AdminServer, expected to operate in a trusted computing environment behind a firewall."
+        },
+        {
+          "bom-ref": "zone-peers",
+          "name": "Quorum peers",
+          "type": "trust",
+          "description": "Other ensemble members exchanging quorum and election traffic; peer authentication (SASL or TLS) is opt-in, and firewalling the election/quorum channel is the documented mitigation when it is off."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-port",
+          "name": "Client port",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-ensemble"
+          ]
+        },
+        {
+          "bom-ref": "boundary-quorum",
+          "name": "Quorum and election channel",
+          "type": "trust",
+          "zones": [
+            "zone-ensemble",
+            "zone-peers"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A ZooKeeper ensemble is expected to operate in a trusted computing environment and is recommended to be deployed behind a firewall; it is not exposed directly to the Internet."
+        },
+        {
+          "description": "The default configuration is intentionally minimal: no transport encryption, no peer authentication, and world-readable/writable znodes until the operator enables the opt-in controls."
+        },
+        {
+          "description": "Network-level controls prevent IP address forgery on any path that relies on the spoofable ip ACL scheme."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-enabled-control-bypass",
+        "name": "Bypass of an enabled and correctly configured security control",
+        "description": "Bypass of an enabled, correctly configured control is in scope for private security reports: for example authentication bypass when SASL is on, ACL enforcement bugs, or behaviors that contradict documented guarantees. Historical instances include the SASL quorum peer authorization bypass via an instance-less auth ID (CVE-2023-44981), the missing ACL check on persistent watchers (CVE-2024-23944), the getACL() disclosure of digest credentials (CVE-2019-0201), and the AdminServer snapshot/restore permission check (CVE-2025-58457).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server",
+          "asset-data-tree",
+          "asset-adminserver",
+          "asset-client-library"
+        ],
+        "mitigations": [
+          "control-authentication",
+          "control-znode-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-unhardened-default-deployment",
+        "name": "Attacks on an unhardened default ensemble",
+        "description": "A fresh ensemble ships with no transport encryption, no peer authentication, and world-readable/writable znodes. Missing hardening on a default installation is expected behavior, not a vulnerability: the default configuration is intentionally minimal, and absence of encryption or authentication on a fresh ensemble is out of scope for security reports. Operators deploy behind a firewall and enable the opt-in controls.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server",
+          "asset-data-tree"
+        ],
+        "mitigations": [
+          "control-firewall",
+          "control-tls",
+          "control-authentication",
+          "control-znode-acls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-quorum-join",
+        "name": "Arbitrary endpoint joining the quorum",
+        "description": "Without quorum peer authentication (opt-in, off by default), an arbitrary endpoint could join the cluster and begin propagating counterfeit changes to the leader, gaining complete read-write access to the data tree (CVE-2018-8012 class; CVE-2023-44981 was a bypass of the enabled control). Mitigations: enable quorum peer mutual authentication (SASL or TLS), or ensure the ensemble election/quorum communication is protected by a firewall.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server",
+          "asset-data-tree"
+        ],
+        "mitigations": [
+          "control-quorum-authentication",
+          "control-firewall"
+        ]
+      },
+      {
+        "bom-ref": "threat-non-recursive-acls",
+        "name": "Child znodes unprotected by a parent's ACL",
+        "description": "ACLs are not recursive: an ACL on a parent znode does not protect its children, and each znode's ACL must be set independently. A known limitation of the access-control model, by design.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-tree"
+        ],
+        "mitigations": [
+          "control-znode-acls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ip-scheme-spoofing",
+        "name": "Spoofing of the ip ACL scheme",
+        "description": "The ip ACL scheme matches source IP address and is spoofable, by design. Operators must ensure network-level controls prevent IP address forgery on any path that relies on this scheme.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-tree"
+        ],
+        "mitigations": [
+          "control-firewall"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-adminserver-xff-spoofing",
+        "name": "X-Forwarded-For forgery against AdminServer IP-based access control",
+        "description": "The AdminServer's default client IP detection honors the X-Forwarded-For header, which can be forged by an attacker to bypass IP-based access controls (see CVE-2024-51504); a known limitation of the default configuration, by design. Operators exposing the AdminServer should configure a trusted proxy or restrict access at the network layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-adminserver"
+        ],
+        "mitigations": [
+          "control-adminserver-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-digest-scheme-weakness",
+        "name": "Weak credential protection in the digest scheme",
+        "description": "The digest scheme transmits the password during authentication and stores an unsalted SHA-1 hash, by design (CVE-2019-0201 showed the hash could additionally be disclosed via getACL()). Use SASL/Kerberos or mTLS where credential confidentiality is required.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-strong-auth-schemes"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-components",
+        "name": "Unsupported components and indirect dependency findings",
+        "description": "Out of scope for private disclosure: zookeeper-contrib and zookeeper-recipes (community contributions not published to Maven Central, no security support commitment); the C CLI example shells cli_st and cli_mt (sample code illustrating C client usage, not production tools, see CVE-2016-5017; use the supported Java CLI); and third-party dependency CVEs bundled in a distribution that pose no direct exploit path through ZooKeeper (handled via public JIRA or the dev list instead).",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-port",
+        "boundary": "boundary-client-port",
+        "name": "Client port trust boundary",
+        "description": "Clients reach the server and the AdminServer from the surrounding network. The ensemble is expected to sit in a trusted computing environment behind a firewall; transport encryption, client authentication, and znode ACLs are all opt-in controls at this boundary.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-enabled-control-bypass",
+          "threat-unhardened-default-deployment",
+          "threat-ip-scheme-spoofing",
+          "threat-adminserver-xff-spoofing",
+          "threat-digest-scheme-weakness"
+        ],
+        "controlsAtBoundary": [
+          "control-tls",
+          "control-authentication",
+          "control-znode-acls",
+          "control-adminserver-protection"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-quorum",
+        "boundary": "boundary-quorum",
+        "name": "Quorum channel trust boundary",
+        "description": "Ensemble members exchange quorum and election traffic. Peer authentication (SASL or TLS for quorum peers) is opt-in; when it is off, firewalling the election/quorum communication is the documented mitigation against counterfeit peers.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-quorum-join"
+        ],
+        "controlsAtBoundary": [
+          "control-quorum-authentication",
+          "control-firewall"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-firewall",
+      "name": "Deploy behind a firewall in a trusted network",
+      "description": "Deploy the ensemble behind a firewall in a trusted computing environment, not exposed directly to the Internet; protect the election/quorum communication and prevent IP address forgery on paths relying on the ip ACL scheme.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server",
+        "boundary-client-port",
+        "boundary-quorum"
+      ]
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "Enable transport encryption (TLS)",
+      "description": "TLS for client-server and quorum traffic, with optional hostname verification. Disabled by default; must be explicitly enabled.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server",
+        "boundary-client-port",
+        "boundary-quorum"
+      ]
+    },
+    {
+      "bom-ref": "control-authentication",
+      "name": "Enable client authentication",
+      "description": "Client authentication via digest (username/password), SASL/Kerberos, or x509/mTLS. None are enabled by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server",
+        "boundary-client-port"
+      ]
+    },
+    {
+      "bom-ref": "control-quorum-authentication",
+      "name": "Enable quorum peer authentication",
+      "description": "SASL or TLS authentication for quorum peers, so an arbitrary endpoint cannot join the cluster; not enabled by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-quorum"
+      ]
+    },
+    {
+      "bom-ref": "control-znode-acls",
+      "name": "Set restrictive per-znode ACLs",
+      "description": "Per-znode ACLs using the world, auth, digest, sasl, ip, or x509 schemes. ACLs are not applied automatically and are not recursive: applications must set a restrictive ACL on each znode independently instead of the wide-open OPEN_ACL_UNSAFE default, and ensure the root ACL does not provide open permissions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-data-tree"
+      ]
+    },
+    {
+      "bom-ref": "control-adminserver-protection",
+      "name": "Protect the AdminServer",
+      "description": "Operators exposing the AdminServer should configure a trusted proxy or restrict access at the network layer, since the default client IP detection honors the forgeable X-Forwarded-For header. Individual commands can be disabled (for example admin.snapshot.enabled and admin.restore.enabled) or the whole interface turned off via admin.enableServer.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-adminserver"
+      ]
+    },
+    {
+      "bom-ref": "control-strong-auth-schemes",
+      "name": "Prefer SASL/Kerberos or mTLS over digest",
+      "description": "Use SASL/Kerberos or x509/mTLS instead of the digest scheme where credential confidentiality is required; digest transmits the password during authentication and stores an unsalted SHA-1 hash.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server",
+        "boundary-client-port"
+      ]
+    }
+  ]
+}

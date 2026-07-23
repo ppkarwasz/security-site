@@ -1,0 +1,151 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-seatunnel",
+      "name": "Apache SeaTunnel",
+      "description": "Data integration framework that executes user-supplied jobs, connector logic, and plugin code in clusters. Its management interfaces (seatunnel-web and the seatunnel-zeta engine) are designed for trusted, operator-controlled environments: any admitted user or client is treated as a cluster administrator.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://seatunnel.apache.org/security",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://seatunnel.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "seatunnel"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://seatunnel.apache.org/security"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-rce-by-design",
+        "name": "Remote code execution through submitted jobs",
+        "description": "SeaTunnel is a framework for executing user-supplied code and config in clusters. Users can submit code to SeaTunnel processes, which will be executed unconditionally, without any attempts to limit what code can run: starting other processes, establishing network connections, or accessing and modifying local files is possible. Code runs with the privileges of the SeaTunnel process and no workload sandboxing is provided. Historically, numerous remote code execution vulnerability reports have been rejected, as this is by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admitted-user-full-admin",
+        "name": "Admitted users and clients have full administrative access",
+        "description": "seatunnel-web delegates user authentication to the surrounding deployment; once a user is admitted, SeaTunnel treats that user as having full administrative access, with no per-operation authorization checks for third-party SDK calls. For the seatunnel-zeta engine, any client that can reach a management interface should be treated as a cluster administrator: SeaTunnel does not perform additional authorization checks when those clients submit jobs or interact with connectors, plugins, or third-party SDKs, and provides no RBAC, multi-tenant isolation, or per-user authorization for management operations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-external-authorization",
+          "control-protect-credentials"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-public-exposure",
+        "name": "Exposure of management interfaces to untrusted networks",
+        "description": "SeaTunnel management interfaces are not intended to be exposed directly to the public Internet; they are intended for trusted operator environments. If a deployment admits a user or client to a SeaTunnel management interface, that access should be protected like administrator access. Exposure to untrusted networks is a deployment concern to be addressed with private networking or an explicit access-control layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-network-isolation",
+          "control-minimal-endpoints",
+          "control-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Place SeaTunnel behind an access-control layer",
+      "description": "Place SeaTunnel behind a private network, VPN, reverse proxy, ingress policy, or an equivalent access-control layer; within company networks or cloud accounts, restrict access to a SeaTunnel cluster via appropriate means. Never expose SeaTunnel processes to the public Internet.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-minimal-endpoints",
+      "name": "Expose only intentionally used management endpoints",
+      "description": "Expose only the management endpoints that you intentionally use.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "Use TLS or mutual TLS for management traffic",
+      "description": "Use TLS or mutual TLS when management traffic crosses less-trusted networks.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-credentials",
+      "name": "Protect credentials and cluster access as administrator access",
+      "description": "Protect credentials, tokens, and cluster access like administrator credentials, since admitted access is administrative access.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-external-authorization",
+      "name": "Enforce fine-grained access control outside SeaTunnel",
+      "description": "SeaTunnel provides no RBAC or fine-grained authorization for management APIs. If finer-grained access control is needed, enforce it outside of SeaTunnel using an identity provider, reverse proxy, API gateway, ingress policy, or network segmentation.",
+      "category": "compensating",
+      "status": "recommended"
+    }
+  ]
+}

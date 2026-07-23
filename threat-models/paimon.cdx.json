@@ -1,0 +1,461 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-paimon",
+      "name": "Apache Paimon",
+      "description": "Streaming data lake platform often deployed as a library and integration layer inside larger systems (Flink, Spark, Hive, and other query engines) that provide their own authentication, authorization, and credential management. The model covers the table format implementation (paimon-core), client libraries (paimon-api, paimon-common), the REST Catalog client and protocol, engine integrations, and the Python client (pypaimon); it does not define the security model for embedding engines, storage-level authorization, or REST Catalog server implementations.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/paimon/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it. It complements the shorter public-facing security model at docs/docs/project/security.md."
+        },
+        {
+          "type": "website",
+          "url": "https://paimon.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "paimon"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/paimon/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/paimon/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-paimon",
+      "name": "Paimon deployment",
+      "description": "Deployment shape described by the Paimon threat model: Paimon runs as a library inside a query engine or application; a catalog control plane (REST Catalog server, Hive Metastore, JDBC-backed or filesystem-based catalog) resolves tables and supplies metadata, configuration, and delegated credentials; the underlying object store enforces storage-level authorization with the credentials the deployment hands to Paimon.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-paimon-library",
+          "type": "component",
+          "name": "Paimon library (paimon-core, paimon-api, paimon-common, engine integrations, pypaimon)",
+          "description": "Table format implementation, client libraries, and engine integrations embedded in the query engine or application process.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-rest-catalog-client",
+          "type": "component",
+          "name": "REST Catalog client (RESTCatalog, RESTApi, RESTTokenFileIO)",
+          "description": "Client-side catalog that sends authenticated requests via a configured AuthProvider, refreshes tokens before expiration, caches FileIO instances keyed by data token, and must not mix data tokens or auth state across catalog instances or tables in the same process.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-data-tokens",
+          "type": "data",
+          "name": "Data tokens (delegated storage credentials)",
+          "description": "Time-limited storage credentials returned by the REST Catalog server's table token endpoint when data-token.enabled is true, used by RESTTokenFileIO to access the underlying object store.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-catalog-control-plane",
+          "type": "service",
+          "name": "Catalog control plane (REST Catalog server, Hive Metastore, JDBC or filesystem catalog)",
+          "description": "Resolves tables and supplies metadata, locations, configuration, and delegated credentials to Paimon. In REST deployments the server authenticates clients, authorizes catalog operations, issues scoped time-limited data tokens, and provides row-level filters and column masking rules. Paimon assumes a trusted catalog or metastore, outside its primary security boundary.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-object-store",
+          "type": "data-store",
+          "name": "Object store (OSS, S3, HDFS)",
+          "description": "Storage whose permissions are enforced by the storage provider and the credentials the surrounding deployment hands to Paimon; Paimon is not the root authority for bucket- or object-level authorization.",
+          "zone": "zone-storage"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-engine",
+          "name": "Engine or embedding application",
+          "type": "trust",
+          "description": "Query engines (Flink, Spark, Hive, Trino, StarRocks) and applications embedding Paimon; responsible for their own user-facing authorization boundaries."
+        },
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Catalog control plane",
+          "type": "trust",
+          "description": "Trusted control-plane components supplying metadata, configuration, and delegated credentials."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Object storage",
+          "type": "trust",
+          "description": "Storage provider enforcing its own authorization (IAM policies, ACLs)."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-catalog",
+          "name": "Paimon client to catalog control plane",
+          "type": "trust",
+          "zones": [
+            "zone-engine",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-storage",
+          "name": "Paimon client to object store",
+          "type": "trust",
+          "zones": [
+            "zone-engine",
+            "zone-storage"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Deploys and configures the catalog, REST Catalog server, engine, and storage integration around Paimon. Trusted to choose endpoints, warehouses, and storage integrations, configure credentials, and decide which users may create, read, or modify tables."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-engine",
+          "party": {
+            "roles": [
+              {
+                "name": "Engine or Embedding Application"
+              }
+            ],
+            "persona": {
+              "description": "Query engines and applications that may expose only a subset of Paimon capabilities to users; responsible for their own user-facing authorization boundaries unless Paimon explicitly documents otherwise."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-table-writer",
+          "party": {
+            "roles": [
+              {
+                "name": "Table Writer or Maintainer"
+              }
+            ],
+            "persona": {
+              "description": "May already legitimately write or replace table metadata, write or delete data files, manage snapshots, create or delete branches and tags, and invoke destructive maintenance operations. A report only showing a new way to achieve the same effect this role can already cause legitimately is usually not a security issue in Paimon."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Paimon assumes a trusted catalog or metastore, which is outside its primary security boundary; catalog-supplied metadata locations, table properties, schema definitions, and related control-plane information are trusted by default."
+        },
+        {
+          "description": "Operator and deployment inputs are trusted: catalog properties (uri, warehouse, token.provider), REST endpoint configuration, warehouse and storage roots, authentication credentials, Kerberos keytab paths and principals, metastore wiring, and custom HTTP headers."
+        },
+        {
+          "description": "Server configuration, data tokens, and auth table query responses returned by the REST Catalog server are trusted control-plane inputs unless Paimon documents a stronger guarantee; the major exception is secret exposure to a new audience."
+        },
+        {
+          "description": "Object store permissions are enforced by the storage provider; Paimon is not the root authority for storage-level authorization."
+        },
+        {
+          "description": "Row-level filters and column masking rules supplied via authTableQuery are relayed by Paimon; enforcement is a shared responsibility and the engine must apply them."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-credential-disclosure",
+        "name": "Secret or credential disclosure to a new audience",
+        "description": "Paimon surfacing credentials or secrets to an audience not already trusted with them: catalog credentials exposed through a user-visible engine surface (query results, EXPLAIN output, table properties); one catalog's credentials or auth state leaking into another catalog or session within the same process; data tokens for table A used for or exposed to table B; credentials or tokens logged at INFO or lower without redaction; credentials surviving in serialized RESTTokenFileIO or RESTApi state beyond their intended scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-catalog-client",
+          "asset-data-tokens"
+        ],
+        "mitigations": [
+          "control-auth-provider-isolation",
+          "control-token-cache-keying"
+        ]
+      },
+      {
+        "bom-ref": "threat-trust-boundary-violation",
+        "name": "Paimon-owned trust-boundary violation across catalogs, principals, or sessions",
+        "description": "Paimon itself is expected to separate catalogs, principals, and sessions and fails to do so: process-global auth provider or signer state crossing catalog instances (for example the FILE_IO_CACHE in RESTTokenFileIO returning a FileIO belonging to a different principal); a data token obtained for one table reused for a different table's data access; auth header state from one RESTApi instance leaking into another.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-catalog-client",
+          "asset-data-tokens"
+        ],
+        "mitigations": [
+          "control-token-cache-keying",
+          "control-auth-provider-isolation",
+          "control-token-refresh"
+        ]
+      },
+      {
+        "bom-ref": "threat-row-column-filter-bypass",
+        "name": "Row-level or column-level access control bypass in Paimon-owned code",
+        "description": "Paimon's client-side handling of authTableQuery responses (row filters or column masking rules) allowing a caller to bypass filters the server intended to enforce, when the bypass occurs within Paimon-owned code rather than in the engine integration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-catalog-client"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-input-robustness",
+        "name": "Malformed-input crashes and memory amplification",
+        "description": "Malformed-input crashes, raw runtime exceptions from invalid JSON or Avro data, and memory amplification from oversized manifests or schemas are usually treated as robustness or hardening work rather than security issues in Paimon itself. Correctness bugs (wrong byte offsets, incorrect merge-tree compaction, race conditions, snapshot or schema version conflicts) that do not create a new trust-boundary violation are likewise non-security by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-paimon-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-control-plane",
+        "name": "Malicious catalog, metastore, or REST Catalog server",
+        "description": "Reports requiring a malicious catalog, metastore, REST Catalog server, or other external service are usually outside Paimon's primary security boundary: for example a REST Catalog server returning a data token with overly broad storage permissions, a Hive Metastore returning a table location pointing to a sensitive path, or a server returning malicious row filters designed to extract data through side channels. Many client-side token-selection bugs are correctness or specification issues rather than security boundary failures.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-catalog-control-plane"
+        ],
+        "mitigations": [
+          "control-server-responsibilities"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-config-control",
+        "name": "Attacker control of trusted operator configuration",
+        "description": "Reports that depend on the attacker directly controlling operator or deployment inputs (catalog properties including uri, warehouse, and token.provider, REST endpoints, storage roots, credentials, Kerberos keytab paths and principals, metastore wiring, custom HTTP headers) are usually not vulnerabilities in Paimon itself.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-equivalent-harm",
+        "name": "Equivalent-harm reports from already-privileged writers or maintainers",
+        "description": "If the actor already has a legitimate capability that can cause the same harm, the new path is usually not a security issue. This often applies to writers or maintainers who already control metadata layout, file layout, or destructive maintenance operations (snapshot expiration, orphan file cleanup, branch deletion).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dos-normal-operations",
+        "name": "Denial of service through normal operations",
+        "description": "Resource exhaustion caused by legitimate but expensive operations (large compaction, scanning many partitions, listing all snapshots) is usually treated as an operational concern rather than a security vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-paimon-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-authorization-gaps",
+        "name": "Over-broad storage-level authorization",
+        "description": "Reports that depend primarily on over-broad IAM policies or permissive storage ACLs are usually deployment-sensitive rather than product-security issues in Paimon; storage-level authorization is enforced by the storage provider and the credentials the surrounding deployment chooses to hand to Paimon.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-object-store"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-catalog",
+        "boundary": "boundary-catalog",
+        "name": "Catalog control plane trust boundary",
+        "description": "Paimon accepts metadata, server configuration (via /v1/config), data tokens (via the table token endpoint), and auth table query responses from the catalog control plane; by default these are trusted control-plane inputs. The major exception is secret exposure: Paimon must not surface credentials to a new audience or leak credential-bearing state across catalog, session, table, or principal boundaries it owns.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-credential-disclosure",
+          "threat-trust-boundary-violation",
+          "threat-row-column-filter-bypass",
+          "threat-malicious-control-plane"
+        ],
+        "controlsAtBoundary": [
+          "control-auth-provider-isolation",
+          "control-token-cache-keying",
+          "control-token-refresh",
+          "control-server-responsibilities"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-storage",
+        "boundary": "boundary-storage",
+        "name": "Storage-level authorization boundary",
+        "description": "Object store permissions (OSS, S3, HDFS ACLs) are enforced by the storage provider and the credentials the deployment hands to Paimon; data tokens must be scoped to specific tables by the server.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-storage-authorization-gaps"
+        ],
+        "controlsAtBoundary": [
+          "control-server-responsibilities"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-token-cache-keying",
+      "name": "FileIO cache keyed by full data token",
+      "description": "When data-token.enabled is true, RESTTokenFileIO caches FileIO instances in the process-global FILE_IO_CACHE keyed on the full RESTToken (token content plus expiration), with a maximum size of 1000 entries and 10-hour expiry, so different tokens produce different FileIO instances and tokens remain scoped to their table.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rest-catalog-client",
+        "asset-data-tokens"
+      ]
+    },
+    {
+      "bom-ref": "control-token-refresh",
+      "name": "Token refresh before expiration",
+      "description": "Data tokens are refreshed before expiration with a configurable safe time margin (1 hour by default); token refresh creates a new RESTApi instance from the catalog context if the original instance is unavailable, for example after deserialization.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rest-catalog-client"
+      ]
+    },
+    {
+      "bom-ref": "control-auth-provider-isolation",
+      "name": "Per-catalog-instance authentication providers",
+      "description": "Authentication providers are created via the AuthProviderFactory SPI (Java ServiceLoader, based on token.provider); the authentication provider is process-level per catalog instance and must not share mutable state across instances.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rest-catalog-client"
+      ]
+    },
+    {
+      "bom-ref": "control-server-responsibilities",
+      "name": "REST Catalog server control-plane responsibilities",
+      "description": "The REST Catalog server is responsible for authenticating clients, authorizing catalog operations (create/drop/alter databases, tables, views, functions), issuing scoped, time-limited data tokens for storage access, providing row-level filters and column masking rules via the auth table query API, and returning server-side configuration to merge with client configuration.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-catalog-control-plane"
+      ]
+    }
+  ]
+}

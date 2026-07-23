@@ -1,0 +1,420 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-httpd",
+      "name": "Apache HTTP Server",
+      "description": "HTTP server daemon. Remote untrusted HTTP clients send requests processed by child processes or threads running as a less-privileged user; on Unix a root parent process retains privileges; configuration can be delegated to trusted local site authors via .htaccess files; many configurations depend on trusted backend services (authentication, caching, reverse-proxy backends). The only supported version is the latest patch release of the 2.4.x stable branch.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/httpd/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://httpd.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "httpd"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/httpd/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/httpd/trunk/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-httpd",
+      "name": "Apache httpd deployment",
+      "description": "Deployment shape described by the httpd security policy: remote untrusted HTTP clients reach server child processes; on Unix a root parent process is separated from less-privileged children; trusted local site authors may hold delegated configuration authority through .htaccess files; trusted dependent services (authentication, caching, OCSP, ACME) and reverse-proxy backend servers sit behind the server.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-parent-process",
+          "type": "process",
+          "name": "Parent process (root)",
+          "description": "When httpd is started as root on Unix, the parent process retains root privileges.",
+          "zone": "zone-parent"
+        },
+        {
+          "bom-ref": "asset-child-processes",
+          "type": "process",
+          "name": "Child processes and threads",
+          "description": "Request-processing children run as a less-privileged user and group configurable via mod_unixd. The less-privileged user has full control over network communication with clients and, in a typical configuration, retains access to SSL private key data.",
+          "zone": "zone-children"
+        },
+        {
+          "bom-ref": "asset-backend-services",
+          "type": "service",
+          "name": "Dependent services and backend servers",
+          "description": "Trusted entities: database or LDAP servers used for authentication (mod_ldap, mod_dbd), Redis/Valkey or Memcache servers for the mod_ssl session cache, OCSP servers for client certificate verification or stapling, ACME servers used by mod_md, and reverse-proxy (gateway) backend servers reached via HTTP or AJP.",
+          "zone": "zone-backends"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Remote HTTP clients",
+          "type": "trust",
+          "description": "Remote untrusted users sending HTTP requests."
+        },
+        {
+          "bom-ref": "zone-children",
+          "name": "Less-privileged server processes",
+          "type": "trust",
+          "description": "Child processes and threads handling requests as the configured less-privileged user."
+        },
+        {
+          "bom-ref": "zone-parent",
+          "name": "Privileged parent process",
+          "type": "trust",
+          "description": "The root parent process on Unix platforms."
+        },
+        {
+          "bom-ref": "zone-site-authors",
+          "name": "Site authors",
+          "type": "trust",
+          "description": "Trusted local site authors granted delegated configuration authority through .htaccess files; trusted not to attack the server with malformed or malicious .htaccess files."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "Trusted backend services",
+          "type": "trust",
+          "description": "Authentication, caching, OCSP, and ACME services, plus reverse-proxy backend servers trusted to provide content."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-request",
+          "name": "Client request processing",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-children"
+          ]
+        },
+        {
+          "bom-ref": "boundary-privilege-separation",
+          "name": "Privilege separation",
+          "type": "trust",
+          "zones": [
+            "zone-children",
+            "zone-parent"
+          ]
+        },
+        {
+          "bom-ref": "boundary-delegated-configuration",
+          "name": "Delegated configuration (.htaccess)",
+          "type": "trust",
+          "zones": [
+            "zone-site-authors",
+            "zone-children"
+          ]
+        },
+        {
+          "bom-ref": "boundary-backend",
+          "name": "Backend and dependent services",
+          "type": "trust",
+          "zones": [
+            "zone-children",
+            "zone-backends"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Only the latest patch release of the 2.4.x stable branch is supported; vulnerabilities existing only in unreleased branches (such as trunk) are handled as normal bug reports."
+        },
+        {
+          "description": "Security vulnerabilities should be reproducible under a reasonable, supported configuration, without third-party modules or modules explicitly designed for debugging, using the latest released sources, under a standard build on a supported platform."
+        },
+        {
+          "description": "Issues depending on a specially crafted server configuration must include references showing the configuration would arise naturally in common deployments; issues reproducible only under instrumented builds (ASAN, valgrind) must be clearly explained as such."
+        },
+        {
+          "description": "Use of platform-specific sandboxing or security features (containers, chroot, SELinux) is out of scope for this security model."
+        },
+        {
+          "description": "The server administrator is responsible for tuning and configuring httpd appropriately for the operating environment, for example adjusting MPM limits."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-request-crash-or-code-execution",
+        "name": "Server crash or code execution from untrusted client requests",
+        "description": "Processing of requests by remote untrusted users (HTTP clients) must not crash or prematurely terminate server processes, nor gain code execution privileges. In the default configuration, timeouts apply to most aspects of HTTP request handling so a single idle client connection should not tie up a processing thread or process indefinitely. Example vulnerabilities which violated the model: CVE-2026-23918, CVE-2004-0786.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-child-processes"
+        ],
+        "mitigations": [
+          "control-request-timeouts"
+        ]
+      },
+      {
+        "bom-ref": "threat-disproportionate-resource-consumption",
+        "name": "Resource consumption disproportionate to network traffic",
+        "description": "Handling requests entails resource consumption (CPU, memory, disk space for logs). Consumption by the server is expected to be at worst proportional to the volume of network traffic, and memory consumption by a single request should be capped with configurable limits. Example vulnerability which violated the model: CVE-2004-0942.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-child-processes"
+        ],
+        "mitigations": [
+          "control-configurable-request-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-connection-flood-dos",
+        "name": "Denial of service via many simultaneous connections",
+        "description": "Denial of service attacks are expected to be mitigated at the firewall or network level. An attacker who can establish multiple simultaneous connections to the server is expected to deny service to other remote users to some extent; this is not a violation of the model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-child-processes"
+        ],
+        "mitigations": [
+          "control-network-level-dos-mitigation",
+          "control-mpm-tuning"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-privilege-separation-escape",
+        "name": "Less-privileged child process gains root privileges or log access",
+        "description": "On Unix platforms with httpd started as root, the less-privileged user running child processes and threads must be restricted from gaining root privileges and should not have read or truncate access to log files. Example vulnerabilities which violated the model: CVE-2007-3304, CVE-2012-0031.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-child-processes",
+          "asset-parent-process"
+        ],
+        "mitigations": [
+          "control-privilege-separation"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-htaccess",
+        "name": "Attacks on the server through malicious .htaccess files",
+        "description": "Site authors granted delegated configuration through .htaccess files are trusted not to attack the server with malformed or malicious files (for example configuration files of excessive size, or deliberately constructed regular expressions that are expensive to evaluate) and gain access to some data (files, environment) which is otherwise restricted. In configurations supporting unsandboxed in-process scripting interpreters such as mod_lua or mod_php, site authors have exactly equivalent privileges to the user the server runs as.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-child-processes"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-trusted-service",
+        "name": "Attack from a trusted authentication or caching service",
+        "description": "Services used for authentication or caching privileged or protected data (database and LDAP servers, Redis/Valkey and Memcache session caches, OCSP servers, ACME servers) are trusted not to attack the web server. An attack requiring a hostile trusted service is outside the model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-backend-services",
+          "asset-child-processes"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-backend-response-splitting",
+        "name": "Backend server influences frontend HTTP protocol framing (response splitting)",
+        "description": "Backend servers accessed in a reverse proxy (gateway) configuration, typically via HTTP or AJP, are trusted to provide content but should not be able to influence HTTP protocol framing logic in the frontend client communication (so-called response splitting attacks). Example vulnerabilities which violated the model: CVE-2026-33523, CVE-2024-42516.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-backend-services",
+          "asset-child-processes"
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-request",
+        "boundary": "boundary-client-request",
+        "name": "Untrusted client request boundary",
+        "description": "Remote untrusted HTTP clients whose requests are processed by server child processes; the primary boundary of the basic model.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-request-crash-or-code-execution",
+          "threat-disproportionate-resource-consumption",
+          "threat-connection-flood-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-request-timeouts",
+          "control-configurable-request-limits",
+          "control-network-level-dos-mitigation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-privilege-separation",
+        "boundary": "boundary-privilege-separation",
+        "name": "Privilege separation boundary",
+        "description": "Separation between the root parent process and the less-privileged children on Unix; the less-privileged user must not regain root privileges and should not read or truncate log files.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-privilege-separation-escape"
+        ],
+        "controlsAtBoundary": [
+          "control-privilege-separation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-delegated-configuration",
+        "boundary": "boundary-delegated-configuration",
+        "name": "Delegated configuration boundary",
+        "description": "Trusted local site authors gain a significant degree of control over, and access to, the server at run-time through .htaccess files; they are trusted not to attack the server.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-htaccess"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-backend",
+        "boundary": "boundary-backend",
+        "name": "Backend services boundary",
+        "description": "Dependent services are trusted entities; reverse-proxy backends are trusted for content but must not influence frontend HTTP framing.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-trusted-service",
+          "threat-backend-response-splitting"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-request-timeouts",
+      "name": "Default timeouts on request handling",
+      "description": "In the default configuration, timeouts are applied to most aspects of HTTP request handling so that a single idle client connection should not tie up a single processing thread or process indefinitely.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-request"
+      ]
+    },
+    {
+      "bom-ref": "control-configurable-request-limits",
+      "name": "Configurable per-request memory limits",
+      "description": "Memory consumption by a single request should be capped with configurable limits, for example LimitRequestFields limits RAM consumption by HTTP headers and LimitXMLRequestBody limits RAM consumption when parsing XML request documents.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-request"
+      ]
+    },
+    {
+      "bom-ref": "control-mpm-tuning",
+      "name": "Tune and configure httpd for the operating environment",
+      "description": "It is the responsibility of the server administrator to tune and configure httpd appropriately to the operating environment, for example adjusting MPM limits (see the httpd security tips documentation).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-child-processes"
+      ]
+    },
+    {
+      "bom-ref": "control-network-level-dos-mitigation",
+      "name": "Mitigate denial of service at firewall or network level",
+      "description": "Denial of service attacks are expected to be mitigated at firewall or network level, not by the server itself.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-request"
+      ]
+    },
+    {
+      "bom-ref": "control-privilege-separation",
+      "name": "Unix privilege separation via mod_unixd",
+      "description": "When httpd is started as root on Unix, privilege separation is used between the parent process which retains root privileges and child processes and threads, which run as a less-privileged user and group configurable via the mod_unixd module.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-privilege-separation"
+      ]
+    }
+  ]
+}

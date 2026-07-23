@@ -1,0 +1,608 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-plc4x",
+      "name": "Apache PLC4X",
+      "description": "Multi-language library of client-side protocol drivers for industrial/OT PLC protocols (Siemens S7, Modbus, EtherNet/IP, OPC UA, ADS/AMS, KNXnet/IP, BACnet/IP, IEC-60870-5-104, CANopen, C-Bus, Firmata, Profinet, UMAS, and others). It is an in-process library with no daemon and no listening sockets; the embedding application supplies the connection URL, authentication, and tag-address strings. Most supported protocols transit cleartext with no authentication, integrity, or confidentiality by standardization; OPC UA is the lone exception with a full TLS-like security stack. The model covers the main apache/plc4x repository only (plc4j, plc4go, and the not-ready plc4c/plc4py bindings); plc4x-extras is out of scope.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/plc4x/blob/develop/THREAT-MODEL.md",
+          "comment": "Source security model document (draft, with PMC review answers folded in); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://plc4x.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "plc4x"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/plc4x/blob/develop/THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/plc4x/develop/THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-plc4x",
+      "name": "PLC4X embedded-library deployment",
+      "description": "Architecture described by the PLC4X threat model: an embedding application (SCADA gateway, MES, historian, industrial-IoT bridge) links PLC4X in-process where the OT network meets the IT network; PLC4X opens outbound connections to PLC endpoints over protocol-specific transports; wire bytes returned by the remote PLC are untrusted input crossing into the parsers; OPC UA is the only protocol with a cryptographic peer identity.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-drivers",
+          "type": "component",
+          "name": "Protocol drivers and generated wire parsers",
+          "description": "Per-protocol drivers (plc4j/drivers), the SPI/runtime, and the mspec code-generation runtime parsers driven by remote-PLC bytes; the wire parsers are the single most important reachability boundary and the most likely site of real findings.",
+          "zone": "zone-library"
+        },
+        {
+          "bom-ref": "asset-transports",
+          "type": "interface",
+          "name": "Transports (tcp, udp, serial, raw-socket, pcap-replay, socketcan)",
+          "description": "Exclusively client-side transports; no listener transport exists. The raw-socket transport requires CAP_NET_RAW (Linux) or Administrator privileges.",
+          "zone": "zone-library"
+        },
+        {
+          "bom-ref": "asset-opcua-security",
+          "type": "module",
+          "name": "OPC UA security subsystem",
+          "description": "Certificate verifier, security-policy negotiator, and secure-channel encoder; the one place in the repository that promises a cryptographic property. Defaults are dev/lab-grade: security-policy=NONE, trust-store-file unset (PermissiveCertificateVerifier accepts all server certificates), discovery=true over an unencrypted channel.",
+          "zone": "zone-library"
+        },
+        {
+          "bom-ref": "asset-file-parsers",
+          "type": "component",
+          "name": "Offline file parsers (KNX .knxproj ETS, BACnet EDE)",
+          "description": "Parsers for operator-supplied files; XXE, external-DTD, and external-schema processing are explicitly disabled in the KNX ETS XML parser.",
+          "zone": "zone-library"
+        },
+        {
+          "bom-ref": "asset-plc-devices",
+          "type": "device",
+          "name": "Remote PLC devices",
+          "description": "Industrial controllers in the field; their firmware, the wire bytes they emit, and any responses to PLC4X requests are untrusted input crossing into the library's parsers.",
+          "zone": "zone-ot-network"
+        },
+        {
+          "bom-ref": "asset-opcua-server",
+          "type": "endpoint",
+          "name": "OPC UA server",
+          "description": "The only peer in the supported protocol set whose identity can be cryptographically verified, when a trust store is configured.",
+          "zone": "zone-opcua-server"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-embedding-app",
+          "name": "Embedding application",
+          "type": "trust",
+          "description": "Trusted sole API caller: decides which driver to load, supplies the connection URL, the PlcAuthentication, and every tag-address string. PLC4X has no notion of an end user within the embedding process."
+        },
+        {
+          "bom-ref": "zone-library",
+          "name": "PLC4X library",
+          "type": "trust",
+          "description": "Drivers, SPI, transports, code-generation runtime, and language bindings running in the embedding application's process."
+        },
+        {
+          "bom-ref": "zone-ot-network",
+          "name": "OT network and PLC devices",
+          "type": "trust",
+          "description": "Untrusted on the wire: anyone with reachability on the OT network can read, modify, drop, replay, or inject frames on the cleartext protocols."
+        },
+        {
+          "bom-ref": "zone-opcua-server",
+          "name": "OPC UA server",
+          "type": "trust",
+          "description": "Partially-authenticated peer whose certificate can be verified against a trust store; with the default PermissiveCertificateVerifier, the peer can MITM the channel."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-api",
+          "name": "B1: Embedding application to PLC4X API surface",
+          "type": "trust",
+          "zones": [
+            "zone-embedding-app",
+            "zone-library"
+          ]
+        },
+        {
+          "bom-ref": "boundary-wire",
+          "name": "B2: PLC4X driver to remote PLC over the wire",
+          "type": "trust",
+          "zones": [
+            "zone-library",
+            "zone-ot-network"
+          ]
+        },
+        {
+          "bom-ref": "boundary-opcua",
+          "name": "B2-OPCUA: OPC UA driver to OPC UA server",
+          "type": "trust",
+          "zones": [
+            "zone-library",
+            "zone-opcua-server"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-embedding-application",
+          "party": {
+            "roles": [
+              {
+                "name": "Embedding application"
+              }
+            ],
+            "persona": {
+              "description": "Trusted, sole API caller. Anything it could express via the public API is by definition authorized; a malicious embedding application is out of scope."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-ot-network-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Network peer on the OT network"
+              }
+            ],
+            "persona": {
+              "description": "Primary adversary for the wire boundary: can read, modify, drop, replay, or inject frames on the cleartext protocols, and can MITM the OPC UA channel when the default permissive certificate verifier is in use. Also covers buggy or compromised PLC firmware sending malformed bytes."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "End user of the embedding application"
+              }
+            ],
+            "persona": {
+              "description": "Out of scope: PLC4X has no concept of an end user; the embedding application owns authentication, authorization, and vetting of user-supplied tag-address strings."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "PLC4X is an in-process library with no long-lived daemons; all sockets are outbound, it spawns no child processes at runtime, and it does not mutate process-wide global state."
+        },
+        {
+          "description": "The OT network is assumed to be operated as a defended perimeter by the integrator; for every cleartext protocol it is the only security control."
+        },
+        {
+          "description": "The JCE provider shipped with the JVM provides the cryptographic primitives (AES, RSA, HMAC, X.509 parsing) used by the OPC UA driver; OPC UA keystores and truststores are loaded from operator-configured paths."
+        },
+        {
+          "description": "plc4c and plc4py are flagged 'not ready for usage' in the README and plc4net is abandoned; findings against them are unsupported-component until the README changes."
+        },
+        {
+          "description": "The raw-socket transport requires CAP_NET_RAW (or Administrator) privileges; other transports need only a non-privileged user."
+        },
+        {
+          "description": "Build-time tooling (mspec compiler, code-generation), dev/test utilities, simulated/mock drivers, and the pcap-replay transport are not part of the deployed security surface."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-wire-parser-memory-safety",
+        "name": "Memory corruption, hang, or unbounded allocation in wire parsers on adversarial PLC bytes",
+        "description": "Per-driver wire parsers and generated readwrite code, reachable from bytes a remote PLC or attacker on the OT network returns over the configured transport, must not corrupt host memory, infinite-loop, allocate unboundedly, or crash the host process on adversarial input (JVM heap exhaustion from a bounded-input expansion factor, parser hang, StackOverflowError from unbounded recursion; in Go goroutine hang or unbounded allocation; in C heap/stack corruption, OOB read/write, use-after-free). This is the most reachable committed property and the most likely site of real findings. Security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drivers",
+          "asset-transports"
+        ],
+        "mitigations": [
+          "control-spi3-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-opcua-permissive-certificates",
+        "name": "OPC UA MITM via the default permissive certificate verifier",
+        "description": "When trust-store-file is unset (the default), the OPC UA driver uses PermissiveCertificateVerifier and accepts every server certificate without validation; an MITM attacker on the OT network can present any certificate and become the encryption peer even under Basic256Sha256 with SIGN_ENCRYPT. Maintainer ruling: this default should be changed and reported; a report that the driver accepts an attacker-presented certificate is VALID (a gap the PMC intends to fix toward secure-by-default), not a non-default-build exclusion.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-opcua-security"
+        ],
+        "mitigations": [
+          "control-opcua-production-config",
+          "control-spi3-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-opcua-secure-channel-break",
+        "name": "Break of the configured OPC UA secure channel",
+        "description": "With a security policy of Basic128Rsa15/Basic256/Basic256Sha256/Aes128_Sha256_RsaOaep/Aes256_Sha256_RsaPss, message security SIGN or SIGN_ENCRYPT, and a configured trust store, wire bytes an on-path attacker can decrypt or modify undetected, a handshake completed with a certificate that does not chain to a trust-store root, or a handshake completing with a policy weaker than the URI implies all violate the driver's cryptographic properties. Security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-opcua-security"
+        ],
+        "mitigations": [
+          "control-opcua-production-config"
+        ]
+      },
+      {
+        "bom-ref": "threat-knx-xxe",
+        "name": "XXE, external-DTD, or external-schema resolution in the KNX .knxproj parser",
+        "description": "An XML processor in EtsParser resolving an external entity, external DTD, or external schema would allow file disclosure or SSRF from a .knxproj file. XXE, external DTD, and external schema processing are explicitly disabled (DISALLOW_DOCTYPE_DECL, FEATURE_SECURE_PROCESSING, empty ACCESS_EXTERNAL_DTD/SCHEMA), so XXE reports are known non-findings; a bypass of this hardening would be security-critical. ZIP-slip protection in the unzip step and BACnet EDE parser robustness are addressed in the SPI3 rewrite.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-file-parsers"
+        ],
+        "mitigations": [
+          "control-knx-xxe-hardening",
+          "control-spi3-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-cleartext-ot-protocols",
+        "name": "Interception, modification, replay, or spoofing on cleartext OT protocols",
+        "description": "Modbus, S7 (PUT/GET), BACnet/IP, IEC-60870-5-104, Profinet, CANopen, KNXnet/IP, C-Bus, DF1, AB-Ethernet, EtherNet/IP, UMAS, ADS/AMS payload, Open-Protocol, and Firmata as standardized do not authenticate the peer, protect message integrity, or encrypt; anyone on the OT network can spoof a master or replay commands. This describes the protocols, not the library; PLC4X cannot add what the protocol does not have and adds no replay protection or transport tunneling of its own (by design, protocol-disclaimed).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drivers",
+          "asset-plc-devices"
+        ],
+        "mitigations": [
+          "control-ot-perimeter",
+          "control-external-tunnel",
+          "control-spi3-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-opcua-discovery-mitm",
+        "name": "MITM of the unencrypted OPC UA discovery handshake",
+        "description": "The OPC UA spec conducts discovery over security-policy NONE; an attacker on the path during discovery can rewrite advertised endpoints, server certificates, and supported policies before the driver chooses what to honor. This is the protocol, not a PLC4X bug (by design, protocol-disclaimed).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-opcua-security"
+        ],
+        "mitigations": [
+          "control-disable-discovery"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-tag-strings",
+        "name": "Parser bugs reachable from user-supplied tag-address strings",
+        "description": "Tag-address strings are trusted caller input by default; the embedding application owns vetting when it sources them from end users, and syntactic-validation reports are out of model. A parser crash, hang, or unbounded allocation on a malformed address is a hardening finding, and is treated as a valid security finding when the parser is memory-corrupting and the embedding application does pass user-controlled strings.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drivers"
+        ],
+        "mitigations": [
+          "control-vet-tag-addresses"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-embedding-application",
+        "name": "Hostile embedding application or unmanaged end users",
+        "description": "The embedding application supplies every connection URL, PlcAuthentication, tag-address string, and written value; anything it can express via the public API is authorized by definition. PLC4X is not a defender against the embedding application or its end users, provides no end-user authentication or per-tag authorization, and the physical consequences of an API-authorized write are downstream to the integrator's process design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-embedding-authorization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-compromised-plc-semantics",
+        "name": "Compromised PLC firmware sending spec-compliant but semantically wrong data",
+        "description": "A compromised PLC that produces wrong measurement values while passing whatever authentication the protocol provides is out of model: the device is the source of truth for its own data. Wrong wire framing from the same device remains in-model for parser robustness.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plc-devices"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-api-dos",
+        "name": "Denial of service via an unthrottled API caller",
+        "description": "PLC4X provides no per-call rate limit or backpressure on the API side; if the embedding application calls read in a hot loop the driver issues as many requests as the transport allows. Bounding request rate and queue depth is the embedding application's responsibility. The SPI3 per-connection ring buffer additionally bounds per-connection allocation.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-caller-rate-limit"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-api",
+        "boundary": "boundary-api",
+        "name": "API trust boundary (B1)",
+        "description": "The embedding application is trusted by construction; URL strings, PlcAuthentication objects, tag-address strings, and write values are trusted caller input unless the embedding application opts user-supplied strings into untrusted handling.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-untrusted-tag-strings",
+          "threat-malicious-embedding-application",
+          "threat-api-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-vet-tag-addresses",
+          "control-embedding-authorization",
+          "control-caller-rate-limit"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-wire",
+        "boundary": "boundary-wire",
+        "name": "Wire trust boundary (B2)",
+        "description": "No authentication by protocol design for the cleartext OT protocols; the OT-network perimeter is the only security control, and wire bytes returned to the driver are untrusted input crossing into the parser.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-wire-parser-memory-safety",
+          "threat-cleartext-ot-protocols",
+          "threat-compromised-plc-semantics"
+        ],
+        "controlsAtBoundary": [
+          "control-ot-perimeter",
+          "control-external-tunnel",
+          "control-spi3-hardening"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-opcua",
+        "boundary": "boundary-opcua",
+        "name": "OPC UA trust boundary (B2-OPCUA)",
+        "description": "With an encrypted policy and a configured trust store, the channel is mutually authenticated and encrypted; with the default permissive verifier, server certificates are not validated and the boundary collapses toward cleartext. Findings here are weighted more heavily than in cleartext-protocol drivers because this is the one place the repository promises a cryptographic property.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-opcua-permissive-certificates",
+          "threat-opcua-secure-channel-break",
+          "threat-opcua-discovery-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-opcua-production-config",
+          "control-disable-discovery",
+          "control-spi3-hardening"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-ot-perimeter",
+      "name": "Operate the OT network as the security perimeter",
+      "description": "Operate every cleartext protocol (Modbus, S7, BACnet/IP, IEC-60870-104, Profinet, CANopen, KNXnet/IP, C-Bus, DF1, AB-Ethernet, EtherNet/IP, UMAS, ADS/AMS) on an OT VLAN behind a firewall with no untrusted-network egress, ideally with monitoring; PLC4X provides no transport security for these protocols by design.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-external-tunnel",
+      "name": "Deploy an external tunnel for hostile paths",
+      "description": "If a cleartext protocol must traverse a hostile path, deploy an external tunnel (site-to-site VPN, IPSec, stunnel/TLS-wrapping proxy, or a point-to-point channel); PLC4X does not bundle such a tunnel.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-wire"
+      ]
+    },
+    {
+      "bom-ref": "control-opcua-production-config",
+      "name": "Configure OPC UA production security settings",
+      "description": "For OPC UA in production, set security-policy to Basic256Sha256 or stronger, message-security to SIGN_ENCRYPT, and a trust-store-file containing only the expected server certificate or its issuing CA; where mutual authentication is required, provision a client certificate via key-store-file/key-store-password rather than relying on the auto-generated self-signed certificate. The default of NONE with no trust store is not the production posture.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-opcua-security"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-discovery",
+      "name": "Disable OPC UA discovery over hostile paths",
+      "description": "Where discovery would traverse a hostile path, disable discovery and configure the endpoint explicitly via endpoint-host and endpoint-port; the discovery handshake is unauthenticated by OPC UA spec.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-opcua-security"
+      ]
+    },
+    {
+      "bom-ref": "control-vet-tag-addresses",
+      "name": "Vet tag-address strings sourced from end users",
+      "description": "Vet tag-address strings before passing them to PLC4X if they are sourced from end users of the embedding application; the parser provides a correctness boundary against malformed strings, not a security boundary against attacker-supplied ones.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-embedding-authorization",
+      "name": "Authenticate and authorize end users in the embedding application",
+      "description": "Authorize which tags may be read or written by which end user inside the embedding application; PLC4X has no end-user identity. Where the target protocol has its own permission system, PLC4X proxies it, deferring the check to the target PLC.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-caller-rate-limit",
+      "name": "Bound request rate and queue depth in the embedding application",
+      "description": "Bound the request rate and queue depth on the embedding-application side if DoS resistance against a misbehaving caller is needed; PLC4X has no API-level throttle.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-api"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege-process",
+      "name": "Run the embedding process with minimum host privileges",
+      "description": "Most transports need only a non-privileged user; grant CAP_NET_RAW (or Administrator) specifically to the embedding process for the raw-socket transport rather than running as root. Treat simulated://, mock://, and pcap-replay as dev/test fixtures and do not deploy the plc4c, plc4py, or plc4net artifacts in production while the README flags them as not ready.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-transports"
+      ]
+    },
+    {
+      "bom-ref": "control-knx-xxe-hardening",
+      "name": "XXE, external-DTD, and external-schema processing disabled in the KNX ETS parser",
+      "description": "EtsParser sets DISALLOW_DOCTYPE_DECL, FEATURE_SECURE_PROCESSING, and empty ACCESS_EXTERNAL_DTD/SCHEMA, disabling XXE, external DTD, and external schema resolution; FEATURE_SECURE_PROCESSING also mitigates XML billion-laughs attacks.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-file-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-spi3-hardening",
+      "name": "SPI3 rewrite: secure-by-default OPC UA, TLS transports, and bounded parsers",
+      "description": "Per PMC review, the SPI3 rewrite moves the OPC UA driver to secure-by-default (the insecure path becomes explicitly opt-in and the permissive certificate verifier is a gap to fix), adds tls and tls-psk transports that can secure a tcp connection where the target PLC or gateway supports it, hardens the ETS/XML parsers, and gives each connection a fixed-length ring buffer that bounds per-connection allocation against the huge-fake-message class of issue.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-opcua-security",
+        "asset-drivers",
+        "asset-transports"
+      ]
+    }
+  ]
+}

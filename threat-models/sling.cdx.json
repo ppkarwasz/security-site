@@ -1,0 +1,1063 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-sling",
+      "name": "Apache Sling",
+      "description": "Framework of Java OSGi bundles for building RESTful, content-driven web applications backed by a JCR repository (typically Apache Jackrabbit Oak). Its organising idea is URL to JCR resource to script: a request path resolves to a content node, the node's sling:resourceType selects a rendering script (HTL/Sightly, JSP, optionally JavaScript/Groovy/FreeMarker/Thymeleaf), and writes go through SlingPostServlet using the requesting user's JCR session. Around the core sit pluggable authentication handlers (form, OAuth/OIDC, SAML2), an OSGi installer that can install bundles from JCR content, a repoinit DSL, content distribution between instances, and operator surfaces (Felix Web Console, JMX, WebDAV/DavEx). The unit of supported product is the individual OSGi bundle; example assemblies (Sling Starter, Sling CMS), archetypes, samples, test bundles, and build-time tooling are out of model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/sling/blob/master/docs/threat-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://sling.apache.org/"
+        },
+        {
+          "type": "documentation",
+          "url": "https://sling.apache.org/project-information/security.html",
+          "comment": "Published security policy; remains canonical for the reporting process."
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "sling"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/sling/blob/master/docs/threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/sling/master/docs/threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-sling",
+      "name": "Sling deployment",
+      "description": "Trust boundaries from the threat model: TB1 HTTP edge (anonymous or low-privilege clients to engine, scripts, and JCR), TB2 distribution peer, TB3 JCR session (a given user's session versus service-user/admin sessions, with Oak ACLs authoritative), TB4 bundle/package/repoinit install, TB6 external integrations (SMTP, Kafka, OAuth/SAML IdPs, MongoDB, Couchbase, Clam, MCP clients), and TB7 operator surface (Web Console, JMX, DavEx). TB5 (build/release) is out of model. The data flow is HTTP client through authentication handler, ResourceResolver against Oak, ServletResolver bounded by search paths, then script engines, POST servlet, or GET servlets, through rewriter and XSS API to the response.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-request-engine",
+          "type": "component",
+          "name": "HTTP request engine and resolution",
+          "description": "SlingMainServlet/SlingRequestProcessor, resource resolution (ResourceResolverFactory, ResourceUtil.normalize), and servlet/script resolution (servlets-resolver), which must stay within configured search paths.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-post-servlet",
+          "type": "component",
+          "name": "SlingPostServlet write surface",
+          "description": "Single write surface whose request parameters (:operation delete/copy/move/import, sling:resourceType, :redirect, @TypeHint, @CopyFrom/@MoveFrom, :name hints) create, modify, copy, move, and delete content, always through the requesting user's JCR session.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-scripting-engines",
+          "type": "module",
+          "name": "Scripting engines",
+          "description": "HTL/Sightly (contextual auto-escaping), JSP, JavaScript (Rhino), Groovy, FreeMarker, Thymeleaf, ESX. Only HTL carries a contextual-escape contract; JSP/Groovy/JS reach full Java, and no sandbox is provided for them.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-auth-handlers",
+          "type": "module",
+          "name": "Authentication handlers",
+          "description": "auth-core, auth-form (/j_security_check), auth-oauth-client, auth-saml2; pluggable authentication with pass-through semantics.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-jcr-repository",
+          "type": "data-store",
+          "name": "JCR repository (Jackrabbit Oak)",
+          "description": "Content repository whose ACLs/permissions are authoritative for content access; Sling does not re-implement or override repository authorization.",
+          "zone": "zone-repository"
+        },
+        {
+          "bom-ref": "asset-osgi-installer",
+          "type": "module",
+          "name": "OSGi installer and provisioning path",
+          "description": "installer-core, installer-provider-jcr/-file, content-package factories (installer-factory-packages, jcr-contentloader, feature-extension-content), and the repoinit DSL (jcr-repoinit, repoinit-parser). High blast radius: a bundle install equals full code execution.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-distribution",
+          "type": "service",
+          "name": "Content distribution",
+          "description": "distribution-api/core/journal, journal-kafka with Avro/Kryo serializers. Peers are authenticated (HTTP Basic, OAuth, mTLS, or Kafka SASL/ACL) but payloads carry no signature/MAC; the HTTP Digest header is a corruption checksum, not a MAC.",
+          "zone": "zone-runtime"
+        },
+        {
+          "bom-ref": "asset-operator-surfaces",
+          "type": "endpoint",
+          "name": "Operator surfaces",
+          "description": "Felix Web Console, JMX provider, WebDAV/DavEx, tooling-support bundles, and the opt-in mcp-server; fully-privileged surfaces that must be access-restricted to operators.",
+          "zone": "zone-runtime"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-http-clients",
+          "name": "HTTP clients",
+          "type": "trust",
+          "description": "Anonymous and authenticated low-privilege HTTP clients on the public network (TB1); anonymous until authenticated, then bounded by JCR ACLs."
+        },
+        {
+          "bom-ref": "zone-runtime",
+          "name": "Sling runtime",
+          "type": "trust",
+          "description": "The OSGi framework and Sling bundles; OSGi bundle authors and operators are fully trusted (code deploy equals total compromise)."
+        },
+        {
+          "bom-ref": "zone-repository",
+          "name": "JCR repository",
+          "type": "trust",
+          "description": "Jackrabbit Oak content store; Oak enforces ACLs for every session (TB3)."
+        },
+        {
+          "bom-ref": "zone-distribution-peers",
+          "name": "Distribution peers",
+          "type": "trust",
+          "description": "Remote Sling instances or Kafka topic producers on the distribution channel (TB2); authenticated but possibly adversarial (Byzantine)."
+        },
+        {
+          "bom-ref": "zone-install-sources",
+          "name": "Install sources",
+          "type": "trust",
+          "description": "Content under /apps/*/install, watched filesystem directories, content packages, and boot repoinit scripts (TB4); trusted for authorship, write access there equals OSGi bundle-install rights."
+        },
+        {
+          "bom-ref": "zone-external-services",
+          "name": "External integrations",
+          "type": "trust",
+          "description": "SMTP, Kafka, OAuth/SAML identity providers, MongoDB, Cassandra, Couchbase, Clam, MCP clients (TB6)."
+        },
+        {
+          "bom-ref": "zone-operator-network",
+          "name": "Operator network",
+          "type": "trust",
+          "description": "Anyone on the admin network reaching the Web Console, JMX, and DavEx surfaces (TB7); operators are fully trusted for the instance."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-edge",
+          "name": "TB1 HTTP edge",
+          "type": "trust",
+          "zones": [
+            "zone-http-clients",
+            "zone-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-distribution",
+          "name": "TB2 distribution peer",
+          "type": "trust",
+          "zones": [
+            "zone-distribution-peers",
+            "zone-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-jcr-session",
+          "name": "TB3 JCR session",
+          "type": "trust",
+          "zones": [
+            "zone-http-clients",
+            "zone-repository"
+          ]
+        },
+        {
+          "bom-ref": "boundary-install-path",
+          "name": "TB4 bundle/package/repoinit install",
+          "type": "trust",
+          "zones": [
+            "zone-install-sources",
+            "zone-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-external-integrations",
+          "name": "TB6 external integrations",
+          "type": "trust",
+          "zones": [
+            "zone-runtime",
+            "zone-external-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-operator-surface",
+          "name": "TB7 operator surface",
+          "type": "trust",
+          "zones": [
+            "zone-operator-network",
+            "zone-runtime"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-anonymous-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted; arbitrary HTTP over the public network (TB1), including malformed framing, adversarial selectors/paths, and crafted uploads."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated low-privilege user"
+              }
+            ],
+            "persona": {
+              "description": "Partially trusted; holds a legitimate JCR principal bounded by Oak ACLs. Goal in the adversary model: privilege escalation across ACL boundaries, such as the author-to-admin escalation realised by CVE-2024-23673."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Administrator"
+              }
+            ],
+            "persona": {
+              "description": "The admin JCR principal; trusted for the instance. An attacker holding admin or code-deploy rights has already won and is out of the adversary model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Service user"
+              }
+            ],
+            "persona": {
+              "description": "In-process bundle principal mapped through serviceusermapper; trusted for its declared scope."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-distribution-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Distribution peer"
+              }
+            ],
+            "persona": {
+              "description": "Authenticated, possibly adversarial remote instance over HTTP or Kafka (TB2); can produce any payload."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-bundle-author",
+          "party": {
+            "roles": [
+              {
+                "name": "OSGi bundle author"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted; their code runs as Java inside the OSGi container (TB4)."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-package-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Content-package / repoinit author"
+              }
+            ],
+            "persona": {
+              "description": "Trusted for declared install paths and the repoinit DSL, supplied via content packages, the Feature Model, or boot configuration (TB4); no cryptographic authorship verification is performed."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted for the instance; uses the Web Console, JMX, and DavEx (TB7)."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "There is no single supported JVM version for Sling: each OSGi bundle chooses its Java version (currently spanning Java 8 to 21, set by the bundle's parent-pom configuration); OSGi R7+ on Apache Felix. A single minimum-Java figure is a property of a distribution, not of Sling."
+        },
+        {
+          "description": "Apache Jackrabbit Oak is the repository; Oak ACLs/permissions are authoritative for content access and Sling does not re-implement or override repository authorization."
+        },
+        {
+          "description": "TLS termination is the deployer's responsibility (reverse proxy/Dispatcher); Sling does not assume the wire is encrypted."
+        },
+        {
+          "description": "Write access to filesystem directories watched by installer-provider-file equals OSGi bundle-install rights."
+        },
+        {
+          "description": "Core bundles spawn no child processes, register no signal handlers, and touch global JVM state only in scoped, documented exceptions (jaxp-configurator's deliberate JVM-wide JAXP defaults, commons-scheduler's quartz update-check flag, commons-log's transient logging property, feature-launcher's slf4j properties and shutdown hook); resourceresolver's StringInterpolationProviderImpl reads System.getenv only for operator-configured placeholders."
+        },
+        {
+          "description": "Sling is single-tenant per JVM; OSGi visibility is the only inter-bundle isolation and multi-tenancy requires separate JVMs."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-script-resolution-bypass",
+        "name": "Script resolution or execution outside configured search paths",
+        "description": "URL parts (selectors, extension, suffix, path) cause a script to be resolved or executed outside the configured search paths (/apps, /libs, additional configured paths), through path traversal, selector confusion, or resolver bypass. Path normalisation must not leave traversal sequences that bypass the path check. A recurring, realised CVE-class (RCE-equivalent) bug class: CVE-2024-23673, where ResourceUtil.normalize left /../ in the path, bypassed isPathAllowed(), and enabled author-to-admin RCE.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine"
+        ],
+        "mitigations": [
+          "control-search-path-enforcement"
+        ]
+      },
+      {
+        "bom-ref": "threat-jcr-acl-bypass",
+        "name": "Sling bypasses Oak ACLs for content access",
+        "description": "A principal without jcr:read reads a node via ResourceResolver, or a principal without write rights modifies it via SlingPostServlet, because Sling used a more-privileged session or skipped the session. Sling's commitment is non-bypass; the semantics of Oak's ACL evaluation belong to Jackrabbit (reports of the shape 'Oak permitted X' route upstream). CVE-class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine",
+          "asset-jcr-repository"
+        ],
+        "mitigations": [
+          "control-requesting-session-writes",
+          "control-repoinit-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-postservlet-session-elevation",
+        "name": "SlingPostServlet write through an elevated session",
+        "description": "SlingPostServlet performs a write via a silently-elevated (admin/service-user/system) session for a non-elevated request, or bypasses the session entirely, regardless of :operation, @TypeHint, @CopyFrom and similar parameters. CVE-class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-post-servlet"
+        ],
+        "mitigations": [
+          "control-requesting-session-writes"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthorized-bundle-install",
+        "name": "Bundle install without write access to a configured install path",
+        "description": "A bundle installs from an unauthorised path, or by a principal lacking write rights on /apps/*/install or another configured watch path, via installer-provider-jcr/-file. CVE-class (full RCE). 'An admin/operator installed a malicious bundle' is by design, since TB4 authors are trusted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-osgi-installer"
+        ],
+        "mitigations": [
+          "control-repoinit-acls",
+          "control-login-admin-whitelist"
+        ]
+      },
+      {
+        "bom-ref": "threat-xss-encoding-failure",
+        "name": "XSS via escaping or output-integrity failure",
+        "description": "A value emitted via standard HTL syntax appears unescaped for its HTML/attribute/JS/URI/CSS context (explicit @context='unsafe' is a documented escape); input survives the correct XSSAPI encodeForX call and still executes; a rewriter transformer un-escapes or re-introduces active markup into correctly escaped content; or ContentDispositionFilter fails to force Content-Disposition: attachment for a binary under a configured path (XSS via uploaded SVG/HTML). All CVE-class for the affected bundle. Realised class: CVE-2022-45064 (include-based XSS via content-type confusion, fixed by an opt-in engine check) and CVE-2023-22849 (stored/reflected XSS in the Sling CMS example assembly).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-scripting-engines",
+          "asset-request-engine"
+        ],
+        "mitigations": [
+          "control-htl-auto-escaping",
+          "control-xss-api",
+          "control-content-disposition-filter",
+          "control-include-content-type-check"
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-handler-bypass",
+        "name": "Authentication handler elevation or cryptographic-envelope bypass",
+        "description": "A request becomes authenticated as principal P without valid credentials for P (handlers must either authenticate or pass through, never silently elevate); or the OAuth/OIDC and SAML2 handlers accept an unsigned, expired, replayed, or wrong-audience assertion (state/nonce, audience, issuer, signature, expiry checks). Both CVE-class. Related realised class: CVE-2017-15700, an open redirect/credential hijack via a newline in the auth-form resource redirect parameter.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth-handlers"
+        ],
+        "mitigations": [
+          "control-auth-handler-contracts"
+        ]
+      },
+      {
+        "bom-ref": "threat-superlinear-dos",
+        "name": "Super-linear resource consumption on attacker-controlled input",
+        "description": "A small input causes disproportionate CPU/memory/time in a documented operation: algorithmic-complexity DoS, billion-laughs, unbounded parser recursion, or ReDoS in a shipped parser. The documented threshold: super-linear (O(n^2), exponential, unbounded recursion) consumption on inputs of reasonable size is a bug; linear consumption proportional to input is not. CVE-class when the blowup is easily reachable by a single, small, attacker-controlled input via the HTTP edge; hardening otherwise. Realised: CVE-2023-26513 (repeated merge-root segments in a resourcemerger path spike CPU) and CVE-2022-47937 (unbounded recursion on nesting depth in the retired commons-json parser).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine"
+        ],
+        "mitigations": [
+          "control-migrate-retired-modules"
+        ]
+      },
+      {
+        "bom-ref": "threat-log-forging",
+        "name": "Log forging via request data",
+        "description": "A request containing CRLF/control characters (%0A%0D) forges fake log lines because values derived from the request (URL, headers) reach the log without neutralisation. CVE-class; realised as CVE-2022-32549 (CRLF in URL forged log lines via the commons-log logback integration and the engine request-progress logger).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine"
+        ]
+      },
+      {
+        "bom-ref": "threat-csrf-bypass",
+        "name": "Cross-origin state-changing request despite ReferrerFilter",
+        "description": "A cross-origin write succeeds despite a non-whitelisted Referer/Origin. The ReferrerFilter default-deny for cross-origin POST/PUT/DELETE is treated as load-bearing CSRF protection: it was the basis for withdrawing CVE-2019-0198 (a POST-only XSS judged not exploitable because the cross-origin write could not be triggered). CVE-class for the bundle.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-post-servlet"
+        ],
+        "mitigations": [
+          "control-referrer-filter"
+        ]
+      },
+      {
+        "bom-ref": "threat-distribution-peer-auth-bypass",
+        "name": "Distribution peer-authentication or digest-check bypass",
+        "description": "A request without, or with forged, peer credentials mutates the distribution receiver, or the HTTP-transport digest check fails to reject a corrupted payload. Also in scope: on the HTTP distribution transport, an authenticated peer violating a property other than payload integrity (crash, super-linear consumption, JCR-session escape). CVE-class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-distribution"
+        ],
+        "mitigations": [
+          "control-distribution-peer-auth",
+          "control-distribution-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-webconsole-weakening",
+        "name": "Sling bundle weakens the operator's Web Console restriction",
+        "description": "A Sling bundle weakens or bypasses the operator-configured Web Console authentication/authorization (for example extensions-webconsolesecurityprovider failing open), letting a non-operator reach console functions. The Web Console is a fully-privileged operator surface that must be restricted to users trusted with total control over the deployment. CVE-class if a bundle weakens a configured restriction; the absence of a restriction in an example assembly is out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-surfaces"
+        ],
+        "mitigations": [
+          "control-webconsole-security-provider",
+          "control-lockdown-operator-surfaces"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-content-package",
+        "name": "Malformed content package defeats runtime package processing",
+        "description": "A small crafted FileVault package exhausts memory/CPU on unpack (decompression bomb, super-linear CPU) or an entry escapes the declared target paths on extraction (zip-slip) in the runtime factories (installer-factory-packages, jcr-contentloader, feature-extension-content). Package authorship is trusted, but processing is expected to be defensive; such findings are hardening-grade (fixed at maintainer discretion), not held to the CVE-class bar.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-osgi-installer"
+        ],
+        "mitigations": [
+          "control-harden-assemblies"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe-untrusted-xml",
+        "name": "XXE in XML parsing of user-supplied documents",
+        "description": "XXE when parsing user XML/PDF/Office content (for example via Tika through Oak). Listed among the well-known attack classes left to the caller: mitigated by the jaxp-configurator bundle, which the deployer must include and start first; custom assemblies that do not are exposed. CVE-2025-66516 was handled as punt-upstream to Oak/Tika with jaxp-configurator as the Sling-side mitigation; a mitigation failure in jaxp-configurator itself would be a valid finding against that bundle.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine"
+        ],
+        "mitigations": [
+          "control-jaxp-configurator"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-generic-dos",
+        "name": "Generic denial of service",
+        "description": "Streaming-bomb uploads, request floods, repeated identical requests, slowloris: per the security policy, no magic workarounds are promised for generic problems such as a client streaming lots of data or re-requesting the same URL repeatedly. Sling imposes no global request-body cap (the servlet container bounds it) and no Sling-layer rate limiting; the deployer rate-limits at the edge. Only super-linear consumption is in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-request-engine"
+        ],
+        "mitigations": [
+          "control-edge-protections"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-code-deploy",
+        "name": "Attacks requiring admin privileges or code-deploy rights",
+        "description": "The most explicit boundary in Sling security practice: the ability to deploy code into the OSGi container is treated as total compromise, so any exploit that first requires deploying a bundle or holding administrative privileges is out of scope (an expression-language-injection report against pipes was rejected on exactly this basis). Non-HTL scripts (Groovy/JSP/JS) calling Runtime.exec are either operator-written or require jcr:write on a script path, which is already RCE-equivalent. Build/release-pipeline attackers (TB5) are ASF-level and also out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-osgi-installer",
+          "asset-scripting-engines"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-vulnerable-dependencies",
+        "name": "Vulnerable dependencies of Sling bundles",
+        "description": "Vulnerable dependencies of Sling bundles are not, by themselves, Sling security issues: bundles import dependencies at the lowest compatible API version and the assembler/deployer resolves non-vulnerable versions into the assembled set. Exceptions where Sling does act (Dependabot policy): libraries inlined/embedded in a bundle, Maven-plugin dependencies, bundles shipped directly in Sling Starter/Karaf features/Sling CMS, Node.js dependencies, and oldest-secure-version bumps. Established practice verifies that an advisory describes a path actually reachable in Sling before acting.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-default-credentials",
+        "name": "Default credentials and example-assembly defaults in production",
+        "description": "Default Felix Web Console credentials, the example JCR admin password, Starter ACLs, and other assembly-level defaults are dev-convenience choices of example assemblies, not Sling bundle properties. Any 'default admin/admin in production' or 'Starter ships weak ACLs' report is out of model; operators must change credentials and restrict the console before non-dev exposure. Exposing /system/console to the public internet is the most common first-deployment mistake.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-surfaces"
+        ],
+        "mitigations": [
+          "control-lockdown-operator-surfaces"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-distribution-payload-tampering",
+        "name": "Malicious payload from a legitimately authenticated distribution peer",
+        "description": "Content distribution authenticates the peer, not the payload: Sling provides no payload signature, MAC, or replay nonce, so a peer with a legitimate identity can ship arbitrary content. Payload integrity between authenticated peers is explicitly disclaimed; per-payload authenticity must be signed externally by the operator. The HTTP Digest header is a corruption checksum, not a MAC (a false friend).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-distribution"
+        ],
+        "mitigations": [
+          "control-distribution-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-kafka-journal-deserialization",
+        "name": "Deserialization of malformed messages on the Kafka journal transport",
+        "description": "For the Kafka journal transport (distribution-journal-kafka with the Avro/Kryo serializers), the topic ACL is the trust boundary: only an authenticated producer can place bytes on the topic, so the serialized message is trusted input. Sling makes no claim that the deserializer is safe against malformed messages; a deserialization crash/RCE there is out of model (trusted input), unlike the HTTP-transport malformed-package case, which remains in model. The deployer must ACL the topic.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-distribution"
+        ],
+        "mitigations": [
+          "control-distribution-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-non-htl-unescaped-output",
+        "name": "Missing auto-escaping and false-friend primitives outside HTL",
+        "description": "Only HTL auto-escapes: JSP, JavaScript, Groovy, FreeMarker, Thymeleaf, and ESX output is not auto-escaped and authors must call XSSAPI with the encoder for the correct context. Documented false friends are not security primitives: XSSAPI.getValidHref validates href syntax only and passes non-javascript: schemes such as data: by design; commons-mime content-type detection is advisory; commons-crypto is a convenience layer with no constant-time guarantee; a JCR session is an authorization context, not a MAC. Related caller-owned classes: SSTI in operator templates composed from request parameters, ReDoS in operator-supplied regexes, SSRF from operator script HTTP calls, open redirects via unvalidated :redirect targets, and script-source confidentiality (scripts are content governed by assembly ACLs).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-scripting-engines"
+        ],
+        "mitigations": [
+          "control-xss-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-disclaimed-environmental-properties",
+        "name": "Disclaimed environmental properties",
+        "description": "Sling provides no transport security (TLS is terminated upstream by the deployer), no rate limiting or brute-force protection on login endpoints, no multi-tenant isolation within a single JVM (single-tenant per JVM; OSGi visibility is the only inter-bundle isolation), no sandbox for bundle code or non-HTL script engines, no constant-time comparison guarantees anywhere unless a bundle's docs explicitly claim it, and no defense against side channels (timing, cache, power). Local privilege escalation on the host and networking below TLS (BGP, DNS, ARP) are out of layer.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-request-engine",
+          "asset-auth-handlers"
+        ],
+        "mitigations": [
+          "control-edge-protections"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-edge",
+        "boundary": "boundary-http-edge",
+        "name": "TB1 HTTP edge trust boundary",
+        "description": "Anonymous and low-privilege authenticated clients versus the engine, scripts, and JCR. Everything a client sends (path, selectors, extension, suffix, POST parameters, multipart uploads, redirect targets, SAML/OAuth callbacks) is attacker-controllable; a finding is in model iff reachable from a TB1 request at the relevant role.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-script-resolution-bypass",
+          "threat-jcr-acl-bypass",
+          "threat-postservlet-session-elevation",
+          "threat-xss-encoding-failure",
+          "threat-auth-handler-bypass",
+          "threat-superlinear-dos",
+          "threat-log-forging",
+          "threat-csrf-bypass",
+          "threat-generic-dos",
+          "threat-xxe-untrusted-xml"
+        ],
+        "controlsAtBoundary": [
+          "control-search-path-enforcement",
+          "control-requesting-session-writes",
+          "control-auth-handler-contracts",
+          "control-referrer-filter",
+          "control-content-disposition-filter",
+          "control-jaxp-configurator",
+          "control-edge-protections"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-distribution",
+        "boundary": "boundary-distribution",
+        "name": "TB2 distribution trust boundary",
+        "description": "Remote Sling instances (or anyone who can produce to the Kafka topic) versus the local JCR write path. Peers are authenticated but modelled as Byzantine; on the Kafka journal transport the topic ACL is the trust boundary and messages are trusted input.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-distribution-peer-auth-bypass",
+          "threat-distribution-payload-tampering",
+          "threat-kafka-journal-deserialization"
+        ],
+        "controlsAtBoundary": [
+          "control-distribution-peer-auth",
+          "control-distribution-hardening"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-jcr-session",
+        "boundary": "boundary-jcr-session",
+        "name": "TB3 JCR session trust boundary",
+        "description": "A given user's JCR session versus service-user/admin sessions; Oak enforces ACLs and every SlingPostServlet write goes through the requesting principal's session.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-jcr-acl-bypass",
+          "threat-postservlet-session-elevation"
+        ],
+        "controlsAtBoundary": [
+          "control-requesting-session-writes",
+          "control-repoinit-acls"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-install-path",
+        "boundary": "boundary-install-path",
+        "name": "TB4 install trust boundary",
+        "description": "Content under /apps/*/install, watched filesystem directories, content packages, and boot repoinit versus the OSGi framework and repository setup. Authors here are trusted (code deploy equals total compromise); only a low-privilege principal reaching an install path is an in-model finding, and package processing is expected to be defensive against malformed packages.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-unauthorized-bundle-install",
+          "threat-malformed-content-package",
+          "threat-admin-code-deploy"
+        ],
+        "controlsAtBoundary": [
+          "control-repoinit-acls",
+          "control-login-admin-whitelist",
+          "control-harden-assemblies"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-external-integrations",
+        "boundary": "boundary-external-integrations",
+        "name": "TB6 external integrations trust boundary",
+        "description": "SMTP, Kafka, OAuth/SAML identity providers, MongoDB, Couchbase, Clam, and MCP clients versus the Sling runtime; the OAuth/OIDC and SAML2 handlers must verify the cryptographic envelope of assertions arriving over this boundary.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-auth-handler-bypass"
+        ],
+        "controlsAtBoundary": [
+          "control-auth-handler-contracts"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-operator-surface",
+        "boundary": "boundary-operator-surface",
+        "name": "TB7 operator surface trust boundary",
+        "description": "The Web Console, JMX, DavEx/WebDAV, and mcp-server are fully-privileged operator surfaces; they are in model only if left exposed to unauthenticated traffic by an assembly's mounts/ACLs, and an operator deliberately exposing them is trusted input.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-webconsole-weakening",
+          "threat-default-credentials"
+        ],
+        "controlsAtBoundary": [
+          "control-webconsole-security-provider",
+          "control-lockdown-operator-surfaces"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-search-path-enforcement",
+      "name": "Servlet/script resolver search-path enforcement",
+      "description": "The servlet/script resolver respects its configured search-path list (/apps, /libs, additional configured paths): URL parts cannot cause a script to be resolved or executed outside them, and path normalisation must not leave traversal sequences that bypass the path check (engine, servlets-resolver, ResourceUtil.normalize).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-request-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-requesting-session-writes",
+      "name": "All access through the requesting principal's JCR session",
+      "description": "Oak ACLs are authoritative and Sling does not bypass them; SlingPostServlet dispatches every write through the requesting principal's JCR session, never a silently-elevated one. The commitment is correct session use, not Oak's ACL-evaluation semantics.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-jcr-session",
+        "asset-post-servlet"
+      ]
+    },
+    {
+      "bom-ref": "control-htl-auto-escaping",
+      "name": "HTL/Sightly contextual auto-escaping",
+      "description": "HTL is a contextual auto-escaping template language: a ${expression} emits content escaped for the surrounding HTML/attribute/JS/URI/CSS context, with the compiler inferring context and applying the matching filter. This applies only to HTL, not JSP or any other engine.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-scripting-engines"
+      ]
+    },
+    {
+      "bom-ref": "control-xss-api",
+      "name": "XSSAPI/XSSFilter context encoders",
+      "description": "org.apache.sling.xss.XSSAPI/XSSFilter produce output safe for the requested context (HTML body, attribute, JS, URI, CSS); JSP and non-HTL templates are expected to call into this bundle for every attacker-controlled output. Scope limit: getValidHref guarantees a syntactically valid href, not a safe URL scheme; it blocks javascript: but by design passes other schemes such as data:.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-scripting-engines"
+      ]
+    },
+    {
+      "bom-ref": "control-referrer-filter",
+      "name": "ReferrerFilter CSRF protection",
+      "description": "The ReferrerFilter rejects state-changing requests whose Referer/Origin is not allow-listed (default-deny for cross-origin POST/PUT/DELETE), active with a conservative allow-list when installed. Operators must configure it for the real production origin set and must not disable it.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-http-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-content-disposition-filter",
+      "name": "ContentDispositionFilter for uploaded binaries",
+      "description": "Forces Content-Disposition: attachment for binary downloads under configured paths, mitigating XSS via uploaded SVG/HTML. Disabled until configured with paths; operators must configure it for all paths serving user-uploaded binaries.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-http-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-include-content-type-check",
+      "name": "Engine include content-type-conflict check (opt-in)",
+      "description": "The engine's opt-in check throws when an included servlet sets a conflicting content-type, the CVE-2022-45064 hardening; kept off by default for backward compatibility and may flip on after a sufficient period.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-request-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-auth-handler-contracts",
+      "name": "Authentication handler contracts",
+      "description": "Authentication handlers either authenticate or pass through, never silently elevate; the OAuth/OIDC and SAML2 handlers verify the cryptographic envelope: state/nonce correlation, audience, issuer, signature, and expiry, with redirect-target validation in auth-form (the CVE-2017-15700 class).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-auth-handlers"
+      ]
+    },
+    {
+      "bom-ref": "control-jaxp-configurator",
+      "name": "Include and start jaxp-configurator first",
+      "description": "When installed and started first, jaxp-configurator sets JVM-global JAXP factory defaults to safe (XXE-off) values; it is the required mitigation for assemblies parsing user XML/PDF/Office content (documented via CVE-2025-66516).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-distribution-peer-auth",
+      "name": "Distribution peer authentication",
+      "description": "The distribution receiver requires a configured peer identity (HTTP Basic, OAuth, mTLS, or Kafka SASL/ACL); no anonymous network party can inject content, and messages cannot be forwarded unless the peer is authorized for the destinations. Sling provides no payload signature/MAC/replay nonce.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-distribution"
+      ]
+    },
+    {
+      "bom-ref": "control-distribution-hardening",
+      "name": "Operator hardening of distribution channels",
+      "description": "TLS the distribution channel, ACL the Kafka topic, do not expose the receive endpoint to untrusted networks, and sign packages externally if per-payload authenticity is needed; Sling authenticates peers, not payloads.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-distribution"
+      ]
+    },
+    {
+      "bom-ref": "control-webconsole-security-provider",
+      "name": "Web Console security provider",
+      "description": "extensions-webconsolesecurityprovider replaces the Felix default Web Console authentication with JCR-backed authentication when installed; an opt-in hardening building block, while the network/credential restriction itself remains the operator's.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-operator-surfaces"
+      ]
+    },
+    {
+      "bom-ref": "control-lockdown-operator-surfaces",
+      "name": "Lock down operator surfaces and credentials",
+      "description": "Remove the Web Console from production or restrict it by network, network-restrict /system/console, /system/sling/*, jcr-davex, jcr-webdav, jmx-provider, and mcp-server to the operator network, change all default credentials (including the JCR admin password) before any non-dev exposure, and configure sling.auth.requirements so no path is unintentionally anonymous.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-operator-surfaces"
+      ]
+    },
+    {
+      "bom-ref": "control-repoinit-acls",
+      "name": "Explicit repository ACLs via repoinit",
+      "description": "Set ACLs explicitly via repoinit for /apps, /libs, /etc, and any */install path, default-deny write for non-admins; granting write on /apps or /libs to a non-admin is RCE-equivalent. Treat repoinit scripts as source code: they create users and ACLs at boot.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jcr-repository",
+        "boundary-install-path"
+      ]
+    },
+    {
+      "bom-ref": "control-login-admin-whitelist",
+      "name": "Minimal loginAdministrative whitelist and service users",
+      "description": "The jcr-base LoginAdminWhitelist defaults to empty (deny); the assembler adds entries explicitly. Minimise the whitelist and prefer per-bundle service users mapped through serviceusermapper, without which privileged login is denied.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-install-path"
+      ]
+    },
+    {
+      "bom-ref": "control-edge-protections",
+      "name": "Edge rate limiting, WAF, and TLS",
+      "description": "Provide edge rate-limiting/WAF for login, write, and search endpoints and run TLS at the reverse proxy; Sling deliberately provides neither transport security nor login throttling.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-edge"
+      ]
+    },
+    {
+      "bom-ref": "control-migrate-retired-modules",
+      "name": "Migrate off retired modules",
+      "description": "Migrate off retired modules (commons-json to Johnzon): CVE-2022-47937 (unbounded parser recursion) will not be fixed in the retired module; the stated remedy is migration, not a depth limit.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-request-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-assemblies",
+      "name": "Harden assemblies and provisioning inputs",
+      "description": "Treat the Starter as a starting point, never a production runtime; do not deploy samples, examples, or test bundles to production; audit installed scripting engines (each expands the attack surface and only HTL auto-escapes); treat content-package install as privileged and never accept packages from untrusted sources (Sling does not verify authorship); and build a non-vulnerable assembly, since Sling depends on the lowest compatible dependency versions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-install-path",
+        "asset-scripting-engines"
+      ]
+    }
+  ]
+}

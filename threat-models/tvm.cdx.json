@@ -1,0 +1,166 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-tvm",
+      "name": "Apache TVM",
+      "description": "Machine learning compiler framework. The default binary relies on a minimal runtime API with limited system call dependencies (such as malloc). The security model is trust-based: all TVM APIs are designed for trusted users only, the RPC server assumes trusted users on a trusted network, and serialized artifacts must only be loaded from trusted sources.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://tvm.apache.org/docs/reference/security.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://tvm.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tvm"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://tvm.apache.org/docs/reference/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-rpc-untrusted-access",
+        "name": "Full code execution via RPC server API access",
+        "description": "The TVM RPC server provides arbitrary file writing capabilities and full remote code execution access to anyone with API access. It assumes users are trusted and operation in a trusted network environment or over encrypted channels; untrusted access is outside the model by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-environment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rpc-plaintext-interception",
+        "name": "Interception of plain-text RPC traffic",
+        "description": "RPC data exchange between tracker, server, and client occurs in plain-text; the model recommends operation under trusted networking environments or encrypted channels, so interception on an untrusted network is a deployment concern.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-environment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-artifact-loading",
+        "name": "Loading serialized artifacts from untrusted sources",
+        "description": "Serialized artifacts must only be loaded from trusted sources; loading an untrusted artifact is outside the security model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-inputs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-url-input",
+        "name": "Untrusted URLs passed to URL-based APIs",
+        "description": "URL-based APIs should only receive trusted URLs as input; all TVM APIs are designed for trusted users only, so feeding them untrusted URLs is outside the model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-inputs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-subroutine-cache-collision",
+        "name": "Subroutine cache hash collision (advisory, resolved)",
+        "description": "SubroutineMixin._get_subroutine() in python/tvm/relax/frontend/nn/subroutine.py used tvm_ffi.structural_hash as the sole cache lookup key without structural_equal verification, so identical 64-bit hashes across different arg_ty values could return previously compiled functions with mismatched parameter shapes, causing silent compilation errors. Severity low: roughly 2^32 distinct inputs are needed for a collision (birthday bound), making it a correctness defect rather than a practically exploitable vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-cache-equality-check"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-trusted-environment",
+      "name": "Operate in a trusted network environment or over encrypted channels",
+      "description": "Run the RPC tracker, server, and client under trusted networking environments or encrypted channels, with only trusted users granted API access, since the RPC server grants arbitrary file writes and full remote code execution to anyone with access.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-trusted-inputs",
+      "name": "Provide only trusted inputs to TVM APIs",
+      "description": "All TVM APIs are designed for trusted users only: pass only trusted URLs to URL-based APIs and load serialized artifacts only from trusted sources.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-cache-equality-check",
+      "name": "Structural equality verification in the subroutine cache",
+      "description": "The subroutine cache now maintains lists of (arg_ty, result) pairs per hash bucket and verifies candidates with structural_equal before returning them, following standard hash-table patterns: the hash selects the bucket, equality confirms the match.",
+      "category": "corrective",
+      "status": "implemented"
+    }
+  ]
+}

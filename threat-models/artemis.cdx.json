@@ -1,0 +1,710 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-artemis",
+      "name": "Apache Artemis",
+      "description": "Multi-protocol message broker for enterprise messaging systems: pub/sub and point-to-point topologies, integration hub for heterogeneous client environments (Java, C++, Python, JavaScript, .NET). Deployed standalone or embedded within another Java application. The threat model defines the security boundaries, assumptions, and guarantees of Artemis and is the authoritative reference for triaging security reports; it is versioned alongside Artemis, so a report against version N is triaged against the model as it stood at N.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/artemis/blob/main/docs/user-manual/threat-model.adoc",
+          "comment": "Source threat model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://artemis.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "artemis"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/artemis/blob/main/docs/user-manual/threat-model.adoc"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/artemis/main/docs/user-manual/threat-model.adoc"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-artemis",
+      "name": "Artemis broker deployment",
+      "description": "Architecture described by the Artemis threat model: data enters the broker via network messaging protocols (AMQP/MQTT/STOMP/OpenWire/Core, with HTTP upgrade to Core and WebSocket transports for AMQP/MQTT/STOMP), via management interfaces (JMX, Jolokia HTTP, management messages), and via filesystem reads (configuration, journal replay, paged messages). Client libraries are partially in model; third-party dependencies (Netty, JGroups) are threat-modeled separately by their projects.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-broker-core",
+          "type": "broker",
+          "name": "Broker core",
+          "description": "Core protocol handler, journal, paging, routing engine. Touches filesystem (journal, paging) and network (bridges, federation). A finding is in-model if reachable from messaging client-controlled payloads, headers, or addressing metadata.",
+          "zone": "zone-broker"
+        },
+        {
+          "bom-ref": "asset-protocol-adapters",
+          "type": "interface",
+          "name": "Protocol adapters",
+          "description": "AMQP, MQTT, STOMP, OpenWire, and Core protocol implementations. A finding is in-model only if reachable from network input on the corresponding protocol port without requiring authenticated full management credentials.",
+          "zone": "zone-broker"
+        },
+        {
+          "bom-ref": "asset-management-apis",
+          "type": "api",
+          "name": "Management APIs",
+          "description": "JMX MBeans, Jolokia HTTP, and management messages, subject to management RBAC. JMX is not exposed on the network by default; Jolokia HTTP and the web console are exposed on localhost by default. A finding is in-model if reachable from an authenticated management client's request.",
+          "zone": "zone-broker"
+        },
+        {
+          "bom-ref": "asset-client-libraries",
+          "type": "component",
+          "name": "Client libraries",
+          "description": "Core client, JMS 2.0 client, Jakarta Messaging 3.1 client; partially in model.",
+          "zone": "zone-messaging-clients"
+        },
+        {
+          "bom-ref": "asset-journal",
+          "type": "data-store",
+          "name": "Journal and paging files",
+          "description": "Append-only journal and paging files in the broker's instance directory; integrity of persisted data depends on filesystem and OS guarantees. The broker performs no strict integrity checks on persisted data; tampering is not detected.",
+          "zone": "zone-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-messaging-clients",
+          "name": "Messaging clients",
+          "type": "trust",
+          "description": "Network/API callers that send and consume messages via supported messaging protocols; untrusted until authenticated at connection establishment."
+        },
+        {
+          "bom-ref": "zone-management-clients",
+          "name": "Management clients",
+          "type": "trust",
+          "description": "Callers invoking management operations via web console, JMX, Jolokia HTTP, or management messages; subject to RBAC."
+        },
+        {
+          "bom-ref": "zone-broker",
+          "name": "Broker process",
+          "type": "trust",
+          "description": "The broker JVM: protocol adapters, broker core, management APIs."
+        },
+        {
+          "bom-ref": "zone-host",
+          "name": "Host filesystem and operator",
+          "type": "trust",
+          "description": "The operator has filesystem or physical access to the broker (can edit broker.xml, access journal files, restart the broker process); not a client actor because there is no network call."
+        },
+        {
+          "bom-ref": "zone-cluster-peers",
+          "name": "Cluster peer brokers",
+          "type": "trust",
+          "description": "Peer brokers in clustered deployments; assumed honest or fail-stop, not adversarial (no Byzantine fault tolerance)."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-messaging",
+          "name": "Messaging client to broker core",
+          "type": "trust",
+          "zones": [
+            "zone-messaging-clients",
+            "zone-broker"
+          ]
+        },
+        {
+          "bom-ref": "boundary-management",
+          "name": "Management client to broker core",
+          "type": "trust",
+          "zones": [
+            "zone-management-clients",
+            "zone-broker"
+          ]
+        },
+        {
+          "bom-ref": "boundary-filesystem",
+          "name": "Broker core to filesystem",
+          "type": "trust",
+          "zones": [
+            "zone-broker",
+            "zone-host"
+          ]
+        },
+        {
+          "bom-ref": "boundary-cluster",
+          "name": "Broker to cluster peers",
+          "type": "trust",
+          "zones": [
+            "zone-broker",
+            "zone-cluster-peers"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-messaging-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Messaging client"
+              }
+            ],
+            "persona": {
+              "description": "Sends and consumes messages via supported messaging protocols. Authentication happens at connection establishment; authorization happens per operation (sending a message, creating a consumer, creating a queue)."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-management-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Management client"
+              }
+            ],
+            "persona": {
+              "description": "Invokes management operations via web console, JMX, Jolokia HTTP, or management messages, subject to RBAC. A client with full admin permissions can perform any management operation including reading message content; reports about admin capabilities are triaged as BY-DESIGN."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Has filesystem or physical access to the broker: can edit broker.xml, access journal files, restart the broker process. The broker does not defend against malicious operators."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Conformant JVM (Java 17 or later); the JVM correctly implements Java's multi-threading semantics (thread synchronization, memory visibility, safe publication). A JVM with broken concurrency primitives could cause race conditions in authentication, authorization, or message routing."
+        },
+        {
+          "description": "The OS provides standard filesystem semantics (atomicity of writes smaller than page size, durability after fsync) and enforces process isolation (no untrusted local processes can ptrace or inject code)."
+        },
+        {
+          "description": "The broker has exclusive write access to its data directory and all sub-directories; the filesystem does not arbitrarily corrupt data. The broker uses libaio on Linux for high-performance journal writes and assumes it behaves correctly."
+        },
+        {
+          "description": "The network can deliver or drop packets but does not inject malicious packets from non-client sources; no confidentiality or integrity of network traffic is assumed unless TLS/SSL is configured."
+        },
+        {
+          "description": "Runtime configuration reload (broker.xml, security-settings) is safe under load: configuration changes do not cause inconsistent state or authorization bypass during reload."
+        },
+        {
+          "description": "The broker does not install signal handlers beyond standard JVM handlers, does not spawn child processes in normal operation, does not mutate process-wide JVM state or system-wide state, and does not open listening sockets on ports other than those explicitly configured."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-network-attacker",
+        "name": "Unauthenticated network attacker on protocol ports",
+        "description": "When authentication is enforced, an unauthenticated attacker cannot meaningfully interact: connection attempts with invalid credentials are rejected at the protocol level before any messaging operations. The attacker can still establish connections and send protocol frames up to the authentication step, attempt authentication with guessed credentials, and attempt DoS via connection exhaustion or malformed input during the connection or authentication phase. When mutual TLS is enforced (needClientAuth=true) this threat is completely eliminated, since the attacker cannot establish a connection without a certificate signed by a trusted CA.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-protocol-adapters"
+        ],
+        "mitigations": [
+          "control-security-enabled",
+          "control-mutual-tls",
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-messaging-client-escalation",
+        "name": "Privilege escalation by a low-privilege authenticated messaging client",
+        "description": "An authenticated messaging client with valid credentials but limited authorization (for example allowed to send to specific addresses but not manage the broker) can attempt privilege escalation via protocol exploits or misuse of broker features. Violations of the authorization property (enforced when security-enabled=true with configured security-settings) are valid findings.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-protocol-adapters",
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-security-enabled"
+        ]
+      },
+      {
+        "bom-ref": "threat-management-client-escalation",
+        "name": "Management API abuse by a low-privilege authenticated management client",
+        "description": "A low-privilege management client can read broker state and metrics, enumerate queues, addresses, connections and consumers, and monitor performance; it can attempt to exploit management API vulnerabilities to gain elevated privileges or cause denial of service via management interface abuse. Management authorization is enforced when management-message-rbac=true or management.xml is configured appropriately with security-settings in place.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-apis"
+        ],
+        "mitigations": [
+          "control-management-rbac",
+          "control-restrict-management-interfaces"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-traffic",
+        "name": "Interception or tampering of unencrypted broker traffic",
+        "description": "The broker does not assume confidentiality or integrity of network traffic unless TLS/SSL is configured (sslEnabled defaults to false). An on-path network attacker is mitigated by TLS; insecure TLS settings (weak ciphers, SSLv3, TLS 1.0/1.1) expose credentials and message content.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-protocol-adapters",
+          "asset-client-libraries"
+        ],
+        "mitigations": [
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-pathological-input-cpu",
+        "name": "Super-linear CPU consumption or hangs on pathological input",
+        "description": "Memory consumption that grows with messages up to configured paging limits is expected behavior, not a DoS vulnerability; however, super-linear CPU consumption or hangs on pathological input are bugs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker-core",
+          "asset-protocol-adapters"
+        ]
+      },
+      {
+        "bom-ref": "threat-broker-reads-plaintext",
+        "name": "Broker access to plaintext message payloads",
+        "description": "The message broker is not a cryptographic confidentiality boundary: it has access to plaintext message payloads. End-to-end encryption between producers and consumers must be implemented outside the broker; if payloads must be kept confidential from the broker operator, the application must implement application-layer encryption.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-application-layer-encryption"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-message-origin-spoofing",
+        "name": "Spoofed logical message sender",
+        "description": "The broker authenticates the connection that sends a message, not the message itself; a compromised client or a client authorized to send to an address can claim to be any logical sender. Authentication of message content origin is not provided; applications requiring non-repudiation must implement message signing.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-message-signing"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rate-limiting-gaps",
+        "name": "Line-rate message flooding on protocols without broker-side rate limiting",
+        "description": "Comprehensive per-client message rate limiting across all protocols is not provided: rate limiting is available for Core and MQTT 5 clients but not for AMQP, STOMP, OpenWire, or MQTT 3.x clients, which can send messages at line rate until paging or disk space limits are enforced. Operators must use network-level controls for protocols that lack broker-side rate limiting.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-protocol-adapters"
+        ],
+        "mitigations": [
+          "control-network-rate-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-cluster-peer",
+        "name": "Compromised cluster peer sending adversarial messages",
+        "description": "Clustered deployments assume peer brokers are honest or fail-stop; if a peer broker is compromised and sends adversarial messages, the cluster may enter an inconsistent state. Byzantine fault tolerance is not provided.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-operator",
+        "name": "Malicious operator with filesystem or JVM access",
+        "description": "An operator with filesystem write access to the data directory, ability to attach a debugger, or kill -9 access can read/modify all data, bypass all security controls, and cause arbitrary behavior: read all persisted messages, modify configuration to grant themselves any role, or inject/modify messages in the journal. The broker does not validate journal or paging file integrity; tampering is not detected. The broker does not defend against malicious operators.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-journal",
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-restrict-filesystem",
+          "control-storage-integrity"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-local-and-side-channel",
+        "name": "Local JVM access, physical attacks, and side channels",
+        "description": "Out of scope: attacks requiring local JVM access (agent attachment, debugger, -javaagent instrumentation); physical or hypervisor-level attacks on the host; side-channel attacks (timing, speculative execution, cache-timing on authentication) on message metadata or routing decisions; and co-tenant attackers sharing the same JVM and classpath.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-os-resource-exhaustion",
+        "name": "Denial of service via OS-level resource exhaustion",
+        "description": "Resource exhaustion at OS level (file descriptor limits, kernel OOM) is not defended against; operators must configure OS limits.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-os-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-security-disabled-deployment",
+        "name": "Attacks on deployments with security-enabled=false",
+        "description": "With security-enabled=false, anyone can send arbitrary protocol messages and perform messaging or management operations without authentication. This configuration is not supported in production; reports against such deployments are triaged as OUT-OF-SCOPE.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-broker-core"
+        ],
+        "mitigations": [
+          "control-security-enabled"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-messaging",
+        "boundary": "boundary-messaging",
+        "name": "Messaging trust boundary",
+        "description": "Messages from network clients (untrusted or authenticated) are parsed by protocol adapters and routed to the broker core. Authentication happens at connection establishment; authorization happens per operation. HTTP connections can upgrade to Core protocol; AMQP, MQTT, and STOMP support WebSocket; beyond these paths, protocol switching is not allowed.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-network-attacker",
+          "threat-messaging-client-escalation",
+          "threat-plaintext-traffic",
+          "threat-pathological-input-cpu",
+          "threat-rate-limiting-gaps"
+        ],
+        "controlsAtBoundary": [
+          "control-security-enabled",
+          "control-tls",
+          "control-mutual-tls",
+          "control-network-rate-limits"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-management",
+        "boundary": "boundary-management",
+        "name": "Management trust boundary",
+        "description": "Management operations from management clients are subject to RBAC. JMX is not networked by default; Jolokia HTTP and the web console are localhost-only by default.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-management-client-escalation"
+        ],
+        "controlsAtBoundary": [
+          "control-management-rbac",
+          "control-restrict-management-interfaces"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-filesystem",
+        "boundary": "boundary-filesystem",
+        "name": "Filesystem trust boundary",
+        "description": "The broker writes to append-only journal and paging files; integrity of persisted data depends on filesystem and OS guarantees. An attacker who can write to broker.xml can reconfigure security-settings and bypass all authorization.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-operator"
+        ],
+        "controlsAtBoundary": [
+          "control-restrict-filesystem",
+          "control-storage-integrity",
+          "control-harden-jaas"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-cluster",
+        "boundary": "boundary-cluster",
+        "name": "Cluster trust boundary",
+        "description": "Cluster nodes are assumed honest or fail-stop, not adversarial; Byzantine fault tolerance is not provided.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-byzantine-cluster-peer"
+        ],
+        "controlsAtBoundary": []
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-security-enabled",
+      "name": "Authentication and authorization (security-enabled=true)",
+      "description": "security-enabled defaults to true and enforces protocol-level authentication (username and password, JWT, etc.) of messaging and management clients; authorization of messaging clients requires configured security-settings, and management authorization requires management-message-rbac=true or an appropriate management.xml plus security-settings. When false, all authentication and authorization are disabled.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-messaging",
+        "boundary-management"
+      ]
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "TLS on network-exposed protocol ports (sslEnabled=true)",
+      "description": "If the broker is exposed to an untrusted network, enable SSL/TLS on all protocol ports for transport confidentiality and integrity. Use strong cipher suites and disable weak protocols (SSLv3, TLS 1.0, TLS 1.1) to prevent downgrade attacks; the broker inherits TLS configuration from the JVM.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-messaging"
+      ]
+    },
+    {
+      "bom-ref": "control-mutual-tls",
+      "name": "Mutual TLS (needClientAuth=true) for high-security deployments",
+      "description": "Requiring clients to present valid certificates during the TLS handshake provides transport-layer authentication that completely eliminates unauthenticated network attackers, since they cannot establish connections at all. Stronger than protocol-level authentication because it is enforced before any messaging protocol interaction; recommended for internet-facing brokers or untrusted networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-messaging"
+      ]
+    },
+    {
+      "bom-ref": "control-management-rbac",
+      "name": "Management RBAC",
+      "description": "Fine-grained permissions on management operations, enabled by default.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-management-apis"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-management-interfaces",
+      "name": "Restrict management interface access",
+      "description": "JMX is not exposed on the network by default; Jolokia HTTP and the web console are exposed on localhost by default. Ensure authentication and TLS are enabled and prefer localhost-only binding for management interfaces on untrusted networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-management"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-filesystem",
+      "name": "Restrict filesystem access to the instance directory",
+      "description": "Restrict read/write access to the broker's instance directory (and all sub-directories) to trusted operators; it includes all configuration, message data, and logs. An attacker who can write to broker.xml can reconfigure security-settings and bypass all authorization.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-filesystem"
+      ]
+    },
+    {
+      "bom-ref": "control-storage-integrity",
+      "name": "OS-level storage integrity mechanisms",
+      "description": "The broker performs no strict integrity checks on persisted data and does not detect tampering; operators requiring such checks must use OS-level mechanisms (ZFS checksums, dm-integrity, etc.).",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-journal"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-jaas",
+      "name": "Review and harden JAAS configuration",
+      "description": "If using JAAS, ensure login modules are correctly configured and credentials are not embedded in cleartext files with world-readable permissions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker-core"
+      ]
+    },
+    {
+      "bom-ref": "control-os-limits",
+      "name": "Set resource limits at OS level",
+      "description": "Configure ulimits (file descriptors, memory) to prevent resource exhaustion.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker-core"
+      ]
+    },
+    {
+      "bom-ref": "control-network-rate-limits",
+      "name": "Network-level rate limiting for protocols without broker-side limits",
+      "description": "Use network-level controls for AMQP, STOMP, OpenWire, and MQTT 3.x clients, since broker-side message rate limiting is only available for Core and MQTT 5 clients.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-messaging"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-message-content",
+      "name": "Validate untrusted message content in applications",
+      "description": "Applications using the broker must validate untrusted message content.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-client-libraries"
+      ]
+    },
+    {
+      "bom-ref": "control-application-layer-encryption",
+      "name": "Application-layer encryption of message payloads",
+      "description": "If message confidentiality from the broker operator is required, encrypt payloads before sending; the broker is not a cryptographic confidentiality boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-client-libraries"
+      ]
+    },
+    {
+      "bom-ref": "control-message-signing",
+      "name": "Message signing for non-repudiation",
+      "description": "Applications requiring non-repudiation must implement message signing, since the broker authenticates connections, not message content origin.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-client-libraries"
+      ]
+    }
+  ]
+}

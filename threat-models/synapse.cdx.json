@@ -1,0 +1,594 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-synapse",
+      "name": "Apache Synapse",
+      "description": "Lightweight, high-performance Enterprise Service Bus (ESB) / mediation engine. It accepts messages over pluggable transports (HTTP/S, JMS, VFS, Mail), runs them through operator-defined mediation sequences and proxy services (XSLT, XQuery, script, filter, switch, send-to-endpoint mediators), and routes/transforms them toward backend endpoints. The synapse configuration (sequences, mediators, scripts, XSLT/XQuery, endpoints, security policies) is trusted input authored by the integration developer; the inbound message from a network client is the untrusted adversary input. Modelled against master with dependency defaults verified against Axis2 1.7.9 and Axiom 1.2.22.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/synapse/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. v1, source-verified, reviewed by the Synapse PMC."
+        },
+        {
+          "type": "website",
+          "url": "https://synapse.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "synapse"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/synapse/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/synapse/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-synapse",
+      "name": "Synapse mediation deployment",
+      "description": "Synapse deployed as a message broker/mediator in front of or between services: clients send messages to a Synapse proxy/API; Synapse mediates (transform, route, secure, throttle) and forwards to backend endpoints. In message-mediation mode Synapse additionally acts as a WS-Addressing-style router: a bare <send/> with no configured endpoint forwards to the message's implicit To address. The trust boundary is the transport listener plus the mediation entry; bytes arriving on a listener are untrusted until mediation and any configured WS-Security/transport auth has processed them.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-transport-listeners",
+          "type": "endpoint",
+          "name": "Transport listeners",
+          "description": "HTTP/S (NHTTP/passthrough), JMS, VFS, and Mail listeners receiving untrusted messages from the network, filesystem, or mail.",
+          "zone": "zone-synapse"
+        },
+        {
+          "bom-ref": "asset-mediation-engine",
+          "type": "component",
+          "name": "Mediation engine",
+          "description": "Sequences, proxy services, and APIs executing operator-defined mediation logic over inbound messages.",
+          "zone": "zone-synapse"
+        },
+        {
+          "bom-ref": "asset-transform-mediators",
+          "type": "component",
+          "name": "XML transform mediators (XSLT, XQuery, payload factory)",
+          "description": "High-value surface: transform input is the already-parsed AXIOM tree; the TransformerFactory is created with JAXP defaults (FEATURE_SECURE_PROCESSING not set), so document()/doc() and extension functions remain available to the trusted stylesheet.",
+          "zone": "zone-synapse"
+        },
+        {
+          "bom-ref": "asset-script-mediators",
+          "type": "component",
+          "name": "Script mediators",
+          "description": "Operator-authored JS/Groovy code running over message data; the code is trusted config, the risk is unsafe handling of message data inside it.",
+          "zone": "zone-synapse"
+        },
+        {
+          "bom-ref": "asset-endpoints",
+          "type": "gateway",
+          "name": "Outbound endpoints (send/call mediators)",
+          "description": "Network egress surface: address/WSDL/loadbalance endpoints, plus attacker-influenced routes via explicit dynamic/content-based routing and the implicit To routing of a bare <send/> in message-mediation mode (SSRF surface).",
+          "zone": "zone-synapse"
+        },
+        {
+          "bom-ref": "asset-secure-vault",
+          "type": "data-store",
+          "name": "Secure-vault secrets",
+          "description": "Encrypted configuration secrets kept under a keystore-backed asymmetric/symmetric cipher (org.apache.synapse.securevault); PasswordManager resolves encrypted passwords at runtime, plaintext only in memory at use.",
+          "zone": "zone-synapse"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Message clients",
+          "type": "trust",
+          "description": "Any peer that can send a message to a Synapse listener, proxy, or API; untrusted."
+        },
+        {
+          "bom-ref": "zone-synapse",
+          "name": "Synapse runtime",
+          "type": "trust",
+          "description": "The mediation engine, mediators, and operator-managed configuration, keystores, and transport setup on the JVM host."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "Backend endpoints",
+          "type": "trust",
+          "description": "Services Synapse calls; semi-trusted, their responses re-enter mediation."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-listener",
+          "name": "Transport listener and mediation entry",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-synapse"
+          ]
+        },
+        {
+          "bom-ref": "boundary-endpoint",
+          "name": "Outbound endpoint boundary",
+          "type": "trust",
+          "zones": [
+            "zone-synapse",
+            "zone-backends"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-message-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Message client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted primary adversary: crafts SOAP/XML/JSON payloads (oversized, deeply nested, malformed), supplies data that a trusted transform passes to external resolution, supplies To/routing values that mediation turns into outbound destinations (SSRF), or data that a script mishandles. DOCTYPE-based payloads (XXE, billion-laughs) are rejected at the build boundary by default."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-backend-endpoint",
+          "party": {
+            "roles": [
+              {
+                "name": "Backend endpoint"
+              }
+            ],
+            "persona": {
+              "description": "Secondary adversary: a malicious backend returning hostile responses that re-enter mediation as semi-trusted input."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-integration-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Integration developer / operator"
+              }
+            ],
+            "persona": {
+              "description": "Authors the synapse config: mediation logic, scripts, XSLT, endpoints, secure-vault secrets, transport and WS-Security policy. Trusted; out of model as adversary."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "JVM host running the Synapse runtime; operator-managed synapse.xml config, keystores, and transport setup; TLS provided by the transport configuration."
+        },
+        {
+          "description": "Secure-vault secrets are protected by an operator-managed keystore and password."
+        },
+        {
+          "description": "Because there are no built-in message-size limits, deployment-level ingress controls (reverse proxy / load balancer request-size caps, connection limits) are assumed for internet-facing listeners."
+        },
+        {
+          "description": "The pinned Axis2/Axiom builder stack must not be downgraded or swapped for a builder that permits DOCTYPE; the default DOCTYPE rejection depends on it."
+        },
+        {
+          "description": "Reachability precondition: a finding is in-model if reachable from an inbound message before the mediation auth/validation the integration configured; a finding requiring a malicious config (script, XSLT body, endpoint address chosen by the operator) is out of model as trusted input."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-xxe-entity-expansion",
+        "name": "XXE or DTD entity expansion via inbound XML",
+        "description": "An entity defined via DOCTYPE in an inbound message being resolved or expanded on a default build path. Source-verified as blocked by default: both SOAP and POX build paths go through Axis2 BuilderUtil with Axiom StAXParserConfiguration.SOAP, whose StAXDialect.disallowDoctypeDecl rejects a DOCTYPE declaration outright, blocking classic XXE and DTD-based billion-laughs. No supported knob re-enables it per-service; a report reaching XXE through the default build path is VALID, and one reproduced only by re-enabling DOCTYPE support (custom builder, modified Axiom/StAX config, non-pinned dependency) is out of model as a non-default build. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transport-listeners"
+        ],
+        "mitigations": [
+          "control-doctype-rejection",
+          "control-pinned-builder-stack"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-message-crash",
+        "name": "Crash or memory corruption from crafted messages",
+        "description": "Malformed inbound messages must yield a fault, not memory corruption; a crash or memory corruption (not mere resource exhaustion) from crafted input violates the robust message building property. High severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transport-listeners"
+        ],
+        "mitigations": [
+          "control-deferred-building"
+        ]
+      },
+      {
+        "bom-ref": "threat-message-as-code",
+        "name": "Message content interpreted as stylesheet, query, or script code",
+        "description": "Stylesheets, XQuery bodies, and script bodies execute only from operator-loaded configuration, never from message content (source-verified: mediator factories read these from config/registry only). Message content being interpreted as stylesheet/query/script code is a critical violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transform-mediators",
+          "asset-script-mediators"
+        ],
+        "mitigations": [
+          "control-config-only-code"
+        ]
+      },
+      {
+        "bom-ref": "threat-mediation-security-bypass",
+        "name": "Bypass of configured mediation-level security",
+        "description": "An unauthenticated or forged message accepted where a configured transport-security or WS-Security (Rampart) policy required authentication, signature, or encryption. Enforcement is Rampart's; see the CXF/WSS4J sibling model for signature-wrapping classes. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-mediation-engine"
+        ],
+        "mitigations": [
+          "control-mediation-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-secret-exposure",
+        "name": "Exposure of configured secrets",
+        "description": "A plaintext secret in config at rest, or a secret emitted to logs by the framework, violates the secure-vault secret protection property. High severity. Secret exfiltration through an over-broad transform or log mediator is a known attack class for integrations to watch.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-secure-vault"
+        ],
+        "mitigations": [
+          "control-secure-vault",
+          "control-protect-keystore"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-mitm",
+        "name": "Man-in-the-middle where TLS is expected",
+        "description": "TLS on HTTPS listeners and outbound calls with certificate validation is supported when configured; MITM where TLS is expected is a high-severity violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transport-listeners",
+          "asset-endpoints"
+        ],
+        "mitigations": [
+          "control-transport-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-message-routing",
+        "name": "SSRF via message-derived outbound destinations",
+        "description": "Synapse provides no intrinsic SSRF protection for message-derived destinations: both explicit dynamic/content-based routing built by the integration (header/XPath-derived addresses) and the designed-in implicit To routing of a bare <send/> in message-mediation mode (source-verified in SendMediator, no built-in allow-listing). Validating/allow-listing destinations is the integration's job; SSRF via implicit To routing is by-design disclaimed. A report showing it bypasses an explicitly configured endpoint or allow-list would be VALID.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-endpoints"
+        ],
+        "mitigations": [
+          "control-validate-destinations"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-parsing-resource-exhaustion",
+        "name": "Resource exhaustion from oversized or deeply nested messages",
+        "description": "There are no built-in message-size, element-depth, or entity-count limits in the NHTTP/passthrough transports. Passthrough streaming plus deferred building bound the pure-routing path, but the moment a mediator reads the payload the full message is built with no size bound. Bounding oversized or deeply nested messages on parsing paths is a deployment responsibility; resource-exhaustion reports within input-proportional bounds against defaults are by-design disclaimed, unless they show asymmetric amplification beyond input size, which remains in model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transport-listeners",
+          "asset-mediation-engine"
+        ],
+        "mitigations": [
+          "control-ingress-limits",
+          "control-deferred-building"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-transform-external-resolution",
+        "name": "External resolution via trusted transforms fed message data",
+        "description": "XSLT/XQuery transforms can read files or fetch URLs via document()/doc() (XQuery via Saxon XQJ) or extension functions, because FEATURE_SECURE_PROCESSING is not set by default. The stylesheet/query body is trusted config, so this becomes an attacker surface only when the operator's stylesheet feeds message-derived strings into resolution-capable constructs, an integration responsibility with a per-mediator hardening knob available.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-transform-mediators"
+        ],
+        "mitigations": [
+          "control-secure-processing",
+          "control-validate-destinations"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-script-data-mishandling",
+        "name": "Unsafe handling of message data in operator scripts",
+        "description": "A script mediator looks sandboxed but runs with the engine's privileges; it is operator code, not a security boundary for message data. Routing untrusted message content into a script that executes or concatenates it unsafely is a known misuse pattern; the code itself is trusted config and Synapse offers no defence against the integration developer.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-script-mediators"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-no-security-without-config",
+        "name": "Exposure of unsecured proxies",
+        "description": "A proxy with no transport or WS-Security configured is only as protected as the integration wired it; Synapse provides no security without configuration. Exposing a proxy with no security and assuming the ESB 'is secure' is a known misuse pattern.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-mediation-engine"
+        ],
+        "mitigations": [
+          "control-mediation-security",
+          "control-transport-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-listener",
+        "boundary": "boundary-listener",
+        "name": "Transport listener trust boundary",
+        "description": "Bytes arriving on a listener are untrusted until mediation and any configured WS-Security/transport auth has processed them. The wire-to-message build transition rejects DOCTYPE by default; the passthrough transport defers building the body until a mediator needs it.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-xxe-entity-expansion",
+          "threat-malformed-message-crash",
+          "threat-message-as-code",
+          "threat-mediation-security-bypass",
+          "threat-parsing-resource-exhaustion",
+          "threat-tls-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-doctype-rejection",
+          "control-deferred-building",
+          "control-mediation-security",
+          "control-transport-tls",
+          "control-ingress-limits"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-endpoint",
+        "boundary": "boundary-endpoint",
+        "name": "Outbound endpoint trust boundary",
+        "description": "Static endpoints are trusted config; attacker-influenced routes exist through explicit content-based routing and implicit To routing. Backend responses re-enter mediation as semi-trusted input.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ssrf-message-routing",
+          "threat-transform-external-resolution"
+        ],
+        "controlsAtBoundary": [
+          "control-validate-destinations",
+          "control-transport-tls"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-doctype-rejection",
+      "name": "DOCTYPE rejection on inbound XML",
+      "description": "SOAP and POX build paths use Axis2 BuilderUtil with Axiom StAXParserConfiguration.SOAP (StAXDialect.disallowDoctypeDecl): a DOCTYPE declaration in an inbound message is rejected outright, blocking classic XXE and DTD-based entity expansion by default. Versions pinned: Axis2 1.7.9, Axiom 1.2.22.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-transport-listeners",
+        "boundary-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-deferred-building",
+      "name": "Passthrough streaming and deferred message building",
+      "description": "The passthrough HTTP transport defers building the message body (RelayUtils/DeferredMessageBuilder): the envelope is only parsed when a mediator actually needs it, so pure-routing configurations never parse untrusted bodies at all. This bounds only untouched bodies, not parsing paths.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-transport-listeners"
+      ]
+    },
+    {
+      "bom-ref": "control-config-only-code",
+      "name": "Trusted-config-only transform and script code",
+      "description": "Mediator factories read stylesheets, XQuery bodies, and script bodies from operator-loaded configuration or registry only, never from message content.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-transform-mediators",
+        "asset-script-mediators"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-vault",
+      "name": "Secure-vault secret encryption",
+      "description": "Configured secrets are kept encrypted at rest under a keystore-backed asymmetric/symmetric cipher and resolved to plaintext only in memory at use (org.apache.synapse.securevault, PasswordManager).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-secure-vault"
+      ]
+    },
+    {
+      "bom-ref": "control-mediation-security",
+      "name": "Configure transport security and WS-Security",
+      "description": "When configured, transport security and WS-Security (Rampart) authenticate, sign, and encrypt messages. Configure them where the integration requires authentication or integrity; use of a weak algorithm explicitly configured in a WS-Security policy is an integration choice.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-transport-tls",
+      "name": "Configure transport TLS with certificate validation",
+      "description": "TLS on HTTPS listeners and outbound calls with certificate validation, configured by the operator for both inbound and outbound traffic.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-transport-listeners",
+        "asset-endpoints"
+      ]
+    },
+    {
+      "bom-ref": "control-ingress-limits",
+      "name": "Deployment-level ingress limits",
+      "description": "Cap request sizes and connection counts at the ingress (load balancer or reverse proxy) for internet-facing listeners; Synapse does not bound message size.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-listener"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-destinations",
+      "name": "Validate or allow-list message-derived destinations",
+      "description": "Validate or allow-list any destination derived from message content, and avoid a bare <send/> on untrusted traffic unless client-steered routing is intended and network-constrained; restrict egress where transforms may resolve external references.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-endpoints",
+        "boundary-endpoint"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-processing",
+      "name": "Enable secure processing on transform mediators",
+      "description": "Per-mediator hardening opt-in: <feature>/<attribute> elements on <xslt> can enable http://javax.xml.XMLConstants/feature/secure-processing. Off by default (JAXP defaults). Do not feed message-derived strings into document()/doc()/extension functions; where unavoidable, enable secure processing on that mediator.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-transform-mediators"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-keystore",
+      "name": "Protect the secure-vault keystore and secrets",
+      "description": "Protect the secure-vault keystore and password, never commit plaintext secrets to configuration, and keep secrets out of log mediators.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-secure-vault"
+      ]
+    },
+    {
+      "bom-ref": "control-pinned-builder-stack",
+      "name": "Keep the pinned Axis2/Axiom builder stack",
+      "description": "Do not downgrade the pinned Axis2/Axiom builder stack or swap in a builder that permits DOCTYPE; the default DOCTYPE rejection depends on it. Any change to the message-build parser configuration that no longer rejects DOCTYPE invalidates the core parsing property.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-transport-listeners"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,570 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-streampipes",
+      "name": "Apache StreamPipes",
+      "description": "Open-source Industrial IoT data platform for connecting industrial data sources, building real-time streaming pipelines, and exploring time-series data. It is a multi-service deployment: a REST control plane (streampipes-rest) driven by the UI, connect source/input adapters as the external data-ingress path, pipeline elements (processors/sinks) as extensions, an internal message bus, a data lake, and trusted broker/datastore dependencies inside an operator-controlled, network-isolated perimeter.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/streampipes/blob/dev/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://streampipes.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "streampipes"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/streampipes/blob/dev/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/streampipes/dev/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-streampipes",
+      "name": "StreamPipes deployment",
+      "description": "One primary control-plane boundary (browser/UI and API clients to streampipes-rest, authenticated and authorized on two tiers: role/privilege gate plus per-object ACL) and one external data-ingress path (external industrial sources to source/input adapters, which normalize raw data into events published on the internal bus). The internal bus, data lake, and inter-service transport run inside an operator-controlled, network-isolated perimeter and are not directly attacker-writable under the assumed deployment architecture. Source provisioning is operator/admin-only.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-rest-control-plane",
+          "type": "api",
+          "name": "streampipes-rest control plane",
+          "description": "Primary HTTP/REST boundary: authentication, user/resource management, pipeline control, adapter control, and data-lake queries. Not the external data-ingress path.",
+          "zone": "zone-perimeter"
+        },
+        {
+          "bom-ref": "asset-adapters",
+          "type": "component",
+          "name": "Connect source/input adapters",
+          "description": "External data-ingress path: connect to external sources (MQTT, Kafka, REST, OPC-UA, HTTP, files, databases), ingest raw data, normalize it into events, and publish them onto the internal bus.",
+          "zone": "zone-perimeter"
+        },
+        {
+          "bom-ref": "asset-pipeline-elements",
+          "type": "component",
+          "name": "Pipeline elements (processors/sinks)",
+          "description": "Processing and sink logic over event streams carried by the internal bus; deployable as extensions running in separate container services.",
+          "zone": "zone-perimeter"
+        },
+        {
+          "bom-ref": "asset-message-bus",
+          "type": "broker",
+          "name": "Internal message bus",
+          "description": "Internal event transport carrying adapter-normalized and processor-derived events between processing steps; not directly writable from outside the assumed deployment perimeter.",
+          "zone": "zone-perimeter"
+        },
+        {
+          "bom-ref": "asset-data-lake",
+          "type": "data-store",
+          "name": "Data lake",
+          "description": "Time-series persistence and queryable event history.",
+          "zone": "zone-perimeter"
+        },
+        {
+          "bom-ref": "asset-ui",
+          "type": "component",
+          "name": "UI (browser client)",
+          "description": "Browser client that drives configuration and visualization through the control plane; lives in the client trust domain.",
+          "zone": "zone-clients"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "UI/API clients",
+          "type": "trust",
+          "description": "Browsers and API clients; request bodies, pipeline definitions, adapter definitions, and configuration crossing into the control plane are treated as untrusted and authorized per resource."
+        },
+        {
+          "bom-ref": "zone-perimeter",
+          "name": "Operator-controlled deployment perimeter",
+          "type": "trust",
+          "description": "Control plane, adapters, extension runtimes, internal bus, data lake, and broker/datastore dependencies inside an operator-controlled, network-isolated perimeter."
+        },
+        {
+          "bom-ref": "zone-external-sources",
+          "name": "External industrial sources",
+          "type": "trust",
+          "description": "Operator-provisioned external systems (MQTT, Kafka, REST, OPC-UA, files, databases). Their data remains untrusted content for StreamPipes-owned parsers, though the sources themselves are operator-provisioned."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-control-plane",
+          "name": "Control-plane boundary",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-perimeter"
+          ]
+        },
+        {
+          "bom-ref": "boundary-data-ingress",
+          "name": "External data-ingress path",
+          "type": "trust",
+          "zones": [
+            "zone-external-sources",
+            "zone-perimeter"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Broker and datastore components are modeled as trusted dependencies inside an operator-controlled, network-isolated perimeter."
+        },
+        {
+          "description": "Source provisioning is operator/admin-only; no in-scope lower-privileged adversary can introduce a new external source."
+        },
+        {
+          "description": "Anyone controlling the deployment infrastructure (host, container, broker, or datastore access) is not an adversary StreamPipes defends against."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authn-authz-bypass",
+        "name": "User acts as another user or escalates role (control plane)",
+        "description": "An authenticated-but-limited UI/REST user bypasses authentication or authorization to act outside their role/permissions. StreamPipes has a fine-grained role model (ROLE_PIPELINE_USER, ROLE_CONNECT_ADMIN, ROLE_DASHBOARD_USER, etc.), not only an admin/user split.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-control-plane"
+        ],
+        "mitigations": [
+          "control-token-authentication",
+          "control-two-tier-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-user-resource-tampering",
+        "name": "User modifies another user's pipeline or adapter resources",
+        "description": "A user modifies another user's pipeline, adapter, schema mapping, or timestamp conversion by bypassing the per-object ACL or privilege check.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-control-plane"
+        ],
+        "mitigations": [
+          "control-two-tier-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-disclosure",
+        "name": "Exposure of source credentials or client secrets",
+        "description": "Source credentials or client secrets are exposed via API, UI, logs, or error messages when reached by a lower-privileged user or hostile input, for example a malformed adapter payload causing credentials, tokens, or connection strings to be logged or returned via API.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-control-plane",
+          "asset-adapters"
+        ],
+        "mitigations": [
+          "control-secret-handling",
+          "control-two-tier-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-ingestion-dos",
+        "name": "Malformed or oversized input crashes the built-in ingestion path",
+        "description": "A compromised or faulty operator-trusted source feeds malformed, oversized, schema-mismatched, or hostile content into an adapter ingestion path, crashing an adapter, causing an uncontrolled restart loop, stopping all event emission instead of failing only the affected event, or exhausting memory/CPU on a single event before the rate limiter meters it, in StreamPipes-owned code. Malformed input in built-in parsers is expected to fail the affected event or adapter operation without compromising unrelated resources; hostile content reaching a StreamPipes-owned parser must not cause code execution, secret disclosure, authorization bypass, corruption of unrelated resources, or uncontrolled cross-adapter impact.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-adapters"
+        ],
+        "mitigations": [
+          "control-robust-ingestion",
+          "control-rate-limiter"
+        ]
+      },
+      {
+        "bom-ref": "threat-graaljs-sandbox-escape",
+        "name": "User script escapes the GraalJS sandbox",
+        "description": "User-supplied JS transform scripts run in the GraalJS transformer (GraalJsScriptEngine) under SandboxPolicy.CONSTRAINED and HostAccess.CONSTRAINED, with allowHostClassLookup disabled and host access limited to @ExposedToScripts members. This is a containment boundary: arbitrary host-code execution from a script is not intended, and a break of this sandbox is in-model and valid.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-pipeline-elements"
+        ],
+        "mitigations": [
+          "control-graaljs-sandbox"
+        ]
+      },
+      {
+        "bom-ref": "threat-adapter-target-authz",
+        "name": "Lower-privileged user sets or modifies adapter targets (SSRF-shaped)",
+        "description": "Configuring an adapter target requires the WRITE_ADAPTER privilege, held by ROLE_CONNECT_ADMIN; a Connect Admin choosing where to connect is an authorized action. In-model and valid only if a lower-privileged role can set the target, or an authorization bypass lets a user modify another user's adapter configuration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-adapters",
+          "asset-rest-control-plane"
+        ],
+        "mitigations": [
+          "control-two-tier-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-bus-datastore-exposure",
+        "name": "External actor reads or writes broker topics or the datastore",
+        "description": "An external actor reading or writing internal broker topics or the datastore is in scope only if the exposure comes from shipped defaults or StreamPipes configuration; otherwise it is an operator infrastructure issue. Ownership is shared between the operator and StreamPipes.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-message-bus",
+          "asset-data-lake"
+        ],
+        "mitigations": [
+          "control-network-isolation",
+          "control-transport-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-default-bootstrap-credentials",
+        "name": "Fresh production-reachable instance accepts known shipped defaults",
+        "description": "On first start, AutoInstallation provisions the admin from SP_INITIAL_ADMIN_EMAIL (default admin@streampipes.apache.org), SP_INITIAL_ADMIN_PASSWORD (default admin), and SP_INITIAL_CLIENT_SECRET (default my-apache-streampipes-secret-key-change-me), falling back to defaults when unset. A production-reachable fresh installation accepting shipped bootstrap credentials is security-relevant and is not automatically routed to operator misconfiguration: if StreamPipes lacks prominent warnings, startup blocking, instance-unique generated values, or forced rotation, it is triaged as a hardening gap or valid shipped-default issue.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-control-plane"
+        ],
+        "mitigations": [
+          "control-override-bootstrap-credentials"
+        ]
+      },
+      {
+        "bom-ref": "threat-builtin-element-dos",
+        "name": "Pathological built-in pipeline element on hostile content",
+        "description": "A built-in StreamPipes pipeline element with super-linear CPU/memory behavior reachable from in-scope hostile source content can be used to exhaust resources across unrelated resources. For custom elements, pathological compute or memory behavior is unvetted extension logic and an operator concern.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-pipeline-elements"
+        ],
+        "mitigations": [
+          "control-robust-ingestion",
+          "control-rate-limiter"
+        ]
+      },
+      {
+        "bom-ref": "threat-network-interception",
+        "name": "Network adversary between clients and services without TLS",
+        "description": "A network adversary between the browser/clients and the REST layer, or between services, where transport security is not configured. TLS on the REST endpoint, broker, datastore, and inter-service transport is left to the operator; StreamPipes makes no blanket wire-encryption guarantee by itself.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-control-plane",
+          "asset-message-bus"
+        ],
+        "mitigations": [
+          "control-transport-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-extension-code-execution",
+        "name": "Installed JAR extension executes arbitrary code",
+        "description": "Adapters/processors/sinks are deployed as separate container services, giving process/namespace isolation from the core, but this is not a boundary against whoever builds and installs the extension: that code runs inside the container with its privileges. The shipped compose applies no cap_drop/security_opt/non-root user/read_only hardening and leaves the broker/datastore reachable on the shared spnet. Installing an extension is trusting that code; a new path to a privilege already held by a trusted admin is equivalent harm. By design, property disclaimed.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-pipeline-elements",
+          "asset-adapters"
+        ],
+        "mitigations": [
+          "control-vet-extensions",
+          "control-container-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-semantic-source-data",
+        "name": "Untruthful or semantically wrong external source data",
+        "description": "StreamPipes does not guarantee that data from an external industrial source is truthful, physically plausible, correctly timestamped, correctly typed, or safe for downstream operational decisions. Source trust, units, sensor correctness, and business meaning are operator concerns; this is distinct from parser/transformation safety, which is upheld.",
+        "origin": "environmental",
+        "affectedAssets": [
+          "asset-adapters"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-infrastructure-operator",
+        "name": "Adversary with host, container, broker, or datastore access",
+        "description": "Anyone controlling the deployment infrastructure is not an adversary StreamPipes defends against; likewise, bugs in infrastructure StreamPipes orchestrates or depends on (broker, datastore, JVM, upstream OPC-UA/MQTT/Kafka libraries) are reported upstream unless StreamPipes-owned code reaches the vulnerable path with attacker-influenceable input.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-message-bus",
+          "asset-data-lake"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-control-plane",
+        "boundary": "boundary-control-plane",
+        "name": "Control-plane trust boundary",
+        "description": "Client (UI/API) to StreamPipes control plane: requests are authenticated and authorized on two tiers (role/privilege gate plus per-object ACL) before acting; request bodies, pipeline definitions, adapter definitions, and configuration are treated as untrusted and authorized per resource. Precedence: anonymous-if-permitted, then admin, then per-object ACL.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-authn-authz-bypass",
+          "threat-cross-user-resource-tampering",
+          "threat-credential-disclosure",
+          "threat-adapter-target-authz",
+          "threat-default-bootstrap-credentials",
+          "threat-network-interception"
+        ],
+        "controlsAtBoundary": [
+          "control-token-authentication",
+          "control-two-tier-authorization",
+          "control-override-bootstrap-credentials",
+          "control-transport-security"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-data-ingress",
+        "boundary": "boundary-data-ingress",
+        "name": "Data-ingress trust boundary",
+        "description": "External source to source/input adapter: source provisioning is operator/admin-only, but data from configured sources remains untrusted content for StreamPipes-owned parsers and transformations. The semantic trustworthiness of that data remains an operator/source concern.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ingestion-dos",
+          "threat-builtin-element-dos",
+          "threat-semantic-source-data"
+        ],
+        "controlsAtBoundary": [
+          "control-robust-ingestion",
+          "control-rate-limiter"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-token-authentication",
+      "name": "Stateless token-based authentication",
+      "description": "Authentication of UI/REST access before privileged actions: stateless and token-based (TokenAuthenticationFilter, SessionCreationPolicy.STATELESS); form login and HTTP Basic are disabled; OAuth2 login is optional. The default rule is anyRequest().authenticated(); the only unauthenticated endpoints are a narrow, non-sensitive asset allowlist for pipeline-element/adapter assets. CSRF protection is not needed for this default model unless authentication material is stored in a browser-ambient way.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-two-tier-authorization",
+      "name": "Two-tier per-resource authorization",
+      "description": "A role/privilege gate (@PreAuthorize) plus per-object ACL checks (SpPermissionEvaluator, @PostFilter for list results). Non-admins are bounded to owned/permitted resources; admins bypass the object ACL by design. Fine-grained roles (ROLE_CONNECT_ADMIN, ROLE_PIPELINE_USER, etc.) determine who may configure adapters and pipelines.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-graaljs-sandbox",
+      "name": "GraalJS constrained sandbox for user scripts",
+      "description": "The GraalJS transformer runs user scripts under SandboxPolicy.CONSTRAINED and HostAccess.CONSTRAINED, with allowHostClassLookup disabled and host access limited to @ExposedToScripts members.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-pipeline-elements"
+      ]
+    },
+    {
+      "bom-ref": "control-rate-limiter",
+      "name": "Byte-based ingress rate limiter",
+      "description": "SpRateLimiter, default-on at extension-service startup: each event costs permits equal to its byte size, the permit budget is a percentage of JVM total memory, and overload applies backpressure (tryAcquire with timeout). It bounds sustained high-rate/high-volume sources after metering but does not guarantee bounded processing for every single malformed or oversized input, nor bound compute complexity inside an individual pipeline element.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-adapters"
+      ]
+    },
+    {
+      "bom-ref": "control-robust-ingestion",
+      "name": "Parser and transformation safety on built-in ingestion paths",
+      "description": "StreamPipes-owned parsing, schema-based transformation, datatype/timestamp coercion, and event handling must fail the affected event or adapter operation on malformed input without compromising unrelated resources, and must not cause code execution, secret disclosure, authorization bypass, corruption of unrelated resources, or uncontrolled cross-adapter impact on hostile content. This does not extend to custom extension parsers or semantic correctness of source data.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-adapters",
+        "asset-pipeline-elements"
+      ]
+    },
+    {
+      "bom-ref": "control-secret-handling",
+      "name": "Secret redaction, ACLs, and safe error handling",
+      "description": "Adapter/source credentials and client secrets are protected by StreamPipes handling: secret redaction, access control, and safe error handling so that logs and error reports do not expose credentials or sensitive payloads unnecessarily.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rest-control-plane",
+        "asset-adapters"
+      ]
+    },
+    {
+      "bom-ref": "control-override-bootstrap-credentials",
+      "name": "Replace bootstrap credentials for production",
+      "description": "Operators must replace SP_INITIAL_ADMIN_EMAIL, SP_INITIAL_ADMIN_PASSWORD, and SP_INITIAL_CLIENT_SECRET before production use; the shipped defaults are known bootstrap credentials that can become global compromise if left in place.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rest-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-transport-security",
+      "name": "Operator-configured TLS",
+      "description": "Configure TLS on the REST endpoint, broker, datastore, and inter-service transport, and secure those backing services; transport security is left to the operator.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-control-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Network isolation of internal infrastructure",
+      "description": "Isolate the broker, datastore, and extension-runtime services from untrusted networks; the internal bus and datastore are modeled as trusted only inside an operator-controlled, network-isolated perimeter.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-message-bus",
+        "asset-data-lake"
+      ]
+    },
+    {
+      "bom-ref": "control-vet-extensions",
+      "name": "Vet installed adapters and pipeline elements",
+      "description": "Installing a JAR extension is deploying code into the runtime, code execution by design, not a sandbox against the extension author; operators must vet extensions before installing them.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-pipeline-elements",
+        "asset-adapters"
+      ]
+    },
+    {
+      "bom-ref": "control-container-hardening",
+      "name": "Harden extension containers beyond the shipped defaults",
+      "description": "The shipped compose applies no cap_drop/security_opt/non-root user/read_only hardening and leaves the broker/datastore reachable on the shared spnet; container hardening beyond the default is an operator concern.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-pipeline-elements"
+      ]
+    }
+  ]
+}

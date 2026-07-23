@@ -1,0 +1,516 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-hop",
+      "name": "Apache Hop",
+      "description": "Hop Orchestration Platform: visual data and metadata orchestration (pipelines and workflows) authored in a GUI and run on a local engine, a remote Hop Server, or Beam runners. Hop executes operator-authored pipelines that by design read/write files, query databases, call services, and run scripting/exec steps; it is not a sandbox and not a multi-tenant isolation boundary. Hop is operated as a single trust domain: the author, local operator, and Hop Server credential holders are all trusted, and the network-facing Hop Server and REST API are where untrusted actors can appear. Threat model ratified by the Hop PMC.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/hop/blob/main/THREAT_MODEL.md",
+          "comment": "Source threat model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hop.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hop"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/hop/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/hop/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-hop",
+      "name": "Hop execution deployment",
+      "description": "Trust boundaries described by the threat model: a trusted author/operator drives the engine; a remote client reaching the Hop Server (embedded Jetty servlets) or the separate hop-rest JAX-RS API is the high-value network boundary; metadata/project files are parsed on load but only execute when run; the connection layer carries operator-configured credentials to external backends; variables are resolved by raw substitution and can carry untrusted data to sinks.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-engine",
+          "type": "process",
+          "name": "Execution engine",
+          "description": "Runs operator-authored pipelines (.hpl) and workflows (.hwf), including transforms that touch files, databases, network, and scripting/exec steps with full host/JVM capability.",
+          "zone": "zone-hop-domain"
+        },
+        {
+          "bom-ref": "asset-hop-server",
+          "type": "service",
+          "name": "Hop Server (servlet/HTTP)",
+          "description": "Embedded Jetty server whose servlets accept pipeline/workflow run requests over HTTP (/hop/execPipeline, /hop/addPipeline + /hop/startExec, /hop/registerPackage, ...). HTTP Basic auth is enabled by default but the only shipped credential is the publicly-known cluster/cluster, there is no per-endpoint authorization, and the Docker image binds 0.0.0.0:8080 with those defaults.",
+          "zone": "zone-hop-domain"
+        },
+        {
+          "bom-ref": "asset-rest-api",
+          "type": "api",
+          "name": "Hop REST API (hop-rest)",
+          "description": "A distinct JAX-RS WAR exposing /api/v1/execute and /api/v1/metadata CRUD. It has no built-in authentication; auth is whatever the servlet container or reverse proxy provides.",
+          "zone": "zone-hop-domain"
+        },
+        {
+          "bom-ref": "asset-metadata-files",
+          "type": "data",
+          "name": "Pipeline/workflow and metadata files",
+          "description": "Unsigned XML (.hpl/.hwf) with no signature, provenance, or integrity check; loading parses them with a hardened XML parser, running them executes their steps. Connection passwords stored in them are only reversibly obfuscated by default.",
+          "zone": "zone-hop-domain"
+        },
+        {
+          "bom-ref": "asset-backends",
+          "type": "service",
+          "name": "External backends (databases, files, cloud services)",
+          "description": "Operator-configured connection targets reached through bundled JDBC drivers and HTTP/REST/cloud transforms; responses are backend-controlled.",
+          "zone": "zone-backends"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Remote network clients",
+          "type": "trust",
+          "description": "Untrusted-capable clients of the Hop Server and REST API; bounded by whatever auth fronts the surface."
+        },
+        {
+          "bom-ref": "zone-hop-domain",
+          "name": "Hop single trust domain",
+          "type": "trust",
+          "description": "The pipeline/workflow author, local operator, and any holder of Hop Server credentials, plus the engine/server/GUI they control; all trusted, with no isolation between pipelines or tenants."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "External backends",
+          "type": "trust",
+          "description": "Databases, file stores, and services the operator connects to; a network MITM between Hop and its backends is an in-scope adversary."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-server-http",
+          "name": "Remote client to Hop Server / REST API",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-hop-domain"
+          ]
+        },
+        {
+          "bom-ref": "boundary-connections",
+          "name": "Connection layer to external backends",
+          "type": "trust",
+          "zones": [
+            "zone-hop-domain",
+            "zone-backends"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Environment: a JVM and OS with full file and process access for exec/shell/scripting steps; network reachability to configured backends and the Hop Server listen interface; the system trust store for outbound TLS (the operator sets javax.net.ssl.keyStore where strict outbound TLS verification is required)."
+        },
+        {
+          "description": "Pipeline/workflow definitions, connection configs, and metadata are trusted operator/author input; running an untrusted .hpl/.hwf is equivalent to running untrusted instructions."
+        },
+        {
+          "description": "Variables and parameters may be untrusted-capable: a Set Variables transform can copy an upstream row-stream value (or OS env / -D property) into a variable that is resolved by raw, unescaped substitution into SQL, paths, or shell bodies."
+        },
+        {
+          "description": "Out of scope: hop-website, docs, tests, assembly build mechanics (though the shipped default posture is an in-scope fact), bundled third-party JDBC driver CVEs, credential acquisition/rotation for backends, and multi-tenant isolation."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-server-auth-bypass",
+        "name": "Bypass of the Hop Server authentication gate",
+        "description": "The servlet Hop Server enables HTTP Basic authentication by default, gating every endpoint. A genuine implementation defect that lets an endpoint be reached without the configured credential, an authorization hole beyond the documented single /* role, or an XXE bypassing the hardened parser is a valid finding under the in-scope remote adversary.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hop-server"
+        ],
+        "mitigations": [
+          "control-default-basic-auth"
+        ]
+      },
+      {
+        "bom-ref": "threat-default-credential-rce",
+        "name": "Remote code execution via an exposed Hop Server with the default credential",
+        "description": "The only shipped credential is the publicly-known cluster/cluster (pwd/hop.pwd), there is no per-endpoint authorization (any authenticated user can run/stop pipelines), and the Docker image binds 0.0.0.0:8080 with those defaults. An exposed deployment with the unchanged default credential (or enable_auth=false) gives remote pipeline execution, which is remote code execution. Changing the credential and restricting exposure is an operator responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hop-server"
+        ],
+        "mitigations": [
+          "control-lockdown-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rest-api-unauthenticated",
+        "name": "Unauthenticated pipeline execution via the exposed REST API",
+        "description": "The separate hop-rest deployable exposes /api/v1/execute and /api/v1/metadata CRUD with no built-in authentication; exposing it to an untrusted network without a fronting auth layer allows unauthenticated pipeline execution and metadata mutation. Access control is entirely the deployment's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-api"
+        ],
+        "mitigations": [
+          "control-front-rest-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-pipeline-execution",
+        "name": "Running an untrusted pipeline or workflow file",
+        "description": "Running an untrusted .hpl/.hwf is equivalent to executing untrusted instructions: there is no signature, provenance, or integrity check on these files, and an authored pipeline runs scripting/shell/SQL and touches files/network with full host capability by design (no SecurityManager; GraalJS with HostAccess.ALL; Rhino without a ClassShutter; Janino/UDJC compile arbitrary Java; Exec process/Shell run OS commands). Loading alone only parses; running executes.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-engine",
+          "asset-metadata-files"
+        ],
+        "mitigations": [
+          "control-trusted-sources-only",
+          "control-janino-denylist"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-variable-injection",
+        "name": "Injection via untrusted variable or parameter values",
+        "description": "Variables (${VAR}/%%VAR%%/$[hex]) are resolved by raw, unescaped string substitution and concatenated directly into SQL strings, file paths, and shell bodies; a value sourced from an untrusted upstream row (via Set Variables) or attacker-influenced OS env / -D property is an injection surface (SQL injection, path traversal, shell command construction). Parameterizing/escaping untrusted variables is the pipeline author's job. (The SQL row-stream value path uses PreparedStatement binding and is not the injection concern.)",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-engine"
+        ],
+        "mitigations": [
+          "control-parameterize-variables"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-recovery",
+        "name": "Recovery of default-obfuscated credentials at rest",
+        "description": "Connection passwords in metadata are by default only reversibly obfuscated, not encrypted: the built-in Hop encoder XORs against a hardcoded, publicly-known seed, and anyone with the file recovers the plaintext. Real confidentiality is opt-in via the AES2 encoder (AES-GCM with an operator-held key) or a secrets resolver (Vault, Azure Key Vault, Google Secret Manager). An exposed default-obfuscated metadata password is recoverable by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-metadata-files"
+        ],
+        "mitigations": [
+          "control-credential-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-log-leak",
+        "name": "Credential leakage through resolved URLs in debug logs",
+        "description": "No plaintext password is logged by default and decrypted DB passwords travel in a JDBC Properties object, not the URL; however, resolved JDBC/REST/HTTP URLs are logged at debug/detailed level without credential masking, so credentials an author embeds in a URL can leak. A credential leak in logs beyond this documented behavior would be a valid finding.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-engine"
+        ],
+        "mitigations": [
+          "control-avoid-url-credentials"
+        ]
+      },
+      {
+        "bom-ref": "threat-relaxed-tls",
+        "name": "Weakened outbound TLS verification and MITM exposure",
+        "description": "A network MITM between Hop and its backends or between client and server is an in-scope adversary. Hop Server TLS is available (Jetty sslConfig with a JKS keystore) but off by default; ServerConnectionManager installs a process-global default SSLContext that skips CA-chain/hostname validation (date-only) when javax.net.ssl.keyStore is unset; several transforms offer opt-in ignoreSsl/trustAllCertificates switches (defaulting to verification on). Enabling TLS and setting the keystore is an operator responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hop-server",
+          "asset-backends"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XXE bypassing the hardened XML parser",
+        "description": "Pipeline/workflow/metadata files are parsed through a secure DocumentBuilderFactory with external general/parameter entities and external DTD loading disabled and FEATURE_SECURE_PROCESSING on, mitigating XXE file-read/SSRF and entity expansion; the same secure parser is used by the Hop Server remote-add endpoints. An XXE that bypasses this hardened parser is a valid finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-metadata-files",
+          "asset-hop-server"
+        ],
+        "mitigations": [
+          "control-hardened-xml"
+        ]
+      },
+      {
+        "bom-ref": "threat-bundled-driver-cves",
+        "name": "Vulnerabilities in bundled third-party JDBC drivers",
+        "description": "A CVE in a packaged driver (lib-jdbc bundles redshift, clickhouse, h2, mssql, vertica, crate, monetdb, jt400, snowflake, derby, duckdb, hsqldb, postgresql, sqlite, mysql) is a dependency/supply-chain matter, not a Hop defect; Hop's job is to call them correctly.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-backends"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-server-http",
+        "boundary": "boundary-server-http",
+        "name": "Hop Server / REST API trust boundary",
+        "description": "The high-value boundary: a network client requests pipeline/workflow execution. Authentication, transport security, and who can run what live here; the separate REST API is a second network surface with no built-in auth of its own.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-server-auth-bypass",
+          "threat-default-credential-rce",
+          "threat-rest-api-unauthenticated",
+          "threat-xxe"
+        ],
+        "controlsAtBoundary": [
+          "control-default-basic-auth",
+          "control-lockdown-server",
+          "control-front-rest-api",
+          "control-enable-tls",
+          "control-hardened-xml"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-connections",
+        "boundary": "boundary-connections",
+        "name": "Connection-layer trust boundary",
+        "description": "Carries operator-configured credentials to external backends; responses are backend-controlled and a network MITM is in scope. Outbound JDBC TLS is driver-delegated; HTTP/REST/cloud transforms use the JVM trust store unless given a per-transform truststore.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-relaxed-tls",
+          "threat-credential-recovery",
+          "threat-bundled-driver-cves"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-tls",
+          "control-credential-protection"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-default-basic-auth",
+      "name": "HTTP Basic authentication on by default",
+      "description": "The servlet Hop Server enables HTTP Basic authentication by default (enable_auth defaults to true), gating every endpoint so a fully unauthenticated client is rejected. Caveat: the shipped credential is the publicly-known default, and a single /* role gate means no per-endpoint authorization.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-hop-server"
+      ]
+    },
+    {
+      "bom-ref": "control-hardened-xml",
+      "name": "XXE-hardened XML parsing",
+      "description": "Pipeline/workflow/metadata files are parsed through a secure DocumentBuilderFactory (XmlParserFactoryProducer) with external entities and external DTD loading disabled and FEATURE_SECURE_PROCESSING on; the Hop Server remote-add endpoints use the same secure parser.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-metadata-files",
+        "asset-hop-server"
+      ]
+    },
+    {
+      "bom-ref": "control-lockdown-server",
+      "name": "Lock down the Hop Server",
+      "description": "Change the default cluster/cluster credential, do not expose the remote-execution API to an untrusted network, restrict who can submit runs, and be aware the Docker image binds 0.0.0.0:8080 with the default credential.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hop-server"
+      ]
+    },
+    {
+      "bom-ref": "control-front-rest-api",
+      "name": "Front the REST API with authentication",
+      "description": "Do not expose the hop-rest REST API without a fronting authentication layer (reverse proxy or container auth); it has none of its own.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rest-api"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-protection",
+      "name": "Protect credentials at rest",
+      "description": "Enable the AES2 encoder (HOP_PASSWORD_ENCODER_PLUGIN=AES2 with HOP_AES_ENCODER_KEY or HOP_AES_ENCODER_KEY_FILE) and/or a secrets resolver (HashiCorp Vault, Azure Key Vault, Google Secret Manager); never commit default-obfuscated credentials to version control.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-metadata-files"
+      ]
+    },
+    {
+      "bom-ref": "control-avoid-url-credentials",
+      "name": "Avoid embedding credentials in URLs",
+      "description": "Resolved JDBC/REST/HTTP URLs are logged at debug/detailed level without credential masking, so operators should avoid in-URL credentials.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS and strict outbound verification",
+      "description": "Serve the Hop Server over HTTPS via the sslConfig block of hop-server.xml (TLS is off by default), use TLS for sensitive backends, and set javax.net.ssl.keyStore to avoid the relaxed process-global TLS trust manager.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-server-http",
+        "boundary-connections"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-sources-only",
+      "name": "Run pipelines from trusted authors only",
+      "description": "Do not source connection config or pipeline/metadata files from untrusted input; only run pipelines from trusted authors, since running an untrusted .hpl/.hwf is equivalent to executing untrusted instructions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-metadata-files"
+      ]
+    },
+    {
+      "bom-ref": "control-parameterize-variables",
+      "name": "Treat scripting/exec/SQL steps as code and parameterize untrusted variables",
+      "description": "Parameterize or escape any variable that may carry untrusted data before it reaches SQL strings, file paths, or shell bodies; the resolver does not escape.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-janino-denylist",
+      "name": "Populate the Janino code-exclusion deny-list if desired",
+      "description": "The opt-in, default-empty substring deny-list (JaninoCheckerUtil + codeExclusions.xml) covers only the three Janino-based steps and blocks nothing out of the box; operators can populate it to block named constructs (e.g. System.exit, Runtime.exec) in those steps.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-engine"
+      ]
+    }
+  ]
+}

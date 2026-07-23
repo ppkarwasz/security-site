@@ -1,0 +1,582 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-drill",
+      "name": "Apache Drill",
+      "description": "Schema-free, distributed SQL query engine for large-scale datasets. A cluster of Drillbit daemons (coordinated via Apache ZooKeeper) accepts ANSI-SQL queries over JDBC, ODBC, a REST API, and a Web UI (default port 8047) and executes them directly against data in configurable storage plugins (local/HDFS/S3 files, Hive, HBase, Kafka, MongoDB, RDBMS via JDBC, HTTP), discovering schema at query time. The threat model is a v0 DRAFT under Drill PMC review; most load-bearing claims are recorded as inferred pending PMC confirmation, with two maintainer-confirmed points (contrib/ plugins in scope; storage enumeration is by design).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/drill/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://drill.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "drill"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/drill/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/drill/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-drill",
+      "name": "Drill clustered deployment",
+      "description": "Intended deployment: a clustered set of Drillbits inside an operator-controlled, network-isolated cluster, queried by analytics clients over the client RPC and the Web UI/REST endpoint; queries reach configured data sources through storage plugins, as the submitting user when impersonation is enabled. Embedded single-user mode is out of scope.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-drillbit",
+          "type": "service",
+          "name": "Drillbit daemon",
+          "description": "Accepts SQL over the user RPC (JDBC/ODBC) as the foreman, parses and plans (Calcite), and executes distributed query fragments; communicates with peers over SASL-capable control/data RPC and coordinates via ZooKeeper.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-web-ui",
+          "type": "endpoint",
+          "name": "Web UI / REST API (:8047)",
+          "description": "Query submission, storage-plugin configuration, profiles, and options; a high-value admin surface since it can configure storage plugins and upload dynamic UDFs.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-storage-plugins",
+          "type": "component",
+          "name": "Storage and format plugins",
+          "description": "file/HDFS/S3, Hive, HBase, Kafka, Mongo, JDBC (RDBMS), and HTTP plugins, including the PMC-maintained contrib/ storage and format plugins, which carry the same connector trust surface: filesystem reads and outbound network reach driven by queries.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-udf-layer",
+          "type": "module",
+          "name": "Dynamic UDF layer",
+          "description": "Built-in functions plus runtime jar upload of dynamic UDFs: in-JVM code execution by design, admin-gated.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-zookeeper",
+          "type": "infrastructure",
+          "name": "ZooKeeper",
+          "description": "Cluster coordination store; anyone with direct ZooKeeper write access has already won and is out of model.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-data-sources",
+          "type": "data-store",
+          "name": "Underlying data sources",
+          "description": "HDFS/S3, RDBMS behind the JDBC plugin, Hive, HBase, Kafka, MongoDB: each enforces its own access control, which Drill honors (via impersonation and views) rather than replaces.",
+          "zone": "zone-data-sources"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "SQL/REST clients",
+          "type": "trust",
+          "description": "Clients submitting queries over JDBC/ODBC/REST/Web UI; authenticated when auth is enabled, otherwise anonymous. The primary untrusted boundary."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Drillbit cluster",
+          "type": "trust",
+          "description": "Drillbits and ZooKeeper on an operator-controlled, network-isolated cluster network, exposed to untrusted clients only through the intended client RPC and :8047 endpoints."
+        },
+        {
+          "bom-ref": "zone-data-sources",
+          "name": "Data sources",
+          "type": "trust",
+          "description": "The configured underlying data sources; with impersonation enabled the source's own ACLs bound each query, with impersonation disabled all access runs as the Drillbit service principal."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-front-door",
+          "name": "Client front door",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-data-source",
+          "name": "Drillbit to data source",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-data-sources"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-sql-client",
+          "party": {
+            "roles": [
+              {
+                "name": "SQL client"
+              }
+            ],
+            "persona": {
+              "description": "Submits queries over JDBC/ODBC/REST; may be authenticated or, if auth is disabled, anonymous. The in-scope adversary is an authenticated low-privilege SQL/REST client (or an anonymous one where auth-disabled is a supported posture), able to submit arbitrary SQL, set connection properties, and drive query-time file/URL access through configured plugins."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Configures storage plugins, system/session options, and security settings, and uploads dynamic UDFs via the Web UI/REST. Trusted; a finding that requires these rights is out of model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-impersonated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Submitting user under impersonation"
+              }
+            ],
+            "persona": {
+              "description": "When impersonation is enabled, the Drillbit accesses the underlying data source as the submitting user, delegating authorization to the data source."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-peer-drillbit",
+          "party": {
+            "roles": [
+              {
+                "name": "Peer Drillbit"
+              }
+            ],
+            "persona": {
+              "description": "Another node in the cluster, authenticated over the inter-Drillbit RPC and fully trusted once authenticated; Drill makes no cross-node integrity claim against a Byzantine authenticated peer."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A JVM on each Drillbit and ZooKeeper for coordination; the cluster network is operator-controlled and not directly exposed to untrusted clients except through the intended client RPC and :8047 endpoints."
+        },
+        {
+          "description": "Authorization correctness depends on the data sources (and/or Drill views plus impersonation) enforcing access; Drill does not re-implement source-side ACLs."
+        },
+        {
+          "description": "Beyond listening on its RPC/Web ports, reading configured storage plugins, writing query profiles and spill files to configured areas, and coordinating via ZooKeeper, a Drillbit is assumed to make no other outbound connections except those a query explicitly drives (pending maintainer confirmation)."
+        },
+        {
+          "description": "The security envelope is set by runtime configuration: auth (drill.exec.security.auth), impersonation, wire encryption, Web UI auth, and dynamic UDF support; the shipped defaults (believed disabled for auth/impersonation/encryption) and whether a multi-user deployment left at defaults is VALID or operator misconfiguration are open wave-1 maintainer questions."
+        },
+        {
+          "description": "Tests, examples, sample data, embedded single-user mode, and the client-side connectors (JDBC/ODBC drivers, C++ client) are out of scope; contrib/ storage and format plugins are in scope (maintainer-confirmed)."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-execution",
+        "name": "Unauthenticated query execution against an auth-enabled cluster",
+        "description": "With drill.exec.security.auth enabled, no SQL or REST statement should run before the session authenticates via the configured mechanism (PLAIN via PAM/LDAP, Kerberos, or custom); unauthenticated execution against an auth-enabled cluster is a security-critical violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drillbit",
+          "asset-web-ui"
+        ],
+        "mitigations": [
+          "control-client-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Low-privilege client reads data outside its authorization",
+        "description": "A query should read or write only what the effective identity is permitted at the data source (impersonation on) and/or what Drill views and storage permissions allow; a low-privilege client reading unauthorized data or bypassing a view is a security-critical, CVE-class violation. Note the maintainer-confirmed non-finding: enumerating and reading the files, schemas, and storage systems Drill is pointed at is the function of a federated query engine, in-model only when access crosses the authenticated identity's authorization.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drillbit",
+          "asset-storage-plugins"
+        ],
+        "mitigations": [
+          "control-impersonation-authz"
+        ]
+      },
+      {
+        "bom-ref": "threat-nonadmin-code-execution",
+        "name": "Non-admin client reaches code execution or plugin reconfiguration",
+        "description": "Registering UDFs and configuring storage plugins are admin-gated; a plain SQL client causing code execution, a plugin change, or arbitrary file or URL access beyond its authorization is a security-critical violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-udf-layer",
+          "asset-web-ui"
+        ],
+        "mitigations": [
+          "control-admin-gating"
+        ]
+      },
+      {
+        "bom-ref": "threat-inbound-impersonation-spoof",
+        "name": "Identity spoofing via connection properties",
+        "description": "A client must not be able to assume an arbitrary user identity through JDBC/ODBC connection properties (inbound impersonation targets) unless the operator configured a proxy/impersonation policy permitting it; an ungated identity spoof is critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drillbit"
+        ],
+        "mitigations": [
+          "control-impersonation-gating"
+        ]
+      },
+      {
+        "bom-ref": "threat-network-mitm",
+        "name": "MITM on unencrypted client or inter-Drillbit links",
+        "description": "A network man-in-the-middle between client and Drillbit, or between Drillbits, where wire encryption (SASL / SSL-TLS) is not configured, can observe or alter sessions and data in the clear.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drillbit"
+        ],
+        "mitigations": [
+          "control-wire-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-open-defaults",
+        "name": "Multi-user deployment left at auth-off / impersonation-off defaults",
+        "description": "If auth and impersonation ship disabled, an open, impersonation-off Drillbit exposes its service-principal access to any client: with impersonation disabled all data-source access runs as the Drill service principal and authorization collapses to whatever Drill itself enforces. Whether this posture is a VALID finding or OUT-OF-MODEL operator misconfiguration is the model's open insecure-default question; the operator responsibility to enable auth and impersonation before exposing Drill to more than one trusted user is documented either way.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-drillbit",
+          "asset-web-ui"
+        ],
+        "mitigations": [
+          "control-enable-auth-impersonation",
+          "control-lockdown-webui"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-udf-plugin-by-design",
+        "name": "Code and connectivity execution via admin-registered UDFs and plugins",
+        "description": "Uploading a UDF jar or configuring a storage plugin is an authorized admin operation; the code or connection runs with the Drillbit's privileges. This is a feature, not a sandbox escape (BY-DESIGN); a finding that requires admin rights to register a UDF or add a plugin is out of model. There is no sandbox around dynamic UDFs or storage-plugin configuration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-udf-layer",
+          "asset-storage-plugins"
+        ],
+        "mitigations": [
+          "control-restrict-plugin-udf-rights"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-query-driven-ssrf-file-read",
+        "name": "Query-driven SSRF and local file read through configured plugins",
+        "description": "The http, jdbc, and dfs plugins exist to reach URLs, RDBMSes, and filesystems, so a query can make a Drillbit issue outbound requests or read local files within the configured plugin scope; Drill provides no defense beyond what plugin configuration and impersonation bound, and restricting them is operator configuration, not an engine guarantee. In-model only if the access crosses the impersonated identity's authorization or the configured workspace.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-storage-plugins"
+        ],
+        "mitigations": [
+          "control-scope-plugins",
+          "control-enable-auth-impersonation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Cluster resource exhaustion by expensive queries",
+        "description": "No hard resource-fairness or anti-DoS guarantee is made (pending maintainer confirmation): a sufficiently expensive query may degrade a Drillbit through heap, direct memory, or CPU exhaustion. Whether per-query memory limits and queues bound this is an open maintainer question.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drillbit"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-peer",
+        "name": "Byzantine authenticated peer Drillbit",
+        "description": "A compromised Drillbit holding a valid cluster identity could behave arbitrarily over the inter-Drillbit RPC; Drill is assumed to make no cross-node integrity claim against a malicious authenticated peer (full peer trust once authenticated). Operators with cluster-host, service-account, or ZooKeeper-write access are likewise out of model.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-drillbit",
+          "asset-zookeeper"
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-embedding-sql-injection",
+        "name": "SQL injection in an embedding application",
+        "description": "An embedding application that string-concatenates untrusted input into Drill SQL has its own bug, not a Drill vulnerability. Similarly, dependency-tail CVEs from SCA scans (Calcite, Hadoop, Jackson, Netty) triage upstream unless Drill's own code reaches the vulnerable path with untrusted input.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-front-door",
+        "boundary": "boundary-client-front-door",
+        "name": "Client front door trust boundary",
+        "description": "Client to Drillbit (the foreman) over the user RPC (JDBC/ODBC) and Web UI/REST (:8047) is the primary boundary. A finding is in-model only if reachable by an authenticated low-privilege SQL/REST client (or an anonymous one where auth-disabled is a supported posture), without admin rights, data-source control, or cluster-host control.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-execution",
+          "threat-authorization-bypass",
+          "threat-nonadmin-code-execution",
+          "threat-inbound-impersonation-spoof",
+          "threat-network-mitm",
+          "threat-resource-exhaustion"
+        ],
+        "controlsAtBoundary": [
+          "control-client-authentication",
+          "control-impersonation-authz",
+          "control-admin-gating",
+          "control-impersonation-gating",
+          "control-wire-encryption",
+          "control-lockdown-webui"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-data-source",
+        "boundary": "boundary-data-source",
+        "name": "Data source trust boundary",
+        "description": "With impersonation enabled, the Drillbit accesses the source as the submitting user and the source's own ACLs bound the query; with impersonation disabled, all access runs as the Drillbit service principal. Malformed data files from configured sources are a parser robustness concern for whoever can write the source.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-query-driven-ssrf-file-read"
+        ],
+        "controlsAtBoundary": [
+          "control-scope-plugins",
+          "control-impersonation-authz"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-client-authentication",
+      "name": "Client authentication when enabled",
+      "description": "With drill.exec.security.auth enabled, sessions authenticate via PLAIN (PAM/LDAP), Kerberos, or a custom mechanism before any statement runs; Web UI auth (form / SPNEGO) is tied to it.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-front-door"
+      ]
+    },
+    {
+      "bom-ref": "control-impersonation-authz",
+      "name": "Authorization scoping via impersonation, views, and storage permissions",
+      "description": "With impersonation enabled the Drillbit accesses data sources as the submitting user, delegating authorization to the source's ACLs; Drill views and storage permissions add engine-side scoping.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-drillbit",
+        "boundary-data-source"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-gating",
+      "name": "Admin gating of UDF upload and plugin configuration",
+      "description": "Registering dynamic UDFs and configuring storage plugins are admin-gated operations that a plain SQL client cannot reach.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-udf-layer",
+        "asset-web-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-impersonation-gating",
+      "name": "Gated inbound impersonation",
+      "description": "A client cannot assume an arbitrary user identity via connection properties unless the operator configured a proxy/impersonation policy permitting it.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-drillbit"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-auth-impersonation",
+      "name": "Enable authentication and impersonation before multi-user exposure",
+      "description": "Enable authentication and impersonation before exposing Drill to more than one trusted user; do not run a multi-user cluster with the shipped auth-off / impersonation-off defaults.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-front-door"
+      ]
+    },
+    {
+      "bom-ref": "control-lockdown-webui",
+      "name": "Lock down the Web UI / REST (:8047)",
+      "description": "The Web UI / REST endpoint can configure storage plugins and upload UDFs; restrict it to admins and protect it with authentication and TLS.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-web-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-plugin-udf-rights",
+      "name": "Restrict plugin-config and UDF-upload rights",
+      "description": "Restrict who can configure storage plugins and upload dynamic UDFs to trusted admins; these are code and connectivity execution surfaces, and granting them to untrusted users hands over code execution and arbitrary connectivity.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-udf-layer",
+        "asset-storage-plugins"
+      ]
+    },
+    {
+      "bom-ref": "control-wire-encryption",
+      "name": "Configure wire encryption",
+      "description": "Configure wire encryption (SASL / SSL-TLS) on client-to-Drillbit and inter-Drillbit links on untrusted networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-front-door"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Network-isolate the cluster and ZooKeeper",
+      "description": "Network-isolate the Drillbit cluster and ZooKeeper from untrusted networks, and give data-source credentials least privilege.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-drillbit",
+        "asset-zookeeper"
+      ]
+    },
+    {
+      "bom-ref": "control-scope-plugins",
+      "name": "Scope storage plugins narrowly",
+      "description": "Do not configure dfs/http/jdbc plugins broadly (filesystem root, open egress) and expose them to low-privilege query clients without impersonation; the plugin scope is the operator's boundary on query-driven file and network reach.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-storage-plugins",
+        "boundary-data-source"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,598 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-camel",
+      "name": "Apache Camel",
+      "description": "Integration framework embedded in someone else's application, not a multi-tenant managed service. The security model documents who is trusted, where the trust boundaries sit, what counts as a framework vulnerability, and what is expected of operators and route authors; it is the reference used by the Camel PMC when triaging security reports.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://camel.apache.org/manual/security-model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://camel.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "camel"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://camel.apache.org/manual/security-model.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/camel/main/docs/user-manual/modules/ROOT/pages/security-model.adoc"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-camel",
+      "name": "Camel application trust model",
+      "description": "The fundamental trust boundary in Camel is between the route (and everything the operator configured) and the data flowing through the route. Anything a route author wrote is trusted code; anything that arrives in an Exchange body, header or attachment from a Camel consumer is untrusted data. The framework's job is to keep that boundary intact: untrusted data must not become code, must not redirect the route to a different endpoint, must not be deserialised into arbitrary types, and must not be parsed in ways that resolve remote resources, unless the route author explicitly asked for it. Management surfaces (JMX, Jolokia, developer console) form a separate boundary whose gate is the surface itself.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-core-engine",
+          "type": "module",
+          "name": "Router engine (camel-core)",
+          "description": "The routing engine, Exchange/Message model, EIP processors, expression/language/property-placeholder resolution, and type-converter and data-format registries. Upholds the core router-engine invariants independently of any component.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-components",
+          "type": "component",
+          "name": "Camel components (consumers, producers, data formats)",
+          "description": "Components consuming untrusted input must apply an inbound HeaderFilterStrategy blocking the Camel* namespace; components deserialising Java objects must default to safe behaviour; components advertising authentication must enforce it.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-management-surface",
+          "type": "interface",
+          "name": "Management surfaces",
+          "description": "camel-management, the developer console, camel-jolokia and JMX: administrative APIs whose exposed operations (ManagedCamelContext.sendBody/requestBody, ManagedBacklogDebugger.evaluateExpressionAtBreakpoint, ...) are intentionally as expressive as a route author's DSL. The trust boundary is the management surface itself (JMX authentication, Jolokia restrictor policy, network exposure), not the individual MBean method.",
+          "zone": "zone-management"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-senders",
+          "name": "External message senders",
+          "type": "trust",
+          "description": "HTTP clients, JMS producers, file droppers, SMTP senders, CoAP peers, AMQP publishers, Kafka producers, mail senders, etc. Untrusted: the primary attacker model."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Camel application (routes and configuration)",
+          "type": "trust",
+          "description": "The route authored in Java, XML or YAML DSL plus the operator's configuration; route code and configuration are trusted."
+        },
+        {
+          "bom-ref": "zone-management",
+          "name": "Management network",
+          "type": "trust",
+          "description": "The trusted network from which management surfaces (JMX, Jolokia, developer console) are meant to be reached."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-message-ingress",
+          "name": "Message ingress (route vs data)",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-senders",
+            "zone-application"
+          ]
+        },
+        {
+          "bom-ref": "boundary-management",
+          "name": "Management surface",
+          "type": "trust",
+          "zones": [
+            "zone-management",
+            "zone-application"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-committers",
+          "party": {
+            "roles": [
+              {
+                "name": "Camel committers and component authors"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Define APIs, write components, choose defaults, publish releases; the framework relies on them to ship secure defaults."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-route-authors",
+          "party": {
+            "roles": [
+              {
+                "name": "Route authors"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. Execute arbitrary Java code in .bean(), .process() and Class references; evaluate arbitrary expressions in simple, groovy, jexl, mvel, xpath, ognl; reach any class on the classpath; configure any component option. Code execution by a route author is by design and not a framework vulnerability."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operators",
+          "party": {
+            "roles": [
+              {
+                "name": "Deployment operators"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. Set configuration properties (including secrets), choose the runtime, decide network exposure and management endpoints, pick the JVM and OS user, configure the secrets backend. Operator misconfiguration is not a framework vulnerability unless the framework's default exposed it."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-message-senders",
+          "party": {
+            "roles": [
+              {
+                "name": "External message senders"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. Send messages into a Camel route over the network or filesystem: the primary attacker. Controls the body, headers, attachments and transport metadata of arriving messages and can replay or shape them arbitrarily; is not assumed to have code execution in the JVM, the operator's filesystem, configuration, the secrets vault, the management network, or the configured keys and credentials."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unsafe-deserialization",
+        "name": "Unsafe deserialization of untrusted input",
+        "description": "Any code path where data received from an external producer is passed to ObjectInputStream.readObject(), an XStream/Hessian/Castor/SnakeYAML unmarshaller, or a polymorphic Jackson reader without an effective filter or allowlist. Critical when gadget-reachable. Historical examples include CVE-2015-5344 (camel-xstream), CVE-2016-8749 (camel-jackson type header), CVE-2015-5348 (HTTP consumers auto-deserialising), CVE-2020-11972/11973 (default consumer configuration), the aggregation-repository series CVE-2024-22369, CVE-2024-23114, CVE-2026-25747, CVE-2026-27172, CVE-2026-40858, CVE-2026-40473 (camel-mina) and CVE-2026-40860 (JMS ObjectMessage.getObject with mapJmsMessage=true).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components",
+          "asset-core-engine"
+        ],
+        "mitigations": [
+          "control-safe-deserialization-defaults",
+          "control-no-serialization-on-untrusted",
+          "control-security-policy-framework"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe-remote-dtd",
+        "name": "XML external entity (XXE) and remote DTD/stylesheet resolution",
+        "description": "Any XML parser, XSLT engine, XSD validator, XPath evaluator or XML data converter that resolves external entities or fetches remote DTDs/stylesheets from untrusted input by default; includes SSRF or remote-resource fetch triggered by default parsing behaviour. Historical examples: CVE-2014-0002/0003 (camel-xslt), CVE-2015-0263/0264 (camel-core XML converter and XPath), CVE-2017-5643 (Validation component fetching remote DTDs), CVE-2018-8027, CVE-2019-0188.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components",
+          "asset-core-engine"
+        ],
+        "mitigations": [
+          "control-component-author-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-expression-injection",
+        "name": "Expression or template language injection",
+        "description": "Untrusted input evaluated as a Camel simple expression or a template language (Velocity, Freemarker, Mustache, MVEL, ...) without explicit route-author opt-in. Historical examples: CVE-2013-4330 (CamelFileName header passed to simple), CVE-2020-11994 (template injection plus arbitrary file disclosure). A route author who writes .simple(\"${header.x}\") over an attacker-controlled header is route-author responsibility; the in-scope case is the framework itself passing untrusted input to an evaluator without the route author asking.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-core-engine",
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-engine-invariants"
+        ]
+      },
+      {
+        "bom-ref": "threat-camel-header-dispatch",
+        "name": "Camel-header / bean-dispatch abuse via untrusted input",
+        "description": "Internal headers (CamelBeanMethodName, CamelFileName, CamelExecCommandExecutable, CamelJmsDestinationName, CamelHttpUri, CamelJacksonUnmarshalType, and the Camel<Api>.* headers of API-based components) drive component behaviour. Any consumer that maps untrusted input into the Exchange header map without a strict, case-insensitive HeaderFilterStrategy becomes an injection vector redirecting dispatch. Historical examples: CVE-2025-27636, CVE-2025-29891, CVE-2025-30177, CVE-2026-33453, CVE-2026-33454, CVE-2026-40453. The in-scope condition is at the inbound consumer, not at the producer honouring the header.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components",
+          "asset-core-engine"
+        ],
+        "mitigations": [
+          "control-header-filter-strategy",
+          "control-remove-headers"
+        ]
+      },
+      {
+        "bom-ref": "threat-path-traversal",
+        "name": "Path traversal",
+        "description": "A file/mail/FTP consumer or producer reads or writes a path outside the configured root directory via ../ or an absolute path supplied in an untrusted file name, header or URI component. Historical examples: CVE-2018-8041 (camel-mail), CVE-2019-0194 (camel-file).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-component-author-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-bypass",
+        "name": "Authentication or authorization bypass in security-providing components",
+        "description": "Components that explicitly provide authentication, authorization, or tenant isolation (Keycloak, JWT, Shiro, Spring Security, platform-http auth handlers) must enforce what they claim: validate token issuers, audiences and signatures, cover every sub-path the matching handler advertises, fail closed. Historical examples: CVE-2026-23552 (camel-keycloak not validating the iss claim), CVE-2026-40022 (camel-platform-http-main sub-router exposing subpaths past the auth handler).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-component-author-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-secret-disclosure",
+        "name": "Information disclosure of secrets or sensitive Exchange state",
+        "description": "Code paths that write secrets, internal Exchange state, file contents or configuration values to a log, an event, a world-readable file, or an HTTP response visible to a lower-privileged party. Judged against the default production log levels (INFO, WARN, ERROR); DEBUG/TRACE findings are out of scope as operator-enabled diagnostic configuration. Historical examples: CVE-2023-34442 (camel-jira world-readable temp files), CVE-2024-22371 (EventFactory exposing sensitive Exchange data).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components",
+          "asset-core-engine"
+        ],
+        "mitigations": [
+          "control-vault-secrets"
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-defaults",
+        "name": "Insecure defaults in components",
+        "description": "A component shipping with a security-relevant option enabled by default (Java deserialisation, TLS validation disabled, an admin endpoint on 0.0.0.0, a permissive HeaderFilterStrategy, an unfiltered ObjectInputStream) is in scope independently of the underlying class: the question is what an attacker can do against a component simply added to a route with no further configuration. Historical examples: CVE-2020-11972, CVE-2020-11973, CVE-2026-40860.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-component-author-review",
+          "control-security-policy-framework"
+        ]
+      },
+      {
+        "bom-ref": "threat-query-injection",
+        "name": "Injection into back-end queries built by Camel",
+        "description": "Components that build a query in another language must not splice untrusted input directly into that query, letting the attacker alter its structure rather than only its data. Historical examples: CVE-2025-66169 (camel-neo4j Cypher injection), CVE-2014-0003 (camel-xslt extension-function invocation).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-component-author-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-route-author-code",
+        "name": "Route authors writing code that does whatever they want",
+        "description": ".bean(), .process(), Runtime.exec(), simple/groovy/jexl/mvel evaluation, custom processors and beans are route code, and route code is trusted. A route author evaluating an attacker-controlled header as an expression, or building SQL/Cypher/LDAP/XPath/HTTP URI strings from untrusted input without parameterisation, is the route's fault, not the framework's. Camel provides no sandboxing of the route or the JVM running it.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Denial of service via resource exhaustion",
+        "description": "Unthrottled routes, unbounded aggregators, HTTP consumers without rate limits, arbitrarily large JMS messages: the engine makes no unbounded-resource guarantee, and operators must apply throttle, circuitBreaker, resilience4j, JVM limits and component options. Algorithmic-complexity attacks in third-party parsers (XML billion-laughs, ReDoS in route-author regex, decompression amplification) are out of scope unless Camel exposes the parser in a way that bypasses the library's own limits.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-operator-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-management-surface-exposure",
+        "name": "Management surface reached by network peers",
+        "description": "A deployer placing camel-management, the developer console, camel-jolokia, JMX or another management surface on a public network. The exposed operations are intentionally as expressive as a route author's DSL; the trust boundary is the management surface itself (JVM JMX authentication, the Jolokia restrictor policy, the network exposure of the management port), not the individual MBean method. A report that an MBean operation executes code when invoked from a JMX or Jolokia connection describes the documented contract.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-surface"
+        ],
+        "mitigations": [
+          "control-isolate-management"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-explicit-optins-and-profiles",
+        "name": "Documented opt-in options and non-default dev/test profiles",
+        "description": "Options whose risk is documented and which must be set explicitly (allowJavaSerializedObject=true, transferException=true, trustAllCertificates=true, hostnameVerificationEnabled=false, mapJmsMessage=true with an untrusted broker, explicit ObjectInputStream data formats) are operator opt-ins. Behaviour present only under the non-default dev or test profile (developer console, debug/trace endpoints, backlog debugger, security policy relaxed from fail to warn) is development-only; the production posture judged is the default prod profile.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-security-policy-framework",
+          "control-operator-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-third-party-cves",
+        "name": "Vulnerabilities in third-party transitive dependencies",
+        "description": "A CVE in a JAR Camel pulls in but does not reach through any Camel-exposed code path is the upstream project's vulnerability. Camel fixes CVEs in Camel code, not in third-party JARs; it may upgrade the dependency to pick up an upstream fix, but the CVE is closed against the upstream project. Also excluded: self-XSS by an authenticated user of a UI built on Camel, and scanner reports that do not demonstrate a concrete trust-boundary breach.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-application-headers",
+        "name": "Application-level semantic headers passed through intentionally",
+        "description": "The framework's automatic header filtering is scoped to the internal Camel* / org.apache.camel.* namespace only. Application-level headers that components consume as their documented header contract (To, Cc, Bcc, Subject, From in camel-mail; HTTP header names; JMS properties; AMQP, MQTT, CoAP, Kafka headers) are passed through intentionally; sanitising them against an untrusted upstream is the route author's responsibility at the trust boundary. The framework is in scope only when a consumer maps untrusted wire input into those headers as part of its own default behaviour without an effective inbound HeaderFilterStrategy, and the path-traversal class applies independently.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-components"
+        ],
+        "mitigations": [
+          "control-remove-headers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-message-ingress",
+        "boundary": "boundary-message-ingress",
+        "name": "Route versus data trust boundary",
+        "description": "Anything arriving in an Exchange body, header or attachment from a Camel consumer is untrusted data; the framework must keep untrusted data from becoming code, redirecting dispatch, being deserialised into arbitrary types, or resolving remote resources, unless the route author explicitly asked for it. All in-scope properties must hold with zero security configuration.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unsafe-deserialization",
+          "threat-xxe-remote-dtd",
+          "threat-expression-injection",
+          "threat-camel-header-dispatch",
+          "threat-path-traversal",
+          "threat-auth-bypass",
+          "threat-query-injection",
+          "threat-insecure-defaults",
+          "threat-application-headers"
+        ],
+        "controlsAtBoundary": [
+          "control-header-filter-strategy",
+          "control-remove-headers",
+          "control-safe-deserialization-defaults",
+          "control-engine-invariants"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-management",
+        "boundary": "boundary-management",
+        "name": "Management surface trust boundary",
+        "description": "Management surfaces assume a trusted network; the boundary is JVM JMX authentication, the Jolokia restrictor policy and the network exposure of the management port, not the individual MBean method.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-management-surface-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-isolate-management"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-engine-invariants",
+      "name": "Core router-engine invariants",
+      "description": "The engine never evaluates Exchange content as an expression unless a route author placed one there; untrusted Exchange content does not, by the engine's own action, select the dispatched endpoint, bean, method or command; the core type-converter registry does not instantiate or deserialise attacker-chosen types on automatic conversion; property-placeholder and bean-reference resolution operates only on route/configuration text; core machinery never promotes untrusted values into the internal Camel* header namespace; error handling and in-band trace/debug do not evaluate untrusted content or leak Exchange state to unprivileged in-band parties.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-core-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-header-filter-strategy",
+      "name": "Case-insensitive inbound HeaderFilterStrategy",
+      "description": "DefaultHeaderFilterStrategy filters the Camel* / org.apache.camel.* namespace case-insensitively out of the box (Camel, CAMEL and caMEL identically); consumers of untrusted input must apply it (or an equivalent) on the inbound path. It is an internal-namespace filter, not an application-header sanitiser.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-components"
+      ]
+    },
+    {
+      "bom-ref": "control-remove-headers",
+      "name": "Strip Camel-internal headers at the trust boundary",
+      "description": "When a consumer receives messages from an untrusted producer, remove Camel-controlled headers (removeHeaders(\"Camel*\")) before the message reaches any dispatching processor. Necessary hygiene against the internal-header dispatch class, but not on its own sufficient to sanitise the application headers a downstream component will trust.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-message-ingress"
+      ]
+    },
+    {
+      "bom-ref": "control-safe-deserialization-defaults",
+      "name": "Safe deserialization defaults in components",
+      "description": "A component using ObjectInputStream.readObject(), an XStream-style unmarshaller or a polymorphic Jackson reader on input the operator did not explicitly control must default safe: an ObjectInputFilter installed, the feature opt-in only, or refusal to deserialise unknown types. Aggregation and idempotent repositories must not call readObject() without an ObjectInputFilter.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-components"
+      ]
+    },
+    {
+      "bom-ref": "control-security-policy-framework",
+      "name": "Security policy enforcement framework (prod profile)",
+      "description": "Camel defaults to the prod profile, under which the annotation-driven security policy framework defaults to fail for the four categories (secret, insecure:ssl, insecure:serialization, insecure:dev), detecting insecure configuration at bootstrap. It is a configuration linter, not a runtime sandbox. Component authors mark security-relevant @UriParam options so the framework can warn or fail on them.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-core-engine",
+        "asset-components"
+      ]
+    },
+    {
+      "bom-ref": "control-vault-secrets",
+      "name": "Resolve secrets through a vault",
+      "description": "Use a supported secrets backend (AWS Secrets Manager, Azure Key Vault, Google Secret Manager, HashiCorp Vault, IBM Secrets Manager, CyberArk Conjur) rather than plain-text values in property files.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-tls-jsse",
+      "name": "Configure TLS through the JSSE Utility",
+      "description": "Use SSLContextParameters to set the trust store, key store, ciphers and protocols explicitly. Do not use trustAllCertificates=true or hostnameVerificationEnabled=false in production. TLS-by-default components protect the wire but do not on their own authenticate the peer; that requires a configured trust store and hostname verification.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-no-serialization-on-untrusted",
+      "name": "No Java serialisation on untrusted consumers",
+      "description": "Do not set allowJavaSerializedObject=true, transferException=true, or mapJmsMessage=true on a JMS consumer when the upstream broker is not inside the trust boundary; if unavoidable, install an ObjectInputFilter.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-components"
+      ]
+    },
+    {
+      "bom-ref": "control-isolate-management",
+      "name": "Do not expose management surfaces",
+      "description": "camel-management, the developer console, camel-jolokia and JMX should listen on a loopback interface, a sidecar, or a separate network only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-management-surface"
+      ]
+    },
+    {
+      "bom-ref": "control-operator-hardening",
+      "name": "Operator deployment hardening",
+      "description": "Stay on the default prod profile in production; apply throttle, circuitBreaker, resilience4j and JVM limits against resource exhaustion; keep components patched (pin a supported version, subscribe to the announce list, respond to advisories); run with least privilege (limit OS user filesystem/network/process privileges, drop container capabilities); use the minimal set of dependencies, since every extra JAR enlarges the attack surface and patch responsibility.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-component-author-review",
+      "name": "Component-author and reviewer guidance",
+      "description": "New or changed components are reviewed against the security model: inbound filtering of Camel* headers, safe deserialization defaults, security-relevant @UriParam marking, no unfiltered readObject() in persistence, enforcement of advertised authentication (validate issuers, audiences, signatures; cover advertised sub-paths; fail closed), and defaults that err toward denied-unless-opted-in, with upgrade-guide entries and PMC review for any relaxed default.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-components"
+      ]
+    }
+  ]
+}

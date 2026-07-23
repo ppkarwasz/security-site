@@ -1,0 +1,554 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-shiro",
+      "name": "Apache Shiro",
+      "description": "Application security framework providing authentication, authorization, cryptography, and session management. Shiro is designed to be used as a library integrated into an application, not a standalone security service or server: it is a security framework, not a security solution, and the security of the application depends on how Shiro is configured and integrated, the application's architecture, and the operational environment.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://shiro.apache.org/security-model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://shiro.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "shiro"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://shiro.apache.org/security-model.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-shiro",
+      "name": "Shiro-secured application",
+      "description": "Shiro operates within the trust boundary of the application's JVM process; end users interact with the application over the network and their input (credentials, session tokens, request data) is untrusted until validated through configured security mechanisms.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-shiro-framework",
+          "type": "component",
+          "name": "Shiro framework",
+          "description": "Authentication (CredentialsMatcher, AuthenticationStrategy, Subject), authorization (permission resolution, WildcardPermission, annotations), session management (container-independent sessions, SessionDAO, fixation prevention), cryptography wrappers (Hash, CipherService, PasswordService over JCA/JCE and BouncyCastle), and the web filter chain.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-realm-data-sources",
+          "type": "data-store",
+          "name": "Realm implementations and backing data sources",
+          "description": "Realm implementations and their backing data sources (LDAP, databases, etc.) are assumed trustworthy and are part of the trust boundary; an attacker controlling them can grant arbitrary access.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-configuration",
+          "type": "data",
+          "name": "Shiro configuration",
+          "description": "Configuration files (INI, properties, Spring beans, etc.) controlled by trusted administrators; an attacker controlling configuration sources can disable security controls.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-end-users",
+          "name": "External network users",
+          "type": "trust",
+          "description": "Unauthenticated or authenticated-but-low-privilege network users of the application. They can submit arbitrary credentials, session identifiers, and request data, observe authentication error responses (including timing), and attempt session fixation, privilege escalation, and authorization bypass; they cannot run code in the JVM, read or modify configuration, or tamper with Realms."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Application JVM process",
+          "type": "trust",
+          "description": "The application code invoking Shiro APIs, its configuration, the JVM and OS, and the Realm backing data sources; all trusted."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-end-user-requests",
+          "name": "End-user request boundary",
+          "type": "trust",
+          "zones": [
+            "zone-end-users",
+            "zone-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The application code invoking Shiro APIs is trusted, configuration files are controlled by trusted administrators, the JVM and underlying operating system are secure, and Realm implementations and their backing data sources are trustworthy."
+        },
+        {
+          "description": "The application properly sanitizes and validates user input before passing it to Shiro APIs, protects sensitive configuration values from exposure, and implements transport-layer security (TLS/SSL) for credential transmission."
+        },
+        {
+          "description": "In deployments behind reverse proxies, load balancers, or forwarding layers, request-derived scheme, host, and port values are only trustworthy if the deployment boundary explicitly guarantees that property."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Violation of authentication guarantees",
+        "description": "An in-scope adversary defeats credential matching, realm coordination, or subject identity establishment, authenticating without valid credentials. Real violations of the authentication guarantees accessible to an in-scope adversary through an in-scope code path are VALID findings fixed via coordinated disclosure and CVE.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-authentication",
+          "control-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-privilege-escalation",
+        "name": "Privilege escalation by an authenticated user",
+        "description": "A user authenticated under one principal gains access to resources they are not authorized for, defeating permission resolution, role checking, or annotation-based checks. Shiro's role and permission checks are only as secure as the application's permission model and input handling; applications must not allow manipulation of permission strings or other inputs that could lead to unauthorized access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-authorization",
+          "control-least-privilege"
+        ]
+      },
+      {
+        "bom-ref": "threat-session-attacks",
+        "name": "Session fixation and session ID theft",
+        "description": "Session identifiers are sensitive credentials; an adversary attempting session fixation or intercepting session IDs transmitted over insecure channels can hijack a subject. Shiro can regenerate session IDs upon authentication when properly configured; persistent and clustered session stores must be secured.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-session-management",
+          "control-tls",
+          "control-secure-session-store"
+        ]
+      },
+      {
+        "bom-ref": "threat-filter-chain-path-mismatch",
+        "name": "Filter-chain bypass through inconsistent path interpretation",
+        "description": "Shiro relies on the Servlet container's interpretation and normalization of request paths for URL-based filter-chain matching and does not control how downstream frameworks (e.g. Spring) subsequently decode, normalize, or route the same request. Encoded or ambiguous path forms interpreted differently downstream may lead to unexpected routing past URL-based authorization. Path traversal in downstream frameworks is a known non-finding: operators must not rely solely on URL-based filter-chain configuration for security-sensitive functionality.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-annotations-not-only-urls",
+          "control-strict-request-validation",
+          "control-latest-release"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-host-header-trust",
+        "name": "Untrustworthy request-derived host, port, and absolute URLs",
+        "description": "Some Shiro web features depend on request-derived absolute URLs (scheme, host, port as interpreted by the Servlet container). Behind reverse proxies, load balancers, or custom forwarding layers, unexpected Host headers or forwarding metadata can make these values untrustworthy; applications should not assume they are trustworthy unless the deployment boundary guarantees it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-normalize-forwarding"
+        ]
+      },
+      {
+        "bom-ref": "threat-username-enumeration",
+        "name": "Username enumeration via differential error responses",
+        "description": "By default, Shiro may reveal whether a username exists through different exceptions for 'unknown account' vs 'incorrect password'. This is the framework's default behavior and a known non-finding; applications that need to prevent enumeration must configure their Realm to return consistent exceptions and return generic failure messages.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-consistent-auth-errors"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-missing-csrf-mfa-lockout",
+        "name": "Brute force, CSRF, and MFA gaps",
+        "description": "CSRF protection, multi-factor authentication, and account lockout are explicitly not built into Shiro (only basic rate limiting for Jakarta EE is included). Reports that Shiro is missing these are not framework vulnerabilities; operators must implement them at the application or infrastructure level (MFA via custom Realm or AuthenticationStrategy extensions).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-infrastructure-protections"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-disclosure",
+        "name": "Usernames and session IDs appearing in logs",
+        "description": "Shiro does not log plaintext passwords or sensitive credentials (that is the property it maintains), but principals (usernames) may appear in SLF4J logs and session identifiers may appear at DEBUG level. This is by design; log content is the operator's responsibility to secure. Known non-finding.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-secure-logging"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-version-disclosure",
+        "name": "Shiro version disclosure",
+        "description": "Shiro does not actively prevent discovery of its version through error messages or HTTP headers. Known non-finding; operators who treat version disclosure as a concern must configure custom error pages and strip version-revealing headers at the web server or proxy level.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-conceal-version"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-crypto-config",
+        "name": "Weak cryptographic configurations via pluggable APIs",
+        "description": "Shiro's Hash, HashService, and CipherService APIs are pluggable and expose MD5, SHA-1, and any JCA-registered algorithm, retained for legacy interoperability and non-security uses such as content checksums. Configuring a weak cipher is an operator misconfiguration, not a framework vulnerability; the framework's default for password hashing is the secure PasswordService. Known non-finding.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "mitigations": [
+          "control-strong-password-hashing"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rememberme-weaker",
+        "name": "RememberMe subjects bypassing full authentication",
+        "description": "The RememberMe mechanism explicitly provides weaker guarantees than full authentication; recognizing returning users without full re-authentication is a documented and intentional security tradeoff. Reports that RememberMe-identified subjects bypass full authentication are not findings.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-shiro-framework"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-adversaries",
+        "name": "Adversaries out of scope: application code, configuration admins, local access, compromised realms",
+        "description": "Explicitly not part of Shiro's threat model: an attacker who can execute arbitrary code in the application's JVM (already won at Shiro's layer); an attacker controlling INI files, Spring beans, or other configuration sources (can disable security controls); an attacker with local shell access or co-tenancy (can read process memory, log files, and the keystore); and an attacker controlling the LDAP server, database, or other Realm backing data (can grant arbitrary access). Defending against these is the application's or operator's responsibility.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-configuration",
+          "asset-realm-data-sources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-end-user-requests",
+        "boundary": "boundary-end-user-requests",
+        "name": "End-user request boundary",
+        "description": "The primary adversary is an unauthenticated or authenticated-but-low-privilege network user submitting arbitrary credentials, session identifiers, and request data. Shiro does not assume end-user input is trustworthy; it is validated through configured security mechanisms.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-privilege-escalation",
+          "threat-session-attacks",
+          "threat-filter-chain-path-mismatch",
+          "threat-host-header-trust",
+          "threat-username-enumeration",
+          "threat-missing-csrf-mfa-lockout"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication",
+          "control-authorization",
+          "control-session-management",
+          "control-tls",
+          "control-infrastructure-protections",
+          "control-strict-request-validation"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication",
+      "name": "Authentication: credential matching, realm coordination, subject identity",
+      "description": "Shiro verifies submitted credentials against stored credentials using configurable CredentialsMatcher implementations; with multiple Realms, the AuthenticationStrategy determines success/failure; upon success Shiro establishes a Subject with verified principals. Optional RememberMe recognition carries weaker guarantees.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization",
+      "name": "Authorization: permissions, roles, and annotations",
+      "description": "Shiro resolves whether a Subject has specific permissions through configured Realms and permission resolvers, supports implicit role checks (hasRole) and explicit permission checks (isPermitted), hierarchical WildcardPermission strings, and declarative security via @RequiresAuthentication, @RequiresPermissions, @RequiresRoles, and related annotations.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-session-management",
+      "name": "Session management with validation and fixation prevention",
+      "description": "Container-independent session management with configurable timeout and validation scheduling, pluggable SessionDAO persistence, and session ID regeneration upon authentication when properly configured.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-strong-password-hashing",
+      "name": "Strong password hashing via PasswordService",
+      "description": "Use the PasswordService for credential hashing with appropriate algorithms (Argon2 or BCrypt with appropriate work factors); avoid deprecated algorithms (MD5, SHA-1) for security purposes. Shiro's cryptographic utilities wrap standard JCA/JCE and BouncyCastle; algorithm selection and key management are the operator's responsibility.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-tls",
+      "name": "TLS for all credential transmission",
+      "description": "Configure transport-layer security (TLS/SSL) for all credential transmission and transmit session identifiers only over secure channels. Part of the minimum security baseline.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-session-store",
+      "name": "Secure session persistence and clustering",
+      "description": "If using persistent sessions (e.g. database-backed SessionDAO), secure the backing store appropriately; in clustered deployments, ensure session serialization and shared storage are configured securely.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-consistent-auth-errors",
+      "name": "Consistent authentication failure responses",
+      "description": "Configure the Realm to throw consistent exceptions regardless of failure reason and return generic authentication failure messages to end users, if username enumeration is a concern for the deployment.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-infrastructure-protections",
+      "name": "Brute-force protection, CSRF, MFA, and WAF at application/infrastructure level",
+      "description": "Implement account lockout and brute-force protection at the application or infrastructure level (Shiro includes only basic rate limiting for Jakarta EE), CSRF tokens in the application, MFA via custom Realm or AuthenticationStrategy extensions, network-level access controls, WAFs, and regular security assessments as part of defense in depth.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-annotations-not-only-urls",
+      "name": "Enforce authorization via Shiro APIs, not only URL filter chains",
+      "description": "Do not rely exclusively on URL-based filter-chain configuration as the only authorization boundary for security-sensitive functionality; enforce authorization within the application using Shiro's authentication and authorization APIs and annotations, especially with downstream wildcard mappings like @RequestMapping(\"/api/admin/**\"), and ensure consistent path interpretation between Shiro, the Servlet container, and the web framework.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-strict-request-validation",
+      "name": "Strict request validation at the servlet boundary",
+      "description": "Where downstream routing semantics may differ from the Servlet container, apply stricter request validation at the servlet boundary, such as configuring InvalidRequestFilter in STRICT mode to reject ambiguous request paths before filter-chain resolution.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-end-user-requests"
+      ]
+    },
+    {
+      "bom-ref": "control-normalize-forwarding",
+      "name": "Normalize Host headers and forwarding metadata at the deployment boundary",
+      "description": "Ensure reverse proxies and load balancers reject, rewrite, or normalize unexpected Host headers and related forwarding metadata; configure the Servlet container to accept only expected hosts and connector ports; avoid exposing application containers directly to untrusted networks unless host and port validation is enforced at the container boundary; and configure explicit host and port settings for features that reconstruct absolute URLs.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-logging",
+      "name": "Secure logging configuration and log files",
+      "description": "Review logging configuration for appropriate verbosity in production, secure log files with appropriate access controls, and consider log aggregation and monitoring for security event detection. Shiro does not log plaintext passwords.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-conceal-version",
+      "name": "Conceal framework version details",
+      "description": "Configure custom error pages that do not reveal framework details and remove or modify version-revealing response headers at the web server or proxy level, if version disclosure is a concern.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-latest-release",
+      "name": "Use the latest stable Shiro release and restrict defaults",
+      "description": "Use the latest stable Shiro release to receive security fixes, review and restrict default configurations, and implement session fixation prevention if not using built-in session management. Part of the minimum security baseline.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-shiro-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege",
+      "name": "Design a least-privilege permission model",
+      "description": "Operators must correctly configure permission-to-role and role-to-user mappings, design an appropriate least-privilege permission model (Shiro enforces permissions as configured), and secure authorization data sources (LDAP, databases) appropriately.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-realm-data-sources"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-commons-imaging",
+      "name": "Apache Commons Imaging",
+      "description": "Pure-Java image library. Generally, Apache Commons libraries do not support possibly-malicious input unless otherwise specified. For Commons Imaging, processing untrusted image material is supported to some extent: it should never lead to code execution, but the component currently does not guarantee the absence of denial-of-service conditions.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://commons.apache.org/proper/commons-imaging/security.html",
+          "comment": "Source security page; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://commons.apache.org/proper/commons-imaging/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "commons"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://commons.apache.org/proper/commons-imaging/security.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/commons-imaging/master/src/site/xdoc/security.xml"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-code-execution-untrusted-image",
+        "name": "Code execution from untrusted image material",
+        "description": "Processing untrusted image material is supported to some extent: it should never lead to code execution. A code path where a crafted image leads to code execution is a security issue in the component.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dos-untrusted-image",
+        "name": "Denial of service from untrusted image material",
+        "description": "The component currently does not guarantee the absence of DoS conditions; applications processing untrusted images should be made resilient against memory, CPU and stack exhaustion problems. Specific cases where certain inputs lead to disproportionate resource usage are welcomed as regular (non-security) issues or contributions; IMAGING-379 tracks general protections against such problems.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-application-resilience"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-application-resilience",
+      "name": "Application resilience against resource exhaustion",
+      "description": "Applications processing untrusted images should be made resilient against memory, CPU and stack exhaustion problems, since the component does not currently guarantee the absence of DoS conditions.",
+      "category": "compensating",
+      "status": "recommended"
+    }
+  ]
+}

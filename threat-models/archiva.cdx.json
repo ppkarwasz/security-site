@@ -1,0 +1,195 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-archiva",
+      "name": "Apache Archiva",
+      "description": "Build artifact repository manager. The project has retired (see its Attic page). The security page documents the security vulnerabilities fixed in released Archiva versions with mitigation guidance; binary patches for individual vulnerabilities are not provided, users must upgrade to a version where the fix is implemented.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://archiva.apache.org/security.html",
+          "comment": "Source security page; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://archiva.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "archiva"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://archiva.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-stored-and-reflected-xss",
+        "name": "Cross-site scripting (stored and reflected)",
+        "description": "Multiple fixed XSS issues: CVE-2023-28158 (authenticated users crafting malicious directory names via file upload to gain elevated privileges up to administrator), CVE-2019-0213 (malicious XSS stored in the central configuration logo URL, exploitable only by admin-role users or when browser-server communication is compromised), CVE-2013-2187 and CVE-2011-0533 (crafted request parameters injecting arbitrary HTML or JavaScript into the home and user management pages), and CVE-2011-1077 (JavaScript appended in a request parameter or stored as a submitted form value getting executed).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release",
+          "control-tls-browser-communication",
+          "control-restrict-admin-role"
+        ]
+      },
+      {
+        "bom-ref": "threat-csrf",
+        "name": "Cross-site request forgery against REST endpoints and admin sessions",
+        "description": "Several REST service endpoints were not protected against CSRF attacks: a malicious site opened in the same browser as the Archiva site could perform arbitrary actions (CVE-2017-5657), attackers could craft hidden image tags to exploit administrator sessions (CVE-2011-1026), and a specially crafted page could force Archiva administrators to change their credentials (CVE-2010-3449).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-csrf-protections",
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-ldap-injection",
+        "name": "LDAP injection via the login form",
+        "description": "By providing special values to the Archiva login form an attacker is able to retrieve user attribute data from the connected LDAP server (CVE-2020-9495). Affects all versions before 2.2.5.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-arbitrary-file-write",
+        "name": "Arbitrary file write and delete via artifact upload",
+        "description": "It is possible to write files to the Archiva server at arbitrary locations by using the artifact upload mechanism (CVE-2019-0214). Affects all versions before 2.2.4; 2.2.4 adds additional validations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release",
+          "control-restrict-upload-permissions",
+          "control-limit-run-user-permissions"
+        ]
+      },
+      {
+        "bom-ref": "threat-arbitrary-password-reset",
+        "name": "Arbitrary user password reset",
+        "description": "CVE-2022-29405: arbitrary user password reset (listed on the security page without expanded description).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      },
+      {
+        "bom-ref": "threat-dependency-rce",
+        "name": "Remote code execution via vulnerable bundled libraries",
+        "description": "Remote command execution through the bundled Struts library (CVE-2013-2251, CVE-2010-1870) and through Log4j2 (CVE-2021-44228, where attackers may inject statements into HTTP requests which may be interpreted by the logging library enabling arbitrary code downloads; CVE-2021-45046 applying only to certain non-default configurations; and CVE-2021-45105 infinite recursion, exploitable if users changed the default Archiva log4j2.xml configuration).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-release"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-upgrade-fixed-release",
+      "name": "Upgrade to a release containing the fix",
+      "description": "Binary patches for individual vulnerabilities are not provided; users have to upgrade to a version where the fix is implemented (for example 2.2.5+ for the LDAP injection, 2.2.4+ for the file write and stored configuration XSS, 2.2.3+ for the REST CSRF issues).",
+      "category": "corrective",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-csrf-protections",
+      "name": "CSRF protections (referrer check, origin verification, password prompt)",
+      "description": "Fixes added a referrer check to the security interceptor, required a password prompt for account changes (2.2.x era, CVE-2010-3449), and added origin verification measures for REST endpoints (2.2.3, CVE-2017-5657).",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-tls-browser-communication",
+      "name": "Use TLS between browser and Archiva server",
+      "description": "Use TLS for the communication between browser and the Archiva server so that it cannot be compromised (listed as mitigation for the stored configuration XSS, CVE-2019-0213).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-admin-role",
+      "name": "Restrict access to the admin role",
+      "description": "Restrict the access to the admin role, since only users with the admin role can change the central configuration exploited in CVE-2019-0213.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-upload-permissions",
+      "name": "Restrict upload permissions to fewer users",
+      "description": "Restrict the artifact upload permission to a smaller set of users (listed as mitigation for the arbitrary file write, CVE-2019-0214).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-limit-run-user-permissions",
+      "name": "Limit filesystem write permissions of the Archiva run user",
+      "description": "Limit the filesystem write permissions of the user that runs Archiva (listed as mitigation for the arbitrary file write, CVE-2019-0214).",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

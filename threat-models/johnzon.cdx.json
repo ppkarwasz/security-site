@@ -1,0 +1,76 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-johnzon",
+      "name": "Apache Johnzon",
+      "description": "Java library implementing the JSON-P and JSON-B APIs (JSON parsing and binding).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://johnzon.apache.org/security.html",
+          "comment": "Source security page; this file is a structured translation of it. The page is primarily a vulnerability-reporting policy plus one security note on BigInteger/BigDecimal handling."
+        },
+        {
+          "type": "website",
+          "url": "https://johnzon.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "johnzon"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://johnzon.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-bigdecimal-tobiginteger-cost",
+        "name": "Expensive BigDecimal to BigInteger conversion on big JSON numbers",
+        "description": "The JSON-P/JSON-B APIs expose BigDecimal and BigInteger; the bridge between them, BigDecimal#toBigInteger, has a slow Java implementation when used without care or maximum-scale validation, so attacker-supplied big numbers can be costly to convert. Johnzon does some sanity checks on this value, but the page recommends staying away from these APIs for untrusted big numbers.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-scale-sanity-checks",
+          "control-handle-big-numbers-as-string"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-scale-sanity-checks",
+      "name": "Sanity checks on big-number scale",
+      "description": "Johnzon performs some sanity checks on the BigDecimal value before conversion to BigInteger.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-handle-big-numbers-as-string",
+      "name": "Handle big numbers as String or plain primitives",
+      "description": "At some point applications should stay away from the BigDecimal/BigInteger APIs and handle big numbers using the String type, parsing them themselves, since only the application knows the correct functional validation of the scale before instantiation. If big types are not needed, prefer plain primitives or their wrappers.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

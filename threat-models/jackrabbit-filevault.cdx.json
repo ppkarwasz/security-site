@@ -1,0 +1,648 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-jackrabbit-filevault",
+      "name": "Apache Jackrabbit FileVault",
+      "description": "Tool and library for moving JCR repository content as a portable zip file (a content package). A content package carries a serialised JCR fragment under jcr_root/ and a manifest under META-INF/vault/, optionally including install hooks: Java classes in META-INF/vault/hooks/ that FileVault dynamically loads and invokes in the host JVM during package install. Runs either as a package importer inside a JCR container (Oak, Jackrabbit, Sling, AEM) or as the standalone vlt CLI.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jackrabbit-filevault/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is a draft by the ASF Security team awaiting Jackrabbit PMC review; many claims are marked inferred pending maintainer confirmation."
+        },
+        {
+          "type": "website",
+          "url": "https://jackrabbit.apache.org/filevault/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jackrabbit"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jackrabbit-filevault/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jackrabbit-filevault/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-filevault",
+      "name": "FileVault package import",
+      "description": "Architecture described by the threat model: content package bytes from package authors cross the zip-bytes-to-install boundary into the importer running inside a host JCR container; the optional vault-rcp HTTP endpoint brings a network adversary into scope; the standalone vlt CLI reads trusted operator filesystem content and talks to a remote DAVex repository.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-import-pipeline",
+          "type": "component",
+          "name": "vault-core package reader and install pipeline",
+          "description": "Reads package zips (ZipVaultPackage, JcrPackageImpl), parses META-INF/vault XML manifests and jcr_root DocView content, and applies JCR mutations under the import session's privileges.",
+          "zone": "zone-importer-host"
+        },
+        {
+          "bom-ref": "asset-install-hook-loader",
+          "type": "module",
+          "name": "Install hook processor",
+          "description": "InstallHookProcessorImpl loads hook JARs and classes from META-INF/vault/hooks/ and invokes them in the host JVM at PREPARE/INSTALLED phases; the only type gate is the InstallHook interface check, and classloader resolution falls back from the processor's own (OSGi bundle) classloader to the thread context classloader.",
+          "zone": "zone-importer-host"
+        },
+        {
+          "bom-ref": "asset-rcp-endpoint",
+          "type": "endpoint",
+          "name": "vault-rcp HTTP endpoint",
+          "description": "Optional remote-copy-protocol endpoint hosted by the servlet container; when exposed, authenticated HTTP peers can submit packages. Authentication is the container's responsibility.",
+          "zone": "zone-importer-host"
+        },
+        {
+          "bom-ref": "asset-vlt-cli",
+          "type": "tool",
+          "name": "vlt CLI and vault-sync",
+          "description": "Subversion-like CLI reading packages and working copies from the operator's trusted filesystem and talking to a remote JCR repository over DAVex/WebDAV with operator-configured auth and TLS.",
+          "zone": "zone-operator"
+        },
+        {
+          "bom-ref": "asset-host-jcr",
+          "type": "system",
+          "name": "Host JCR repository",
+          "description": "Jackrabbit Oak or jackrabbit-core; FileVault delegates all JCR-side authorisation to the host. The import session's privileges bound what JCR mutations FileVault can apply.",
+          "zone": "zone-importer-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-package-sources",
+          "name": "Package sources",
+          "type": "trust",
+          "description": "Package authors and HTTP peers supplying content package bytes; trust varies from trusted developers to third-party vendors and end-users. The package author is the highest-priority adversary."
+        },
+        {
+          "bom-ref": "zone-importer-host",
+          "name": "Importer host JVM",
+          "type": "trust",
+          "description": "The JCR container process (Sling, AEM, OSGi) in which vault-core parses packages, applies JCR mutations, and executes install hooks."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operator domain",
+          "type": "trust",
+          "description": "The operator's filesystem, ImportOptions configuration, hook classloader policy, and the vlt working copy; fully trusted."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-package-install",
+          "name": "Zip-bytes-to-install boundary",
+          "type": "trust",
+          "zones": [
+            "zone-package-sources",
+            "zone-importer-host"
+          ]
+        },
+        {
+          "bom-ref": "boundary-rcp-http",
+          "name": "vault-rcp HTTP boundary",
+          "type": "trust",
+          "zones": [
+            "zone-package-sources",
+            "zone-importer-host"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-package-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Package author"
+              }
+            ],
+            "persona": {
+              "description": "The party who built the content package zip; trust varies wildly (trusted developer, third-party vendor, end-user via self-service portals). Because packages can carry install hooks, a package author becomes a code author at install time; the single highest-priority adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Configures whether install hooks are allowed (ImportOptions.hookClassLoader), what classloader they load against, acHandling, nonRecursive, and the privileges of the import session. Trusted; out of scope as an adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-rcp-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "HTTP peer to vault-rcp"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted but authenticated peer submitting packages over the vault-rcp HTTP endpoint when it is exposed; authenticates against the host's container-level HTTP auth."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Java 17+ conformant JVM; no SecurityManager required (modern JVMs deprecate it)."
+        },
+        {
+          "description": "The host JCR repository (Oak or jackrabbit-core) performs all JCR-side authorisation; FileVault honours whatever the import session can do."
+        },
+        {
+          "description": "vault-core opens no listening sockets of its own (vault-rcp is servlet-container hosted), installs no process-wide signal handlers, and does not spawn child processes from the import pipeline; install hooks are arbitrary Java and may."
+        },
+        {
+          "description": "The vlt CLI reads packages from the operator's trusted filesystem; authentication and TLS to remote DAVex endpoints are operator-configured."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-zip-slip",
+        "name": "Path traversal during zip extraction (zip-slip)",
+        "description": "A zip entry named with .. segments or an absolute path resolves outside the configured extraction target, resulting in a file write outside the intended destination. The model claims (pending maintainer confirmation) that vault-core's zip extraction refuses such entry names; a violation is security-critical and in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-zip-entry-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe-xml-parsing",
+        "name": "XXE, DTD, and entity-expansion attacks via package XML",
+        "description": "A crafted filter.xml, config.xml, properties.xml, or .content.xml DocView document triggers XML external entity resolution (file read, SSRF), DTD-based remote fetch, or billion-laughs CPU/memory exhaustion. The model claims (pending maintainer confirmation) that vault-core's XML parsers are hardened; whether they harden beyond JVM JAXP defaults is the highest-leverage open question of the import pipeline.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-hardened-xml-parsers"
+        ]
+      },
+      {
+        "bom-ref": "threat-hook-gate-bypass",
+        "name": "Install hook loaded or invoked outside the configured gate",
+        "description": "A class is loaded as an InstallHook outside the classloader configured via ImportOptions.hookClassLoader, or a class that does not implement InstallHook is invoked as one. The documented gate is the hooks directory presence, the classloader resolution, and the InstallHook interface check; a bypass of that gate is in scope and security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-install-hook-loader"
+        ],
+        "mitigations": [
+          "control-hook-classloader-gate"
+        ]
+      },
+      {
+        "bom-ref": "threat-subpackage-bypass-nonrecursive",
+        "name": "Sub-package installs despite nonRecursive=true",
+        "description": "When ImportOptions.nonRecursive=true, sub-packages embedded in a parent package must not be automatically installed. A nested package installing despite the flag is a valid finding, since sub-packages are a trojan vector for contents the operator did not inspect.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-nonrecursive-option"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-filter-partial-apply",
+        "name": "Malformed workspace filter applies an incomplete mutation set",
+        "description": "A malformed filter.xml causes a partial or ambiguous set of JCR mutations to be applied instead of aborting the import. Primarily a correctness concern; security-critical if the partial set is a privilege-escalation shape. The model assumes malformed filters are treated as fatal, pending maintainer confirmation.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ]
+      },
+      {
+        "bom-ref": "threat-install-hook-code-execution",
+        "name": "Arbitrary Java execution via install hooks in a package the operator allowed",
+        "description": "Install hooks executing arbitrary Java code in the importer JVM is the advertised behaviour of the feature: hooks are loaded from META-INF/vault/hooks/ and invoked at PREPARE/INSTALLED phases. If the operator's policy permits hook execution, the package author becomes a code author at install time; there is no in-FileVault gate beyond the InstallHook interface check, which is a type gate, not a sandbox. By design, closed as property-disclaimed.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-install-hook-loader"
+        ],
+        "mitigations": [
+          "control-restrict-hook-execution",
+          "control-verify-package-authorship"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-no-package-signing",
+        "name": "No package signing or authenticity verification",
+        "description": "FileVault content packages are zip files with no built-in cryptographic signature; zip CRC integrity detects corruption, not tampering. Package authenticity is whatever the operator's distribution channel guarantees (HTTPS download, build-pipeline code signing, manual review). Disclaimed by the model.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-verify-package-authorship"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-zip-bomb",
+        "name": "Zip-bomb decompression amplification",
+        "description": "No decompressed-output cap, per-entry expansion ratio limit, or entry-count limit is enforced by FileVault; a 1 MB zip that expands to 100 GB is streamed through to the importer. Disclaimed; resource caps are the container or pipeline layer's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-container-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-pathological-package-dos",
+        "name": "Authenticated denial of service via pathological package shapes",
+        "description": "A package with a million entries, deeply nested sub-packages, or a huge filter.xml is parsed and applied without resource bounds; FileVault enforces no package size, hook count, or filter complexity caps. Disclaimed by the model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "mitigations": [
+          "control-container-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-acl-trojan",
+        "name": "ACL rewriting by packages when acHandling permits",
+        "description": "A package can include rep:policy nodes; if the operator's ImportOptions.acHandling permits (e.g. OVERWRITE), FileVault writes them and the package author becomes the authorisation author. Operator configuration, out of model; the operator must set acHandling to the most restrictive value consistent with the use case, especially for cross-tenant packages.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-import-pipeline",
+          "asset-host-jcr"
+        ],
+        "mitigations": [
+          "control-restrict-achandling"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hook-classloader-reach",
+        "name": "Hooks reach sensitive container classes through a loose classloader",
+        "description": "The documented classloader fallback (processor's own OSGi bundle classloader, then the thread context classloader) means a hook can reach whatever the container exposes, which in OSGi/AEM is a lot. Pinning or auditing the install-hook classloader is the operator's responsibility; disclaimed by the model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-install-hook-loader"
+        ],
+        "mitigations": [
+          "control-restrict-hook-execution"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-import-session",
+        "name": "Package installed by an over-privileged JCR session",
+        "description": "If the JCR session used to invoke install has admin privileges, everything the package writes is admin-level, and every JCR mutation its hook performs is admin-level; a hook can also open its own session if the host permits. FileVault provides no defence against a malicious or over-privileged host session; JCR-side authorisation belongs to the host repository's threat model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-host-jcr"
+        ],
+        "mitigations": [
+          "control-least-privilege-session"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-rcp",
+        "name": "vault-rcp exposed without authentication",
+        "description": "An unauthenticated vault-rcp endpoint accepts arbitrary packages from the network. vault-rcp is HTTP and authentication is the servlet container's job; container misconfiguration is not a FileVault bug. Out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rcp-endpoint"
+        ],
+        "mitigations": [
+          "control-secure-rcp"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-validation-false-friend",
+        "name": "Reliance on vault-validation or dryRun as security controls",
+        "description": "vault-validation checks package structure only; a package can fully pass validation and ship a malicious hook. ImportOptions.dryRun applies the JCR mutations and rolls back at the end, and install hooks may still execute in some phases, so dryRun is not a safe preview of an untrusted package. Deprecated ImportOptions patch* methods were deprecated in 4.2.0 for security reasons and using them is out of the supported posture. Findings that treat these as violated security controls are non-issues by design.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-import-pipeline"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-package-install",
+        "boundary": "boundary-package-install",
+        "name": "Zip-bytes-to-install trust boundary",
+        "description": "The most load-bearing boundary: bytes entering as a content package are serialised data until the install pipeline opens them, at which point they become both JCR mutations and, when hooks are present and allowed, Java code loaded into the host JVM.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-zip-slip",
+          "threat-xxe-xml-parsing",
+          "threat-hook-gate-bypass",
+          "threat-subpackage-bypass-nonrecursive",
+          "threat-install-hook-code-execution",
+          "threat-zip-bomb",
+          "threat-pathological-package-dos",
+          "threat-acl-trojan",
+          "threat-no-package-signing"
+        ],
+        "controlsAtBoundary": [
+          "control-zip-entry-validation",
+          "control-hardened-xml-parsers",
+          "control-hook-classloader-gate",
+          "control-nonrecursive-option",
+          "control-restrict-hook-execution",
+          "control-verify-package-authorship"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-rcp-http",
+        "boundary": "boundary-rcp-http",
+        "name": "vault-rcp HTTP trust boundary",
+        "description": "When the vault-rcp endpoint is exposed, network peers authenticate against the host's container-level HTTP auth and submit packages, bringing a network adversary into scope.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-rcp"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-rcp"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-zip-entry-validation",
+      "name": "Reject traversing zip entry names",
+      "description": "vault-core's zip extraction refuses ZipEntry names containing .. segments or absolute paths that would resolve outside the configured destination (claimed property P1, pending maintainer confirmation of the exact validator).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-import-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-hardened-xml-parsers",
+      "name": "Harden XML parsers against XXE and entity expansion",
+      "description": "Configure DocumentBuilderFactory/XMLInputFactory used for filter.xml, config.xml, properties.xml, and DocView parsing to disable external entity resolution, disallow or limit DOCTYPEs, and cap entity expansion (claimed property P2; whether FileVault hardens beyond JVM JAXP defaults is an open maintainer question).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-import-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-hook-classloader-gate",
+      "name": "Gate install hooks on ImportOptions.hookClassLoader and the InstallHook interface",
+      "description": "Install hooks are only invocable when META-INF/vault/hooks/ is present and the configured classloader gate allows the load, and only classes implementing InstallHook are invoked. The interface check is a type gate, not a sandbox.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-install-hook-loader"
+      ]
+    },
+    {
+      "bom-ref": "control-nonrecursive-option",
+      "name": "Set nonRecursive for unaudited sub-package lists",
+      "description": "ImportOptions.nonRecursive=true prevents sub-packages embedded in a parent package from installing automatically; set it for packages whose sub-package list is not pre-audited.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-import-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-hook-execution",
+      "name": "Deny or restrict install hook execution for untrusted packages",
+      "description": "For packages from untrusted authors, configure ImportOptions.hookClassLoader to deny hook loading or disable hook execution entirely at the container level, and pin or audit the install-hook classloader so hooks cannot reach everything the container exposes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-install-hook-loader"
+      ]
+    },
+    {
+      "bom-ref": "control-verify-package-authorship",
+      "name": "Validate package authorship out of band",
+      "description": "FileVault does not sign packages; guarantee authenticity through the distribution pipeline (HTTPS download, code signing at build time, manual review) and only install packages from authors the operator trusts.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-package-install"
+      ]
+    },
+    {
+      "bom-ref": "control-least-privilege-session",
+      "name": "Import with a least-privilege JCR session",
+      "description": "Ensure the JCR session used for import has the smallest privileges the import requires; a package installed by an admin session is an admin-level write, and a hook in such a package runs admin code.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-host-jcr"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-achandling",
+      "name": "Restrict ACL and CUG handling on import",
+      "description": "Set ImportOptions.acHandling (and cugHandling) to the most restrictive value consistent with the use case; do not allow OVERWRITE for cross-tenant packages, or the package author becomes the ACL author.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-import-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-rcp",
+      "name": "Expose vault-rcp only behind strong HTTP auth and TLS",
+      "description": "Do not expose the vault-rcp endpoint without strong authentication and TLS configured at the servlet container; the container owns the port and the auth.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rcp-endpoint"
+      ]
+    },
+    {
+      "bom-ref": "control-container-resource-limits",
+      "name": "Apply resource limits at the container or pipeline layer",
+      "description": "Apply request size limits, rate limits, and per-package resource caps at the container or delivery-pipeline layer; FileVault enforces no package size, expansion ratio, entry count, or hook count bounds.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-import-pipeline",
+        "asset-rcp-endpoint"
+      ]
+    },
+    {
+      "bom-ref": "control-deprecate-patch-methods",
+      "name": "Deprecated patch-related ImportOptions methods",
+      "description": "Several patch-related methods on ImportOptions are deprecated as of version 4.2.0 for security reasons; operators using deprecated patch* methods are outside the supported posture.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-import-pipeline"
+      ]
+    }
+  ]
+}

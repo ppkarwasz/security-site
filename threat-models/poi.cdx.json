@@ -1,0 +1,214 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-poi",
+      "name": "Apache POI",
+      "description": "Java library for reading and writing Microsoft Office file formats. Applications that parse potentially untrusted documents are expected to be architected so that a malicious document has limited impact; POI's built-in checks against suspicious values are not comprehensive protection.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://poi.apache.org/security.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://poi.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "poi"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://poi.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unexpected-parsing-exceptions",
+        "name": "Unexpected exceptions while parsing documents",
+        "description": "Parsing a document can throw unexpected exceptions, including StackOverflowError and many different types of RuntimeException, which can crash or destabilize an application that does not guard its parsing code.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-broad-exception-handling"
+        ]
+      },
+      {
+        "bom-ref": "threat-prolonged-parsing-time",
+        "name": "Prolonged CPU usage and long parsing time",
+        "description": "Complex document formats may cause prolonged CPU usage and long parsing time when processing certain documents.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-timeouts",
+          "control-sandboxing"
+        ]
+      },
+      {
+        "bom-ref": "threat-memory-expansion",
+        "name": "Excessive memory use from compressed formats",
+        "description": "Compressed Microsoft formats can expand significantly when parsed, causing high memory consumption; large xlsx files in particular can require excessive memory when not read via streaming APIs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-streaming-apis",
+          "control-sandboxing"
+        ]
+      },
+      {
+        "bom-ref": "threat-crafted-legacy-format-oom",
+        "name": "OutOfMemoryErrors from maliciously crafted legacy-format files",
+        "description": "Legacy binary formats (xls, doc, ppt) are particularly vulnerable to crafted files that cause large arrays to be allocated, leading to memory exhaustion or overflow errors. POI includes checks to detect suspicious values that may indicate malicious content, but these checks should not be considered comprehensive; the guidance strongly recommends never parsing files from untrusted or unknown sources.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-suspicious-value-checks",
+          "control-avoid-untrusted-sources",
+          "control-sandboxing"
+        ]
+      },
+      {
+        "bom-ref": "threat-temporary-file-access",
+        "name": "Access to or manipulation of POI temporary files",
+        "description": "POI makes significant use of temporary files, which must be protected from access or manipulation by untrusted users. Custom temporary-file strategies can be implemented beyond the default approach.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-protect-temporary-files"
+        ]
+      },
+      {
+        "bom-ref": "threat-heap-memory-exposure",
+        "name": "Sensitive document data remaining in heap memory",
+        "description": "Sensitive data from documents remains in memory, including through ThreadLocal storage such as Biff8EncryptionKey. POI should not run in a JVM where untrusted users have access to the heap memory.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-isolated-jvm"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-broad-exception-handling",
+      "name": "Use broad exception handling around parsing code",
+      "description": "Wrap parsing code in broad catch statements because parsing can throw unexpected exceptions, including StackOverflowError and many types of RuntimeException.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-timeouts",
+      "name": "Apply timeout mechanisms to parsing",
+      "description": "Use timeout mechanisms around document parsing since complex formats may cause prolonged CPU usage and long parsing time.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-streaming-apis",
+      "name": "Use streaming APIs for large xlsx files",
+      "description": "Use the streaming APIs when processing large xlsx files to avoid excessive memory use from expanding compressed formats.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-suspicious-value-checks",
+      "name": "Built-in checks for suspicious values",
+      "description": "Apache POI includes checks to detect suspicious values that may indicate malicious content, but these checks should not be considered comprehensive.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-avoid-untrusted-sources",
+      "name": "Avoid parsing files from untrusted or unknown sources",
+      "description": "The guidance strongly recommends never parsing files from untrusted or unknown sources, particularly for the legacy binary formats (xls, doc, ppt).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-protect-temporary-files",
+      "name": "Protect temporary files",
+      "description": "Protect the temporary files POI creates from access or manipulation by untrusted users; a custom temporary-file strategy can be implemented beyond the default approach.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-isolated-jvm",
+      "name": "Do not share the JVM heap with untrusted users",
+      "description": "Do not run POI in a JVM where untrusted users have access to the heap memory, since sensitive document data (for example the Biff8EncryptionKey ThreadLocal) remains in memory.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-sandboxing",
+      "name": "Sandbox parsing in a separate process",
+      "description": "For high-security environments, extract parsing logic into separate processes with memory limits and automatic timeouts.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-keep-current",
+      "name": "Maintain current POI versions",
+      "description": "Regularly update to current versions, which address CVEs and improve robustness against malicious inputs even when changes are not explicitly security-focused.",
+      "category": "corrective",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-monitor-advisories",
+      "name": "Monitor security advisories",
+      "description": "Track security announcements on the POI website (Project News), mailing lists, and services such as OpenCVE for ongoing security information.",
+      "category": "detective",
+      "status": "recommended"
+    }
+  ]
+}

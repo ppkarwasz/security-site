@@ -1,0 +1,597 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-zeppelin",
+      "name": "Apache Zeppelin",
+      "description": "Web-based, multi-user notebook server for interactive data analytics. Users open notebooks in a browser and run paragraphs of code against pluggable interpreters (Spark, Flink, Python, JDBC, shell, etc.); the server launches and talks to interpreter processes over Thrift IPC and returns results over a websocket. Executing user-supplied code on the server is the product's primary function, not a vulnerability: the security model is about who is allowed to reach that capability and with what isolation. The source threat model has been reviewed by the Zeppelin PMC, which confirmed the framing and ruled that Zeppelin's stance is open by default, secure by configuration.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/zeppelin/blob/master/THREAT_MODEL.md",
+          "comment": "Source security threat model (PMC-reviewed v0); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://zeppelin.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "zeppelin"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/zeppelin/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/zeppelin/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-zeppelin",
+      "name": "Zeppelin notebook server deployment",
+      "description": "Deployment architecture described by the threat model: a long-running zeppelin-server JVM reached over HTTP and websocket (optionally behind a reverse proxy), one or more interpreter processes launched over Thrift IPC, and backend compute systems (Spark, Flink, JDBC, shell) that interpreter code reaches. The primary trust boundary is the authentication and authorization layer (Shiro realm, notebook ACL, URL ACL), not the API surface itself.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-web-server",
+          "type": "service",
+          "name": "Web / REST / websocket server",
+          "description": "The zeppelin-server HTTP, REST, and websocket surface (org.apache.zeppelin.rest.*, websocket operations), untrusted network input until Shiro authenticates the session.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-authz-layer",
+          "type": "module",
+          "name": "Authentication and authorization layer",
+          "description": "Shiro realm (conf/shiro.ini), per-notebook owner/reader/writer/runner ACLs (NotebookAuthorization), and shiro.ini [urls] URL ACLs. Absent shiro.ini, Zeppelin runs anonymous with full access.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-interpreters",
+          "type": "process",
+          "name": "Interpreter processes",
+          "description": "Processes executing user-authored paragraph code, launched by the server and reached over Thrift IPC. Without impersonation they all run as the server OS user; binding modes (shared by default, scoped, isolated) are stability and resource controls, not security sandboxes. All bundled interpreters are first-class for security purposes.",
+          "zone": "zone-interpreters"
+        },
+        {
+          "bom-ref": "asset-credential-store",
+          "type": "data-store",
+          "name": "Credential store",
+          "description": "Per-user datasource credentials managed via CredentialRestApi and injected into interpreters; per-user isolation is a committed property.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-notebook-storage",
+          "type": "data-store",
+          "name": "Notebook storage",
+          "description": "NotebookRepo backends (local filesystem, S3, Git, etc.) holding persisted notes; mostly trusted, written via the application; repo integrity is the operator's responsibility.",
+          "zone": "zone-server"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Browser clients",
+          "type": "trust",
+          "description": "Notebook users and anonymous visitors sending HTTP / websocket traffic; untrusted until authenticated, then trusted only up to their notebook and role permissions."
+        },
+        {
+          "bom-ref": "zone-server",
+          "name": "Zeppelin server",
+          "type": "trust",
+          "description": "The zeppelin-server JVM with its configuration (shiro.ini, zeppelin-site.xml, interpreter settings), credential store, and notebook storage access; operator-controlled host and config are trusted inputs."
+        },
+        {
+          "bom-ref": "zone-interpreters",
+          "name": "Interpreter processes",
+          "type": "trust",
+          "description": "Child processes executing arbitrary user code by design; what that code does within its granted OS identity is not confined by Zeppelin."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "Backend compute and data systems",
+          "type": "trust",
+          "description": "Spark / Flink / JDBC / shell / SSH backends provisioned by the operator; data flow leaves Zeppelin's boundary entirely, and their security is not owned by Zeppelin."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-web",
+          "name": "Network to server boundary",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-interpreter",
+          "name": "Server to interpreter boundary",
+          "type": "trust",
+          "zones": [
+            "zone-server",
+            "zone-interpreters"
+          ]
+        },
+        {
+          "bom-ref": "boundary-backend",
+          "name": "Interpreter to backend boundary",
+          "type": "trust",
+          "zones": [
+            "zone-interpreters",
+            "zone-backends"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted for the instance; owns shiro.ini, interpreter settings, zeppelin-site.xml, and the host. Anyone with write access to these has already won and is out of the adversary model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-notebook-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Notebook user"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted until authenticated; once authenticated, trusted only up to their notebook and role permissions. A run-capable user executing code within their grant is the product working as designed."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-anonymous",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous visitor"
+              }
+            ],
+            "persona": {
+              "description": "Present by default (no shiro.ini ships enabled); trusted at whatever level the deployment's authorization grants anonymous, which by default is full access. The PMC ruled anonymous mode a dev convenience, not the supported production posture."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass on the web / REST / websocket surface",
+        "description": "With Shiro configured, an unauthenticated network client performs an operation requiring a session: bypassing the login filter, forging or stealing a session, or reaching a websocket or REST operation pre-auth. Violation of committed property 1 (critical).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-server",
+          "asset-authz-layer"
+        ],
+        "mitigations": [
+          "control-enable-shiro"
+        ]
+      },
+      {
+        "bom-ref": "threat-notebook-acl-bypass",
+        "name": "Notebook ACL bypass by an authenticated user",
+        "description": "An authenticated user reads, edits, or runs a note they lack owner/reader/writer/runner permission for. The PMC confirmed ACLs and role checks are enforced server-side for every websocket and REST operation, with no client-side-only checks; a bypass is a critical violation of committed property 2.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-authz-layer"
+        ],
+        "mitigations": [
+          "control-notebook-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-endpoint-access",
+        "name": "Non-admin access to sensitive admin endpoints",
+        "description": "A non-admin reaches /interpreter, /credential, or /configurations despite a restricting [urls] rule (violation of committed property 3, high severity). There is no built-in admin gate: absent explicit shiro.ini [urls] rules these endpoints are open to any authenticated role, so the property holds only when the operator adds the rules.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-server",
+          "asset-authz-layer"
+        ],
+        "mitigations": [
+          "control-url-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-user-credential-read",
+        "name": "Cross-user credential disclosure",
+        "description": "One user reads another user's injected datasource credentials, including via a shared interpreter process. The PMC confirmed per-user credential isolation as a committed property; a cross-user credential read is critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credential-store"
+        ],
+        "mitigations": [
+          "control-credential-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-impersonation-escape",
+        "name": "Escape from the impersonation identity",
+        "description": "With impersonation enabled, interpreter code runs as a different identity than the session's: breaking out of the impersonation user into another user's identity or the server's. Violation of committed property 5 (high severity).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-interpreters"
+        ],
+        "mitigations": [
+          "control-impersonation"
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Resource exhaustion (no rate limits or launch caps)",
+        "description": "There is no rate limit and no concurrent-interpreter-launch cap today, and resource / availability is not a committed property. The PMC treats hardening here as VALID-HARDENING and welcomes concrete limits being surfaced; pre-auth exhaustion is distinguished from by-design expensive queries.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-server",
+          "asset-interpreters"
+        ],
+        "mitigations": [
+          "control-proxy-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-anonymous-default",
+        "name": "Exposed anonymous default deployment",
+        "description": "With no shiro.ini there is no authentication boundary at all and every authn/authz property is void; exposing a default anonymous Zeppelin to the public internet turns the by-design code-execution surface into unauthenticated RCE-equivalent. The PMC ruled anonymous mode a dev convenience: reports against an internet-exposed anonymous instance are out of model (non-default build).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-server"
+        ],
+        "mitigations": [
+          "control-enable-shiro"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-permitted-code-execution",
+        "name": "Arbitrary code execution by run-capable users (by design)",
+        "description": "A user with run permission on a notebook can execute arbitrary code (%sh, Spark driver code, etc.) by design; Zeppelin does not sandbox or confine what that code does on the host or backend. Static-analysis command-injection or code-execution hits on the interpreter execution path are the feature, in model only if they bypass the authn/authz gate or cross a tenant or operator boundary.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-interpreters"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-shared-server-os-user",
+        "name": "Interpreter code sharing the server OS identity (default)",
+        "description": "Impersonation is off by default, so every run-capable user's code runs as the server OS user and shares its privileges and filesystem; interpreter binding modes (shared by default, scoped, isolated) give process-level separation for stability and resources but are not security sandboxes, and absent impersonation all interpreter processes still run as the same server OS user. Documented default behavior, ruled by design; multi-tenant OS isolation requires enabling impersonation. Notebook permissions are an application-layer ACL, not OS isolation: a user denied read on a note may still reach data through an interpreter they can run if backends are not separately access-controlled.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-interpreters"
+        ],
+        "mitigations": [
+          "control-impersonation",
+          "control-backend-access-control"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-public-notebooks",
+        "name": "Public-by-default notebooks readable and runnable by any user",
+        "description": "zeppelin.notebook.public defaults to true, so a new note with an empty ACL is readable and runnable by any authenticated (or anonymous) user. The PMC ruled public-by-default intended convenience, by design; operators needing isolation set it to false.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-notebook-storage",
+          "asset-authz-layer"
+        ],
+        "mitigations": [
+          "control-private-notebooks"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-transport",
+        "name": "Plaintext HTTP / websocket transport by default",
+        "description": "There is no transport security by default: credentials and sessions transit in the clear unless the operator configures TLS, and security headers (http_security_headers) are off unless configured. Operator responsibility.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-server"
+        ],
+        "mitigations": [
+          "control-tls-headers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-web-ui-attack-classes",
+        "name": "Web-UI and integrator-side attack classes (XSS, CSRF, SSRF, secrets in notebooks)",
+        "description": "Well-known attack classes left to the operator / integrator: SSRF from interpreter code reaching internal services; secrets stored in notebook source instead of the credential store; and XSS / CSRF / clickjacking on the notebook web UI. There is no Content-Security-Policy and CSRF protection is Origin-header-based only; the PMC treats strengthening these (CSP, stronger CSRF) as welcome VALID-HARDENING.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-web-server"
+        ],
+        "mitigations": [
+          "control-tls-headers",
+          "control-host-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-web",
+        "boundary": "boundary-web",
+        "name": "Network to server trust boundary",
+        "description": "Browser traffic crosses the network boundary and is untrusted until Shiro authenticates the session; beyond authentication, notebook ACLs and URL ACLs bound what each session may do. A finding here is in model only if reachable pre-auth or beyond the granted permission.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-notebook-acl-bypass",
+          "threat-admin-endpoint-access",
+          "threat-resource-exhaustion",
+          "threat-anonymous-default",
+          "threat-plaintext-transport",
+          "threat-web-ui-attack-classes"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-shiro",
+          "control-notebook-acls",
+          "control-url-acls",
+          "control-tls-headers",
+          "control-proxy-hardening"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-interpreter",
+        "boundary": "boundary-interpreter",
+        "name": "Server to interpreter trust boundary",
+        "description": "The server hands user code to interpreter processes over Thrift IPC. Whether this crosses an OS-user boundary depends on impersonation (off by default, so code runs as the server OS user). A finding is in model only if it crosses a claimed boundary: one tenant reaching another tenant's interpreter or credentials, or escaping the impersonation user.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-impersonation-escape",
+          "threat-cross-user-credential-read",
+          "threat-shared-server-os-user",
+          "threat-permitted-code-execution"
+        ],
+        "controlsAtBoundary": [
+          "control-impersonation",
+          "control-credential-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-backend",
+        "boundary": "boundary-backend",
+        "name": "Interpreter to backend trust boundary",
+        "description": "Interpreter code reaching Spark / JDBC / filesystem / shell backends leaves Zeppelin's boundary entirely; backends must be treated as reachable by any run-capable user and access-controlled independently.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-permitted-code-execution"
+        ],
+        "controlsAtBoundary": [
+          "control-backend-access-control"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-shiro",
+      "name": "Enable Shiro authentication",
+      "description": "Configure conf/shiro.ini to enable authentication, or keep Zeppelin strictly inside a trusted, network-isolated perimeter; the shipped default is anonymous with full access. Use a strong realm configuration.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-web",
+        "asset-authz-layer"
+      ]
+    },
+    {
+      "bom-ref": "control-notebook-acls",
+      "name": "Server-side notebook ACL enforcement",
+      "description": "Per-notebook owner/reader/writer/runner ACLs are enforced on the server for every websocket and REST operation, with no client-side-only checks (PMC-confirmed).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-authz-layer"
+      ]
+    },
+    {
+      "bom-ref": "control-url-acls",
+      "name": "Restrict admin endpoints with shiro.ini [urls] rules",
+      "description": "Add [urls] rules restricting /interpreter, /credential, /configurations (and other admin paths) to admin roles; there is no built-in admin gate, so protection of these endpoints relies entirely on the operator's rules.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-web-server",
+        "boundary-web"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-isolation",
+      "name": "Per-user credential isolation",
+      "description": "The credential store guarantees one user cannot read another user's injected datasource credentials, including via a shared interpreter process (PMC-confirmed committed property).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-credential-store"
+      ]
+    },
+    {
+      "bom-ref": "control-impersonation",
+      "name": "Enable interpreter user impersonation",
+      "description": "Enable interpreter impersonation for genuine multi-tenant OS isolation, so interpreter code runs as the logged-in user rather than the server OS user; do not rely on interpreter binding modes (shared / scoped / isolated), which are stability and resource controls, not security sandboxes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-interpreters",
+        "boundary-interpreter"
+      ]
+    },
+    {
+      "bom-ref": "control-private-notebooks",
+      "name": "Default new notebooks to private",
+      "description": "Set zeppelin.notebook.public=false (ZEPPELIN_NOTEBOOK_PUBLIC) if notebooks should default to private instead of the shipped public-by-default behavior.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-notebook-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-headers",
+      "name": "Terminate TLS and enable security headers",
+      "description": "Terminate TLS for the web / websocket channel (HTTPS is highly recommended) and enable http_security_headers. Note the current gaps the PMC acknowledged: no Content-Security-Policy, and Origin-header-based CSRF protection only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-web-server",
+        "boundary-web"
+      ]
+    },
+    {
+      "bom-ref": "control-proxy-hardening",
+      "name": "Lockout and rate limiting at the reverse proxy",
+      "description": "Apply login lockout and rate limiting at the fronting reverse proxy; Zeppelin itself has no rate limit or concurrent-interpreter-launch cap today.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-web-server",
+        "boundary-web"
+      ]
+    },
+    {
+      "bom-ref": "control-backend-access-control",
+      "name": "Independently access-control backends",
+      "description": "Treat backends (Spark, JDBC, SSH, shell) as reachable by any run-capable user and access-control them independently of Zeppelin's notebook ACLs.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-backend"
+      ]
+    },
+    {
+      "bom-ref": "control-host-protection",
+      "name": "Protect host configuration and storage",
+      "description": "Protect shiro.ini, credential stores, and notebook storage with host filesystem permissions; do not run the server as root; store long-lived secrets in the credential store, not in notebook source.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-credential-store",
+        "asset-notebook-storage"
+      ]
+    }
+  ]
+}

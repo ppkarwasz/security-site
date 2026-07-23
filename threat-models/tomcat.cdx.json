@@ -1,0 +1,354 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-tomcat",
+      "name": "Apache Tomcat",
+      "description": "Java servlet container and web server. The Apache Tomcat Security Team reviews reported vulnerabilities against this security model, which defines administrative users and deployed web applications as trusted, data received via Connectors as untrusted (with narrow exceptions), and a trusted network as a requirement for clustering.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://tomcat.apache.org/security-model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://tomcat.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tomcat"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://tomcat.apache.org/security-model.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-tomcat",
+      "name": "Tomcat trust zones",
+      "description": "Trust zones defined by the Tomcat security model: administrative users and deployed web applications are trusted; network clients (including reverse proxies) presenting data via Connectors are untrusted; cluster traffic crosses a network that must be trusted unless the EncryptInterceptor is used.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-tomcat-server",
+          "type": "service",
+          "name": "Tomcat server instance",
+          "description": "The Tomcat process with its binaries, scripts, configuration files, log files, temp directory ($CATALINA_BASE/temp), web application working directories ($CATALINA_BASE/work), persisted session store, JMX API, and debugging interfaces, all under administrative control.",
+          "zone": "zone-tomcat"
+        },
+        {
+          "bom-ref": "asset-builtin-webapps",
+          "type": "component",
+          "name": "Web applications included with Tomcat distributions",
+          "description": "The web applications shipped with standard ASF Tomcat distributions, including the Manager and Host Manager applications; vulnerability reports against them are accepted, with reporter guidance in the Security Considerations documentation for the version under test.",
+          "zone": "zone-tomcat"
+        },
+        {
+          "bom-ref": "asset-connectors",
+          "type": "interface",
+          "name": "Connectors",
+          "description": "HTTP and AJP connectors through which all client data arrives; connector data is untrusted regardless of protocol, except standard and allowedRequestAttributesPattern-permitted AJP request attributes and headers processed by RemoteIpValve, SSLValve, RemoteIpFilter, or similar functionality.",
+          "zone": "zone-tomcat"
+        },
+        {
+          "bom-ref": "asset-clustering",
+          "type": "subsystem",
+          "name": "Clustering (org.apache.catalina.ha / tribes)",
+          "description": "Session replication and cluster messaging; cluster traffic requires a trusted network unless the EncryptInterceptor is used (which protects confidentiality and integrity but not availability), and multicast cluster membership always requires a trusted network.",
+          "zone": "zone-tomcat"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-admin",
+          "name": "Administrative users",
+          "type": "trust",
+          "description": "Administrative users are always considered to be trusted; an attacker with their access is out of model."
+        },
+        {
+          "bom-ref": "zone-webapps",
+          "name": "Deployed web applications",
+          "type": "trust",
+          "description": "Web applications deployed to Tomcat are considered to be trusted; vulnerabilities in user-provided applications are application vulnerabilities."
+        },
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "All clients, including reverse proxies, presenting data via a Connector; responsible for the consequences of the data they present."
+        },
+        {
+          "bom-ref": "zone-cluster-network",
+          "name": "Cluster network",
+          "type": "trust",
+          "description": "Network carrying cluster traffic between Tomcat nodes; must be trusted unless the EncryptInterceptor is used, and always for multicast membership."
+        },
+        {
+          "bom-ref": "zone-tomcat",
+          "name": "Tomcat instance",
+          "type": "trust",
+          "description": "The running Tomcat server and its bundled applications."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-connector",
+          "name": "Connector boundary",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-tomcat"
+          ]
+        },
+        {
+          "bom-ref": "boundary-cluster",
+          "name": "Cluster boundary",
+          "type": "trust",
+          "zones": [
+            "zone-cluster-network",
+            "zone-tomcat"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin",
+          "name": "Administrative boundary",
+          "type": "trust",
+          "zones": [
+            "zone-admin",
+            "zone-tomcat"
+          ]
+        },
+        {
+          "bom-ref": "boundary-webapp",
+          "name": "Web application boundary",
+          "type": "trust",
+          "zones": [
+            "zone-webapps",
+            "zone-tomcat"
+          ]
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-connector-untrusted-data",
+        "name": "Attacks via data received through a Connector",
+        "description": "Data received via a Connector is untrusted regardless of protocol, with the exception of the standard request attributes and any arbitrary request attributes permitted by allowedRequestAttributesPattern for an AJP connector, and HTTP headers processed by a RemoteIpValve, SSLValve, equivalent filters (RemoteIpFilter) or similar functionality. Vulnerabilities exploitable through such data are Tomcat vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-connectors"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-csrf",
+        "name": "CSRF against an administrative user",
+        "description": "An attacker tricks an administrative user into performing an action the administrator did not intend to perform (e.g. CSRF vulnerabilities). Such reports are accepted despite administrative users being trusted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-builtin-webapps"
+        ]
+      },
+      {
+        "bom-ref": "threat-builtin-webapp-vulnerability",
+        "name": "Vulnerability in a web application bundled with Tomcat",
+        "description": "Vulnerabilities in the web applications included with standard Tomcat distributions from the ASF (such as Manager and Host Manager) are accepted as Tomcat vulnerabilities; reporters should review the Security Considerations documentation for the version under test.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-builtin-webapps"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-access-compromise",
+        "name": "Attacks requiring administrative access",
+        "description": "Reports where the attacker already has access to or control over Tomcat binaries or scripts, configuration files, log files, the temp directory, web application working directories, the persisted session store, the Manager or Host Manager applications, the JMX API (local or remote), or the Java Attach API or any other debugging interface are rejected: administrative users are always trusted. This also covers reports depending on modification of persisted session data through mechanisms not accessible to non-administrative users.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tomcat-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-webapp",
+        "name": "Malicious or vulnerable deployed web application",
+        "description": "Web applications deployed to Tomcat are trusted; vulnerabilities in user-provided applications are application vulnerabilities, not Tomcat vulnerabilities. Applications enabling functionality that allows modification of the web application (WebDAV, HTTP PUT, or similar) are expected to secure it themselves; so are reports depending on write access to an application's docBase or on attacker-controlled SSI directives.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-tomcat-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cluster-untrusted-network",
+        "name": "Attacks on cluster traffic over an untrusted network",
+        "description": "Cluster traffic requires a trusted network unless the EncryptInterceptor is used, in which case confidentiality and integrity are protected but not availability; multicast cluster membership always requires a trusted network. Reports depending on deserialization within the clustering code (org.apache.catalina.ha, org.apache.catalina.tribes and sub-packages) without the EncryptInterceptor configured, or on an attacker controlling a cluster node, are known non-findings.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-clustering"
+        ],
+        "mitigations": [
+          "control-encrypt-interceptor"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-disclosure",
+        "name": "Disclosure of security-sensitive information through logs",
+        "description": "With the default configuration, security-sensitive information is not logged apart from anything included in the request URI; modified logging configurations, particularly debug logging, may log sensitive information. Default logs are likely to contain PII such as user IP addresses, and Tomcat is not responsible for the content of log messages generated by applications.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tomcat-server"
+        ],
+        "mitigations": [
+          "control-default-logging"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-connector",
+        "boundary": "boundary-connector",
+        "name": "Connector trust boundary",
+        "description": "All data crossing a Connector is untrusted regardless of protocol, with the narrow AJP request attribute and reverse-proxy header exceptions; clients (including reverse proxies) bear the consequences of the data they present, and impacts to a client from a malformed request Tomcat processes per specification are the client's responsibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-connector-untrusted-data",
+          "threat-admin-csrf",
+          "threat-builtin-webapp-vulnerability"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-cluster",
+        "boundary": "boundary-cluster",
+        "name": "Cluster trust boundary",
+        "description": "Cluster traffic requires a trusted network; with EncryptInterceptor, confidentiality and integrity are protected but not availability, and multicast membership always requires a trusted network.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-cluster-untrusted-network"
+        ],
+        "controlsAtBoundary": [
+          "control-encrypt-interceptor"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin",
+        "boundary": "boundary-admin",
+        "name": "Administrative trust boundary",
+        "description": "Administrative users are always trusted; attacks requiring their access are rejected, except reports where an attacker tricks an administrator into an unintended action (CSRF), which are accepted.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-admin-access-compromise"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-webapp",
+        "boundary": "boundary-webapp",
+        "name": "Web application trust boundary",
+        "description": "Deployed web applications are trusted; their vulnerabilities, including unsecured self-modification features, are application vulnerabilities.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-webapp"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-encrypt-interceptor",
+      "name": "EncryptInterceptor for cluster traffic",
+      "description": "Using the EncryptInterceptor protects the confidentiality and integrity of cluster traffic on an untrusted network, but not availability; without it, cluster traffic requires a trusted network, and multicast membership requires one in all cases.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-cluster"
+      ]
+    },
+    {
+      "bom-ref": "control-default-logging",
+      "name": "Default logging avoids security-sensitive information",
+      "description": "With the default configuration, security-sensitive information is not logged apart from anything included in the request URI; operators enabling debug or otherwise modified logging configurations accept the risk of sensitive information reaching logs.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-tomcat-server"
+      ]
+    }
+  ]
+}

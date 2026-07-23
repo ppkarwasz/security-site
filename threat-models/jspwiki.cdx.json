@@ -1,0 +1,590 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-jspwiki",
+      "name": "Apache JSPWiki",
+      "description": "Feature-rich WikiWiki-style engine built on standard Java/Jakarta EE components, deployed as a WAR in a servlet container. Page content is authored in JSPWiki markup (or Markdown) and rendered to HTML; server-side plugins and filters are invoked from markup; file attachments are stored and served; JAAS-based authentication and per-page access control lists govern who may do what.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jspwiki/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is a v0 draft by the ASF Security team, maintainer-reviewed by the JSPWiki PMC."
+        },
+        {
+          "type": "website",
+          "url": "https://jspwiki.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jspwiki"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jspwiki/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jspwiki/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-jspwiki",
+      "name": "JSPWiki web deployment",
+      "description": "A WAR inside a servlet container: untrusted web users (anonymous, cookie-asserted, authenticated, admin) act over the HTTP request surface; the engine renders stored markup, invokes installed plugins, and stores pages/attachments/user data on operator-trusted backends.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-wiki-engine",
+          "type": "component",
+          "name": "Wiki engine core and markup renderer",
+          "description": "Page CRUD, references, and the markup-to-HTML render pipeline (JSPWiki markup by default, optionally Markdown); the stored-XSS boundary.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-plugins",
+          "type": "component",
+          "name": "Plugins and filters",
+          "description": "Server-side Java invoked from page markup ([{Plugin ...}]) and the filter chain; any author with edit permission can invoke any installed plugin with arbitrary parameters. Which plugins are installed is the operator's choice; the default set is considered safe.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-attachments",
+          "type": "data-store",
+          "name": "Attachment store",
+          "description": "Uploaded bytes and filenames stored on the filesystem (BasicAttachmentProvider) and served back as attachments.",
+          "zone": "zone-storage"
+        },
+        {
+          "bom-ref": "asset-auth",
+          "type": "component",
+          "name": "Authentication and authorization layer",
+          "description": "JAAS LoginModules, per-page ACLs, wiki groups, and the user database (XML or JDBC); salted-hash password storage and login throttling.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-page-storage",
+          "type": "data-store",
+          "name": "Page storage",
+          "description": "Filesystem (default) or pluggable providers holding page markup; untrusted data at rest that later renders into HTML served to other users.",
+          "zone": "zone-storage"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-web-users",
+          "name": "Web users",
+          "type": "trust",
+          "description": "Anonymous, cookie-asserted, and authenticated HTTP clients; asserted is never authenticated for a security decision."
+        },
+        {
+          "bom-ref": "zone-engine",
+          "name": "Wiki engine",
+          "type": "trust",
+          "description": "The JSPWiki WAR inside the servlet container."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Operator-trusted storage and configuration",
+          "type": "trust",
+          "description": "Page/attachment directories, the user database, jspwiki.properties, jspwiki.policy, and installed plugin JARs; anyone with access here already controls the instance."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http",
+          "name": "HTTP request surface",
+          "type": "trust",
+          "zones": [
+            "zone-web-users",
+            "zone-engine"
+          ]
+        },
+        {
+          "bom-ref": "boundary-storage",
+          "name": "Engine to storage",
+          "type": "trust",
+          "zones": [
+            "zone-engine",
+            "zone-storage"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-anonymous",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted; whatever an unauthenticated HTTP request can reach."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-asserted",
+          "party": {
+            "roles": [
+              {
+                "name": "Asserted identity"
+              }
+            ],
+            "persona": {
+              "description": "A user who supplied a name via cookie but did not authenticate; asserted is not authenticated, trusted only as a convenience label, never as an identity for a security decision."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated user"
+              }
+            ],
+            "persona": {
+              "description": "Logged in via JAAS; trusted up to the permissions their roles and page ACLs grant."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Wiki admin"
+              }
+            ],
+            "persona": {
+              "description": "Holds the Admin role / AllPermission-class grants; trusted for the instance."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / deployer"
+              }
+            ],
+            "persona": {
+              "description": "Controls the WAR, jspwiki.properties, jspwiki.policy, installed plugin JARs, and storage backends. Fully trusted; out of model as an adversary."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A standard Jakarta EE servlet container hosts the WAR on a conformant JVM; TLS and container hardening are the deployment's job."
+        },
+        {
+          "description": "Outbound network connections happen only through plugins/filters/feeds that fetch URLs (RSS, Image, InterWiki) or the Kendra search provider; Tika parses attachment content only when the Tika search provider is enabled."
+        },
+        {
+          "description": "The XML-RPC remote API exists on the master-2.x line only; it has been removed on master."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-stored-xss",
+        "name": "Stored or reflected XSS via authored markup",
+        "description": "Page markup stored by an author with edit rights is untrusted data at rest that later renders into HTML served to other users; one user's content running script in another user's session is the classic stored-XSS boundary. The engine sanitizes output before serving and raw HTML is disallowed/sanitized by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wiki-engine"
+        ],
+        "mitigations": [
+          "control-output-sanitization"
+        ]
+      },
+      {
+        "bom-ref": "threat-acl-bypass",
+        "name": "Page ACL or role bypass",
+        "description": "An identity performs a view/edit/rename/delete/upload or admin action its per-page ACL, wiki group, or role forbids; CVE-class if violated.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth"
+        ],
+        "mitigations": [
+          "control-jaas-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-bypass",
+        "name": "Authentication bypass or privilege escalation",
+        "description": "Login must verify credentials against the configured LoginModule, and asserted (cookie-only) identities are not treated as authenticated; a bypass or escalation from anonymous/asserted to authenticated/admin is CVE-class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth"
+        ],
+        "mitigations": [
+          "control-jaas-acls",
+          "control-credential-protection"
+        ]
+      },
+      {
+        "bom-ref": "threat-attachment-traversal",
+        "name": "Path traversal or server-side execution via attachments",
+        "description": "Uploaded bytes and filenames cross into filesystem storage and are later served back; path interpretation and content-type handling are the risk points. Attachment filenames are canonicalized and attachments are served as attachments, not executed server-side.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-attachments"
+        ],
+        "mitigations": [
+          "control-attachment-containment",
+          "control-upload-size-limit"
+        ]
+      },
+      {
+        "bom-ref": "threat-plugin-invocation",
+        "name": "Abuse of installed plugins invoked from markup",
+        "description": "Any author with edit permission can invoke any installed plugin with arbitrary parameters; a finding in a default-set plugin reachable by an author that breaks a claimed property is in model, while a finding requiring an operator-installed non-default plugin is out of model. Plugins are not sandboxed beyond the JVM policy and run with the server's privileges; SSRF/outbound fetch via URL-consuming plugins (RSS, Image, InterWiki) is a class the operator must keep in view.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "mitigations": [
+          "control-vet-plugins"
+        ]
+      },
+      {
+        "bom-ref": "threat-csrf",
+        "name": "CSRF and automated abuse of state-changing actions",
+        "description": "Cross-site request forgery or automated abuse of edit, delete, profile, and group-management actions; token and SpamFilter-based anti-automation protection on state-changing actions is a claimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wiki-engine"
+        ],
+        "mitigations": [
+          "control-spamfilter-tokens"
+        ]
+      },
+      {
+        "bom-ref": "threat-brute-force",
+        "name": "Brute force or credential stuffing against login",
+        "description": "Un-throttled brute force against authentication, or plaintext/trivially reversible credential storage, would violate the credential-at-rest property: passwords in the default user database are stored as a salted hash and login throttling is configurable and on by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth"
+        ],
+        "mitigations": [
+          "control-credential-protection"
+        ]
+      },
+      {
+        "bom-ref": "threat-render-dos",
+        "name": "Super-linear render cost or unbounded plugin recursion",
+        "description": "Super-linear render cost on pathological markup and unbounded plugin/transclusion recursion are treated as bugs to fix, not accepted limitations; a report demonstrating a hang or OOM there is in model. Disk-fill via uploads at the operator-set attachment limit is an operator-tuning matter.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wiki-engine",
+          "asset-plugins"
+        ]
+      },
+      {
+        "bom-ref": "threat-xmlrpc-xxe",
+        "name": "XXE and remote-API abuse via XML-RPC (master-2.x only)",
+        "description": "The XML-RPC endpoint invokes engine operations under whatever identity the request authenticates as and requires XXE-safe XML parsing plus the same authorization as the web UI. It exists on master-2.x and has been removed on master (no jakarta-namespace replacement).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wiki-engine"
+        ],
+        "mitigations": [
+          "control-disable-remote-apis"
+        ]
+      },
+      {
+        "bom-ref": "threat-tika-parser",
+        "name": "Content-parser attacks via Tika attachment indexing",
+        "description": "Zip-bombs and malformed documents can attack the Apache Tika parsers that index attachment content, but only when the Tika search provider is enabled; keep Tika and search dependencies patched when that provider is on.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-attachments"
+        ],
+        "mitigations": [
+          "control-patch-optional-providers"
+        ]
+      },
+      {
+        "bom-ref": "threat-arbitrary-markup-flag",
+        "name": "Arbitrary markup execution when the operator flag is enabled",
+        "description": "Execution of arbitrary markup is possible only when the operator enables the flag for it; with the flag off (the default) it is not exposed, and with it on the operator has accepted that behaviour. Reports against an instance with the flag on are out of model unless they show the flag being bypassed while off.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-wiki-engine"
+        ],
+        "mitigations": [
+          "control-restrict-production-defaults"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-operator",
+        "name": "Malicious operator or filesystem-level adversary",
+        "description": "Anyone who can edit jspwiki.properties or jspwiki.policy, deploy plugin JARs, or reach the page/attachment/user-DB storage on disk has already won; JSPWiki does not defend the instance against its own administrator, and page ACLs are an authorization mechanism, not a confidentiality boundary against the operator or the storage layer.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-page-storage",
+          "asset-attachments"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http",
+        "boundary": "boundary-http",
+        "name": "HTTP request surface",
+        "description": "Every inbound request carries an identity (anonymous, asserted, authenticated) that the authorization layer resolves to a set of permissions before any state-changing or ACL-guarded action. Authoring stores untrusted markup; the render step serving it to other viewers is the security-relevant transition.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-stored-xss",
+          "threat-acl-bypass",
+          "threat-auth-bypass",
+          "threat-attachment-traversal",
+          "threat-plugin-invocation",
+          "threat-csrf",
+          "threat-brute-force",
+          "threat-render-dos",
+          "threat-xmlrpc-xxe"
+        ],
+        "controlsAtBoundary": [
+          "control-jaas-acls",
+          "control-output-sanitization",
+          "control-attachment-containment",
+          "control-spamfilter-tokens",
+          "control-credential-protection"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-storage",
+        "boundary": "boundary-storage",
+        "name": "Storage and configuration boundary",
+        "description": "Page and attachment directories, the user database, jspwiki.properties, jspwiki.policy, and installed plugin JARs are operator-trusted; anything reachable only from there is out of model.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-operator"
+        ],
+        "controlsAtBoundary": [
+          "control-vet-plugins",
+          "control-restrict-production-defaults"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-jaas-acls",
+      "name": "JAAS-backed access control on pages and actions",
+      "description": "View/edit/rename/delete/upload and admin operations are gated by per-page ACLs, wiki groups, and roles via the JAAS authorization layer; asserted (cookie-only) identities are never treated as authenticated.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-http",
+        "asset-auth"
+      ]
+    },
+    {
+      "bom-ref": "control-output-sanitization",
+      "name": "Sanitize rendered output",
+      "description": "Rendered page HTML is sanitized before serving so authored markup cannot inject active script into another viewer's session; raw HTML in markup is disallowed/sanitized by default.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-wiki-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-attachment-containment",
+      "name": "Attachment filename canonicalization and safe serving",
+      "description": "Attachment filenames are canonicalized and attachments are served as attachments (not executed server-side).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-attachments"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-protection",
+      "name": "Salted-hash passwords and login throttling",
+      "description": "Passwords in the default user database are stored as a salted hash; login throttling is configurable and on by default.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-auth"
+      ]
+    },
+    {
+      "bom-ref": "control-spamfilter-tokens",
+      "name": "Token and SpamFilter anti-automation",
+      "description": "Token / SpamFilter-based protection is present on state-changing actions (edit, profile, group management) against CSRF and automated abuse.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-wiki-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-production-defaults",
+      "name": "Lock down permissive defaults for production",
+      "description": "The permissive default page ACL / jspwiki.policy grants and default-enabled self-registration (with an approval workflow) are a dev convenience; decide deliberately whether anonymous view/edit/upload is intended, restrict self-registration, restrict the Admin role, protect install/setup pages, and leave the execute-arbitrary-markup flag off unless genuinely required.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-auth",
+        "asset-wiki-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-vet-plugins",
+      "name": "Deploy only trusted plugin JARs",
+      "description": "Keep the installed plugin set to the default-safe set unless a third-party plugin has been vetted; any author with edit permission can invoke any installed plugin with arbitrary parameters, and jspwiki.policy is not a substitute for not installing untrusted plugins.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-plugins"
+      ]
+    },
+    {
+      "bom-ref": "control-upload-size-limit",
+      "name": "Configure the attachment size limit",
+      "description": "Attachment upload size is bounded by an operator-customizable limit; configure it (and keep login throttling on) for the deployment.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-attachments"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-remote-apis",
+      "name": "Disable unused remote endpoints",
+      "description": "On master-2.x, disable XML-RPC and unused remote endpoints if not needed (on master, XML-RPC is already removed); serve over HTTPS behind a hardened container and do not expose admin pages to the public internet.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-patch-optional-providers",
+      "name": "Keep optional provider dependencies patched",
+      "description": "Keep Tika / search and Markdown dependencies patched if those providers are enabled; Tika parses attachment content only when the Tika search provider is enabled.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-attachments"
+      ]
+    }
+  ]
+}

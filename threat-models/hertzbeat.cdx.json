@@ -1,0 +1,173 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-hertzbeat",
+      "name": "Apache HertzBeat",
+      "description": "Real-time monitoring system. HertzBeat is highly extensible: users can add custom monitoring templates (SQL, SHELL, JMX, URL, and API scripts), custom code plugins that run in the system life cycle, custom collectors, and custom URL/parameter configuration. The security model draws the boundary at these extension points: extension content is the responsibility of the authorized users who supply it.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://hertzbeat.apache.org/docs/help/security_model/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hertzbeat.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hertzbeat"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://hertzbeat.apache.org/docs/help/security_model/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-default-credentials",
+        "name": "Unauthorized access via unchanged default account credentials",
+        "description": "HertzBeat ships default account credentials. The security model instructs organizations to modify the default account credentials immediately upon deployment; a deployment that keeps them is exposed to unauthorized access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "mitigations": [
+          "control-change-default-credentials"
+        ]
+      },
+      {
+        "bom-ref": "threat-uniform-management-privileges",
+        "name": "All users hold management privileges while RBAC is under development",
+        "description": "User access control is provided through the Sureness framework, but role-based access control functionality remains under development; currently all users possess management privileges. Any authenticated user therefore has full management capability over the system.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-sureness-configuration"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-monitoring-template",
+        "name": "Malicious content in custom monitoring templates",
+        "description": "Users can define monitoring rules through custom templates incorporating SQL, SHELL, JMX, URL, and API scripts. Template creators bear sole responsibility for content security: content must not contain malicious code or unsafe elements, and organizations should review templates before deployment. Malicious template content is the template author's responsibility, not a HertzBeat vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-template-review"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-custom-plugin",
+        "name": "Malicious or unsafe custom code plugins",
+        "description": "HertzBeat supports uploading custom code plugins that run in the life cycle of multiple systems. Users need to ensure the security of the custom plugin code themselves; plugin developers assume complete security liability for uploaded code.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-assess-custom-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-custom-collector",
+        "name": "Malicious or unsafe custom collectors",
+        "description": "Users may develop custom collectors to personalize metrics collection. As with plugins, developers must independently validate collector security prior to deployment; collector code security is the developer's responsibility.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-assess-custom-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-custom-url-parameter-abuse",
+        "name": "Abuse of custom URL and parameter configuration by authorized users",
+        "description": "The system permits custom URL and other parameter configuration. All users authorized to configure URLs and other parameters are considered highly trusted and are expected to trigger certain behaviors; abuse by such users is outside the model. All extension capabilities operate within authenticated user boundaries.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-change-default-credentials",
+      "name": "Change default account credentials on deployment",
+      "description": "Modify the default account credentials immediately upon deployment, following the Account Permission Management guide.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-sureness-configuration",
+      "name": "Configure user accounts, roles, and API permissions in sureness.yml",
+      "description": "HertzBeat uses the Sureness framework for user access control. Organizations should implement the sureness.yml configuration to establish user accounts, roles, and API resource permissions, noting that role-based access control functionality remains under development and currently all users possess management privileges.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-template-review",
+      "name": "Review monitoring templates before deployment",
+      "description": "Organizations should implement review processes before deploying custom monitoring templates; template content must not contain malicious code or unsafe elements.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-assess-custom-code",
+      "name": "Assess the security of custom plugins, collectors, and other customizations",
+      "description": "Developers must ensure the security of custom plugin and collector code themselves, and organizations should conduct security assessments for custom implementations across the platform ecosystem.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

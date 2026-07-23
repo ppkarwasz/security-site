@@ -1,0 +1,505 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-kudu",
+      "name": "Apache Kudu",
+      "description": "Distributed, columnar storage engine for fast analytics on fast-changing data. A cluster is a set of master servers (catalog/metadata, tablet placement) and tablet servers (row data in tablets, replicated via Raft consensus); clients talk to masters and tablet servers over RPC, an HTTP Web UI exposes status/metrics, and the master's embedded webserver can optionally serve a REST API for DDL. Kudu is designed to run inside a trusted cluster network; several security controls are optional and off by default.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/kudu/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is a v0 draft by the ASF Security team, not yet maintainer-ratified; most claims are marked inferred pending PMC confirmation."
+        },
+        {
+          "type": "website",
+          "url": "https://kudu.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "kudu"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/kudu/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/kudu/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-kudu",
+      "name": "Kudu cluster deployment",
+      "description": "Long-running master and tablet-server daemons inside an organization's analytics cluster (often alongside Impala/Spark on a Kerberized network): clients cross the network boundary into master/tserver RPC, authenticated operations cross the authorization boundary (User/Superuser ACL, optional Ranger), peers replicate via Raft over inter-node RPC with internal X.509 certs/tokens, and tablet servers write to local storage (optionally encrypted via a KMS).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-master",
+          "type": "service",
+          "name": "Kudu master",
+          "description": "Catalog, metadata, tablet placement, and authz-token issuance over the master RPC port; optionally serves a REST API for DDL (--enable_rest_api, off by default) behind the same authn/authz gate as RPC DDL.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-tserver",
+          "type": "service",
+          "name": "Tablet servers",
+          "description": "Store and serve row data in Raft-replicated tablets; handle read/write/scan RPC from clients and inter-node replication traffic.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-webui",
+          "type": "endpoint",
+          "name": "Web UI",
+          "description": "HTTP(S) status port exposing status/metrics; row data is redacted by default but metadata/metrics are visible, and fine-grained (Ranger) authorization is not enforced on it.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-storage",
+          "type": "data-store",
+          "name": "Local storage and WAL",
+          "description": "Data directories and write-ahead log on the local filesystem; unencrypted unless --encrypt_data_at_rest is enabled with a KMS.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Cluster clients",
+          "type": "trust",
+          "description": "Impala, Spark, and Kudu API clients; untrusted until authenticated (Kerberos/token), but with the default rpc_authentication=optional, unauthenticated connections from reachable subnets are allowed."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Kudu cluster daemons",
+          "type": "trust",
+          "description": "Masters and tablet servers on the trusted cluster network; peers authenticate via internal certs/tokens, and a compromised authenticated peer is the Byzantine-participant case."
+        },
+        {
+          "bom-ref": "zone-infrastructure",
+          "name": "Operator infrastructure",
+          "type": "trust",
+          "description": "Kerberos KDC, Ranger, KMS, daemon flags, keytabs, and hosts: provisioned and trusted by the operator; out of Kudu's model."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-rpc",
+          "name": "Client RPC and HTTP boundary",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-infrastructure",
+          "name": "Cluster to operator infrastructure",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-infrastructure"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Kudu assumes a trusted cluster network; with authentication optional, the cluster does not prevent access from unauthenticated users, so network-level controls are load-bearing until the operator sets rpc_authentication=required."
+        },
+        {
+          "description": "Kerberos, Ranger, and the KMS are provisioned and trusted by the operator when those features are enabled."
+        },
+        {
+          "description": "Daemons open RPC and HTTP listening sockets, read/write local data dirs and the WAL, talk to KDC/Ranger/KMS, and are not expected to run as root."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-optional-auth-exposure",
+        "name": "Unauthenticated access under the default rpc_authentication=optional",
+        "description": "The default --rpc_authentication=optional allows unauthenticated connections from reachable subnets; the docs tell operators to set =required to secure a cluster. An unauthenticated-accessible cluster reachable by attackers is treated as an operator posture choice, not a Kudu defect (pending the PMC's explicit insecure-default ruling). 'Optional' does not mean 'authentication on': it authenticates if offered and otherwise allows.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver"
+        ],
+        "mitigations": [
+          "control-rpc-auth-required"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-bypass",
+        "name": "Authentication bypass on a required-auth cluster",
+        "description": "An unauthenticated client performs an RPC that requires identity on a cluster configured with rpc_authentication=required (Kerberos / internal tokens). Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver"
+        ],
+        "mitigations": [
+          "control-rpc-auth-required"
+        ]
+      },
+      {
+        "bom-ref": "threat-authz-exceed",
+        "name": "Authenticated principal exceeds its ACL or Ranger grant",
+        "description": "A legitimate principal reads/writes a table or column its coarse User/Superuser ACL or fine-grained Ranger policy forbids, escalates via authz-token handling, or reaches admin RPCs reserved for the Superuser ACL. Critical severity. Note the User ACL default of '*' grants user-level access to all authenticated principals, not 'no access'.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver"
+        ],
+        "mitigations": [
+          "control-narrow-acls",
+          "control-ranger"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-rpc",
+        "name": "Plaintext RPC under the default rpc_encryption=optional",
+        "description": "With the default --rpc_encryption=optional, RPC may be plaintext and wire confidentiality/integrity is not guaranteed; plaintext RPC under the default is operator responsibility, and in-transit protection is a claimed property only when =required. Loopback (same-host) connections are not TLS-protected by design even then, unless --rpc_encrypt_loopback_connections is set.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver"
+        ],
+        "mitigations": [
+          "control-rpc-encryption-required"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-webui-row-data-leak",
+        "name": "Row data exposed in the Web UI despite redaction",
+        "description": "The Web UI redacts row data by default while exposing schema, metrics, and cluster state by design; row values appearing in the Web UI would violate the redaction property (high severity). Metadata exposure itself is by design, and fine-grained authorization is not enforced on the Web UI.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webui"
+        ],
+        "mitigations": [
+          "control-webui-redaction",
+          "control-front-webui"
+        ]
+      },
+      {
+        "bom-ref": "threat-webui-no-fine-authz",
+        "name": "No fine-grained authorization on the Web UI",
+        "description": "Ranger policies are not enforced on the Web UI, which is gated only by its own coarse controls; treating the Web UI as a fine-grained-authz surface is a mistake. Disclaimed by the model.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webui"
+        ],
+        "mitigations": [
+          "control-front-webui"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-at-rest-plaintext",
+        "name": "Unencrypted data files on disk by default",
+        "description": "Data files are plaintext on disk unless --encrypt_data_at_rest is enabled together with a KMS; a documented default, so readable data files given disk access are operator responsibility rather than a defect.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-storage"
+        ],
+        "mitigations": [
+          "control-at-rest-encryption",
+          "control-protect-host"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-peer",
+        "name": "Compromised authenticated peer in Raft replication",
+        "description": "A compromised tablet or master server that passed the internal X.509 cert/token handshake and then behaves arbitrarily. Raft replication safety (a committed write is durable and consistent across replicas) is claimed given fewer than a majority of faulty replicas; divergent replicas, a lost commit, or split-brain within that bound is critical. Compromise of a majority or more of replicas is out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tserver",
+          "asset-master"
+        ],
+        "mitigations": [
+          "control-raft-replication",
+          "control-internal-peer-auth"
+        ]
+      },
+      {
+        "bom-ref": "threat-dos",
+        "name": "Denial of service against RPC/HTTP surfaces",
+        "description": "Volumetric or resource-exhaustion attacks against the RPC/HTTP surfaces are out of scope for this v0 model; availability is not a committed property. Whether an authenticated client triggering super-linear CPU/memory via crafted scans is in-model (versus a by-design expensive query) is an open maintainer question; the proposal is that only pre-authentication exhaustion would be in-model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-infrastructure",
+        "name": "Compromise of the operator or surrounding infrastructure",
+        "description": "The operator/admin and anyone with the daemon flags or keytabs has already won; the Kerberos KDC, Ranger service, KMS, HDFS, OS, and cluster network fabric are integrated with but not owned by Kudu. Out of scope.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-master",
+          "asset-tserver",
+          "asset-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-rpc",
+        "boundary": "boundary-client-rpc",
+        "name": "Client RPC and HTTP trust boundary",
+        "description": "The primary trust boundary is the authentication plus authorization layer (Kerberos/token auth, then coarse ACL, then optional Ranger fine-grained policy) when the operator has enabled enforcement; with auth optional (the default), unauthenticated connections from reachable subnets are allowed and network placement is load-bearing.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-optional-auth-exposure",
+          "threat-auth-bypass",
+          "threat-authz-exceed",
+          "threat-plaintext-rpc",
+          "threat-webui-row-data-leak",
+          "threat-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-rpc-auth-required",
+          "control-rpc-encryption-required",
+          "control-narrow-acls",
+          "control-ranger",
+          "control-webui-redaction",
+          "control-front-webui"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-infrastructure",
+        "boundary": "boundary-infrastructure",
+        "name": "Operator infrastructure boundary",
+        "description": "Daemon flags, ACLs, Kerberos/Ranger/KMS configuration, keytabs, and hosts are trusted operator inputs; anything requiring their control is out of model.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-operator-infrastructure",
+          "threat-at-rest-plaintext"
+        ],
+        "controlsAtBoundary": [
+          "control-at-rest-encryption",
+          "control-protect-host"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-rpc-auth-required",
+      "name": "Set --rpc_authentication=required",
+      "description": "Enforce Kerberos / internal-token client authentication (or keep the cluster strictly on a trusted, isolated network); the default 'optional' authenticates if offered and otherwise allows.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-rpc-encryption-required",
+      "name": "Set --rpc_encryption=required",
+      "description": "Enable TLS wire confidentiality/integrity for RPC; add --rpc_encrypt_loopback_connections if same-host RPC must also be encrypted, since loopback connections are not TLS-protected by default (a performance-motivated design choice).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-narrow-acls",
+      "name": "Narrow the User and Superuser ACLs",
+      "description": "Move the User ACL away from the '*' default (which grants user-level access to all authenticated principals) to the intended principals, and reserve the Superuser ACL for admins.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-master",
+        "asset-tserver"
+      ]
+    },
+    {
+      "bom-ref": "control-ranger",
+      "name": "Enable Apache Ranger fine-grained authorization",
+      "description": "Wire the optional Ranger integration (Kudu 1.12+) for table/column-level policy in multi-tenant clusters; note it is not enforced on the Web UI.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-master",
+        "asset-tserver"
+      ]
+    },
+    {
+      "bom-ref": "control-at-rest-encryption",
+      "name": "Enable --encrypt_data_at_rest with a KMS",
+      "description": "Enable at-rest encryption plus a KMS where disk confidentiality matters; data files are otherwise plaintext on disk.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-webui-redaction",
+      "name": "Web UI row-data redaction",
+      "description": "The Web UI redacts row data by default while exposing schema, metrics, and cluster state; keep redaction on.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-front-webui",
+      "name": "Front or restrict the Web UI",
+      "description": "Put the Web UI (and the optional REST API) behind an authenticating proxy or restrict its network exposure; fine-grained authorization is not enforced there.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-internal-peer-auth",
+      "name": "Internal certificate/token authentication on inter-node channels",
+      "description": "Masters and tablet servers authenticate peers via internal X.509 certs/tokens on inter-node RPC and Raft channels (pending maintainer confirmation of the exact boundary).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-master",
+        "asset-tserver"
+      ]
+    },
+    {
+      "bom-ref": "control-raft-replication",
+      "name": "Raft consensus replication",
+      "description": "Committed writes are durable and consistent across tablet replicas given fewer than a majority of faulty replicas; Raft tolerates a minority of faulty replicas.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-tserver"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-host",
+      "name": "Protect keytabs, flagfiles, and data directories",
+      "description": "Restrict host filesystem permissions on keytabs, flagfiles, and data dirs; do not run daemons as root.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-storage",
+        "boundary-infrastructure"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,522 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-tapestry",
+      "name": "Apache Tapestry",
+      "description": "Component-based Java web application framework. Developers build pages and components; Tapestry handles request dispatch, rendering, form/event processing, asset serving, and serialization of some server-side state into the client (page activation context, form data) which it validates and deserializes on postback. The single most security-load-bearing mechanism is the HMAC-protected serialized client state: Tapestry round-trips serialized objects through the browser and deserializes them on return, so their integrity rests on a configured HMAC secret.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/tapestry-5/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. Draft under Tapestry PMC review with wave-1/2 maintainer answers folded in."
+        },
+        {
+          "type": "website",
+          "url": "https://tapestry.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tapestry"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/tapestry-5/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/tapestry-5/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-tapestry",
+      "name": "Tapestry web application",
+      "description": "A servlet container hosts the Tapestry application; the trust boundary is the HTTP request: parameters, form data, activation context, and serialized client state are untrusted until validated. The application developer's pages, components, and handlers are trusted authored code.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-serialized-client-state",
+          "type": "component",
+          "name": "Serialized client state and HMAC gate",
+          "description": "t:formdata and activation serialization deserialized on postback, accepted only if its HMAC verifies against the configured tapestry.hmac-passphrase. The critical, attacker-reachable deserialization channel; its safety is entirely the HMAC (the post-CVE-2021-27850 design).",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-rendering",
+          "type": "component",
+          "name": "Rendering and template output",
+          "description": "Component render and output escaping; the XSS surface.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-asset-service",
+          "type": "component",
+          "name": "Asset serving",
+          "description": "Classpath/context asset URLs resolving to filesystem/classpath resources; the traversal surface.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-whitelist",
+          "type": "component",
+          "name": "Access whitelisting",
+          "description": "@WhitelistAccessOnly pages/services gated by the ClientWhitelist analyzer, default LocalhostOnly (localhost IPv4/IPv6). An address/origin filter, not user authentication.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-forms-upload",
+          "type": "component",
+          "name": "Forms and file upload",
+          "description": "Form submit and multipart upload handling with temp files.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-web-clients",
+          "name": "Web clients",
+          "type": "trust",
+          "description": "Any browser or agent issuing requests, form posts, and activation-context URLs; untrusted."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Tapestry application",
+          "type": "trust",
+          "description": "The framework and developer-authored application code in the servlet container; developer and operator are trusted."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-request",
+          "name": "HTTP request boundary",
+          "type": "trust",
+          "zones": [
+            "zone-web-clients",
+            "zone-application"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-web-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Web client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted primary adversary: submits crafted activation/event contexts, tampered or replayed serialized client state, malicious asset paths, oversized/typed uploads, and content intended to reflect as XSS. Goals: deserialization RCE via forged client state (defeated only by the HMAC), arbitrary file read via asset traversal, reaching a whitelisted/admin page, stored/reflected XSS, DoS via large uploads/contexts."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-application-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer"
+              }
+            ],
+            "persona": {
+              "description": "Authors pages, components, templates, and handlers and chooses where to use raw output, uploads, whitelisting, and HTTPS. Trusted; out of model as adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / deployer"
+              }
+            ],
+            "persona": {
+              "description": "Sets tapestry.hmac-passphrase, production mode, and deployment hardening. Trusted; out of model."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A servlet container hosts the Tapestry application; TLS is provided by the container."
+        },
+        {
+          "description": "tapestry.hmac-passphrase is configured to a strong secret by the operator."
+        },
+        {
+          "description": "Production mode disables developer conveniences (detailed exception pages, component reload)."
+        },
+        {
+          "description": "Tapestry reads classpath/context assets, writes temp files for uploads, and deserializes HMAC-validated client state; it is not assumed to open arbitrary sockets or run host commands."
+        },
+        {
+          "description": "Internal test code (src/test/** in every module), sample apps, and documentation do not deploy and are not an adversary surface."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-forged-serialized-state-rce",
+        "name": "Deserialization RCE via forged serialized client state",
+        "description": "An attacker submits an arbitrary serialized object as client state; acceptance of a forged serialized object means remote code execution. Serialized client state is deserialized only after its HMAC verifies against the configured passphrase, the post-CVE-2021-27850 protection. Reports that ignore the HMAC gate are known non-findings; only an HMAC bypass (or an unset passphrase) is valid. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-serialized-client-state"
+        ],
+        "mitigations": [
+          "control-hmac-verification",
+          "control-set-hmac-passphrase"
+        ]
+      },
+      {
+        "bom-ref": "threat-framework-xss",
+        "name": "XSS from framework-rendered values",
+        "description": "Reflected or stored XSS from values Tapestry itself renders; rendered component output is HTML-escaped by default, and the PMC notes any unchecked passthrough of data in an internal component should itself be treated as a bug. High to critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rendering"
+        ],
+        "mitigations": [
+          "control-default-escaping"
+        ]
+      },
+      {
+        "bom-ref": "threat-asset-traversal",
+        "name": "Path traversal via asset URLs",
+        "description": "Reading files outside the asset roots through asset requests. Traversal is prevented by a mix of the servlet container's path normalization and Tapestry's own checks (explicit exclusion of sensitive file extensions); the PMC notes these checks could be improved further. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-asset-service"
+        ],
+        "mitigations": [
+          "control-asset-path-protection"
+        ]
+      },
+      {
+        "bom-ref": "threat-whitelist-bypass",
+        "name": "Whitelisted page reachable by a non-whitelisted client",
+        "description": "@WhitelistAccessOnly resources served to a client outside the whitelist; by default only LocalhostOnly is contributed (localhost IPv4/IPv6). High severity. The PMC noted a correctness bug where certain shortened IPv6 addresses are falsely denied (TAP5-2832), which is over-restrictive, not a bypass. A whitelisted page reachable from localhost is by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-whitelist"
+        ],
+        "mitigations": [
+          "control-localhost-whitelist"
+        ]
+      },
+      {
+        "bom-ref": "threat-secure-page-over-http",
+        "name": "Secure page served over plain HTTP",
+        "description": "RequestSecurityManager decides whether HTTPS is required from a page's @Secure annotation; enforcement is on by default in production mode and configurable via tapestry.secure-enabled. A secure page served over plain HTTP is a medium to high severity violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rendering"
+        ],
+        "mitigations": [
+          "control-secure-links"
+        ]
+      },
+      {
+        "bom-ref": "threat-upload-dos",
+        "name": "Denial of service via large uploads or contexts",
+        "description": "Upload-based DoS and content-type confusion through oversized or mistyped uploads and large activation/event contexts; the operator must set upload size/type limits.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-forms-upload"
+        ],
+        "mitigations": [
+          "control-upload-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-unset-hmac-passphrase",
+        "name": "Deployment without a configured HMAC passphrase",
+        "description": "If tapestry.hmac-passphrase is unset or weak, the serialized-state protection is void and the deserialization surface reopens. An unset passphrase is currently a loud error (logged plus an AlertManager client-side alert), not yet a hard startup failure; making it fail closed in production mode is planned (TAP5-2834). Misconfiguration is the operator's responsibility.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-serialized-client-state"
+        ],
+        "mitigations": [
+          "control-set-hmac-passphrase",
+          "control-fail-closed-startup"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-csrf",
+        "name": "Cross-site request forgery on form/event posts",
+        "description": "Tapestry ships no CSRF module/component. The HMAC guards invalid requests, but a valid request is still subject to CSRF, so CSRF defence is the application's responsibility until a built-in lands (the PMC is planning one; prior art: porscheinformatik/tapestry-csrf-protection, primarily by a Tapestry committer/PMC member).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-forms-upload"
+        ],
+        "mitigations": [
+          "control-builtin-csrf"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-raw-output-xss",
+        "name": "XSS via developer-emitted raw output",
+        "description": "Raw output is an explicit opt-in via MarkupWriter.writeRaw or the OutputRaw component, where the developer must escape/validate beforehand; XSS attributed to a developer's raw output of untrusted data is the developer's responsibility, not a framework default.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rendering"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dev-mode-disclosure",
+        "name": "Information disclosure from development mode in production",
+        "description": "Running in development mode in production exposes detailed exception pages and component sources; dev-mode information disclosure against a dev configuration is operator posture, out of model.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-production-mode"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-app-authorization",
+        "name": "Application-level authorization gaps",
+        "description": "Tapestry provides no application-level authorization beyond the whitelist and secure-link mechanisms; page-level access control for normal pages, and validation of activation/event context values in handlers, are the application's job.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-request",
+        "boundary": "boundary-http-request",
+        "name": "HTTP request trust boundary",
+        "description": "Parameters, form data, activation context, and serialized client state are untrusted until validated. In-model findings are those reachable from an untrusted request before the framework's HMAC/whitelist/escaping controls; findings requiring an unset HMAC passphrase or developer raw output are misconfiguration, out of model.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-forged-serialized-state-rce",
+          "threat-framework-xss",
+          "threat-asset-traversal",
+          "threat-whitelist-bypass",
+          "threat-secure-page-over-http",
+          "threat-upload-dos",
+          "threat-csrf"
+        ],
+        "controlsAtBoundary": [
+          "control-hmac-verification",
+          "control-default-escaping",
+          "control-asset-path-protection",
+          "control-localhost-whitelist",
+          "control-secure-links"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-hmac-verification",
+      "name": "HMAC verification of serialized client state",
+      "description": "Serialized client state is deserialized only after its HMAC verifies against the configured tapestry.hmac-passphrase, preventing submission of arbitrary serialized objects (the post-CVE-2021-27850 protection).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-serialized-client-state",
+        "boundary-http-request"
+      ]
+    },
+    {
+      "bom-ref": "control-set-hmac-passphrase",
+      "name": "Set a strong HMAC passphrase",
+      "description": "Set tapestry.hmac-passphrase to a strong secret and protect it like a cryptographic key; without it, the serialized-state protection is void.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-serialized-client-state"
+      ]
+    },
+    {
+      "bom-ref": "control-fail-closed-startup",
+      "name": "Fail-closed startup on missing passphrase",
+      "description": "A startup failure in production mode when the HMAC passphrase is unset is planned (TAP5-2834); currently an unset passphrase is a loud, non-fatal error (logged plus an AlertManager client-side alert).",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-serialized-client-state"
+      ]
+    },
+    {
+      "bom-ref": "control-default-escaping",
+      "name": "HTML escaping by default",
+      "description": "Rendered component output is HTML-escaped by default; raw output requires an explicit opt-in via MarkupWriter.writeRaw or the OutputRaw component, where the developer must escape/validate beforehand.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rendering"
+      ]
+    },
+    {
+      "bom-ref": "control-asset-path-protection",
+      "name": "Asset path canonicalization and sensitive-extension exclusion",
+      "description": "Asset URLs resolve only to intended classpath/context resources; traversal is prevented by the servlet container's path normalization plus Tapestry's own checks, including explicit exclusion of sensitive file extensions. The PMC notes these checks could be improved further.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-asset-service"
+      ]
+    },
+    {
+      "bom-ref": "control-localhost-whitelist",
+      "name": "Client whitelist analyzer (default LocalhostOnly)",
+      "description": "@WhitelistAccessOnly resources are served only to whitelisted clients; by default only LocalhostOnly is contributed (localhost IPv4/IPv6). Use it for admin/diagnostic pages and confirm the analyzer fits the deployment. It is an address/origin filter, not user authentication.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-whitelist"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-links",
+      "name": "Secure-link HTTPS enforcement",
+      "description": "RequestSecurityManager requires HTTPS based on the @Secure annotation, enforced by default in production mode and configurable via the tapestry.secure-enabled symbol. Mark sensitive pages secure and run behind TLS.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rendering"
+      ]
+    },
+    {
+      "bom-ref": "control-builtin-csrf",
+      "name": "Built-in CSRF protection",
+      "description": "The PMC is planning a built-in CSRF module; until then CSRF defence is the application's responsibility (prior art: porscheinformatik/tapestry-csrf-protection).",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-forms-upload"
+      ]
+    },
+    {
+      "bom-ref": "control-upload-limits",
+      "name": "Set upload size and type limits",
+      "description": "The operator must set upload size/type limits and rely on safe temp-file handling for multipart uploads.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-forms-upload"
+      ]
+    },
+    {
+      "bom-ref": "control-production-mode",
+      "name": "Run in production mode",
+      "description": "Run in production mode; never expose development exception pages or component sources publicly.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rendering"
+      ]
+    }
+  ]
+}

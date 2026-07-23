@@ -1,0 +1,504 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-unomi",
+      "name": "Apache Unomi",
+      "description": "Java reference implementation of the OASIS Context Server (CXS) spec, a Customer Data Platform. It collects behavioural events about visitors (typically from a browser via the unomi-tracker JavaScript over a public context endpoint), builds and stores profiles and segments, evaluates rules and conditions, exposes REST and GraphQL APIs, and persists to Elasticsearch/OpenSearch. Runs in an Apache Karaf/OSGi container. The threat model is a v0 draft by the ASF Security team pending Unomi PMC ratification; many statements are marked inferred.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/unomi/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document (draft v0); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://unomi.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "unomi"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/unomi/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/unomi/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-unomi",
+      "name": "Unomi context server deployment",
+      "description": "Architecture described by the Unomi threat model: browsers post events unauthenticated to the public context endpoint; authenticated integrators use the REST/GraphQL admin APIs to author conditions, rules, segments, and scopes; the rule/condition engine evaluates expressions; data persists to an operator-secured Elasticsearch/OpenSearch backend.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-context-endpoint",
+          "type": "endpoint",
+          "name": "Public context ingestion endpoint",
+          "description": "/context.json and /eventcollector (EventsCollectorServlet): unauthenticated, internet-facing by design, the highest-value untrusted surface. Its gate is JSON-Schema validation plus the public-event allow-list (protected events / third-party server key mechanism), not authentication.",
+          "zone": "zone-unomi"
+        },
+        {
+          "bom-ref": "asset-rule-engine",
+          "type": "module",
+          "name": "Rule / condition / segment engine and scripting",
+          "description": "Services and scripting modules evaluating MVEL/OGNL expressions; historically the RCE surface (CVE-2020-11975, CVE-2020-13942, CVE-2021-31164), since constrained so that public input cannot reach expression evaluation.",
+          "zone": "zone-unomi"
+        },
+        {
+          "bom-ref": "asset-admin-apis",
+          "type": "api",
+          "name": "REST and GraphQL admin APIs",
+          "description": "Authenticated surface where conditions, rules, segments, and scopes are defined; assumed not exposed to the public network and trusted to the credential's authority.",
+          "zone": "zone-unomi"
+        },
+        {
+          "bom-ref": "asset-persistence",
+          "type": "data-store",
+          "name": "Elasticsearch / OpenSearch persistence",
+          "description": "Profile, segment, and event storage via persistence-elasticsearch / persistence-opensearch; Unomi's use of it is in model, the backend's own security is the operator's.",
+          "zone": "zone-backend"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-public-clients",
+          "name": "Public web clients",
+          "type": "trust",
+          "description": "Browsers running unomi-tracker on the open internet, hitting the public context endpoint unauthenticated."
+        },
+        {
+          "bom-ref": "zone-integrators",
+          "name": "Authenticated integrators and admins",
+          "type": "trust",
+          "description": "API clients and operators authoring conditions, rules, segments, and scopes; trusted to their credential's authority, with the operator fully trusted."
+        },
+        {
+          "bom-ref": "zone-unomi",
+          "name": "Unomi server",
+          "type": "trust",
+          "description": "The Unomi process in its Karaf/OSGi container: ingestion servlets, rule engine, schema validation, admin APIs."
+        },
+        {
+          "bom-ref": "zone-backend",
+          "name": "Search backend",
+          "type": "trust",
+          "description": "Elasticsearch or OpenSearch, assumed deployed on a trusted network and secured by the operator."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-context",
+          "name": "Public context boundary",
+          "type": "trust",
+          "zones": [
+            "zone-public-clients",
+            "zone-unomi"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin",
+          "name": "Admin API boundary",
+          "type": "trust",
+          "zones": [
+            "zone-integrators",
+            "zone-unomi"
+          ]
+        },
+        {
+          "bom-ref": "boundary-persistence",
+          "name": "Persistence boundary",
+          "type": "trust",
+          "zones": [
+            "zone-unomi",
+            "zone-backend"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-public-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Public web client"
+              }
+            ],
+            "persona": {
+              "description": "A browser running unomi-tracker, hitting the public context endpoint unauthenticated from the open internet; the primary untrusted actor."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-integrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Integrator / API client"
+              }
+            ],
+            "persona": {
+              "description": "Calls the REST/GraphQL APIs authenticated; may author conditions, rules, segments, and scopes. Trusted to its credential's authority."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Controls configuration, the Karaf container, plugins, and the Elasticsearch/OpenSearch backend. Trusted."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-cluster-peer",
+          "party": {
+            "roles": [
+              {
+                "name": "Cluster peer"
+              }
+            ],
+            "persona": {
+              "description": "Another Unomi node in the same deployment."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The public context endpoint is internet-facing by design (browsers post events directly); the admin REST/GraphQL APIs are assumed not public and authenticated."
+        },
+        {
+          "description": "The Elasticsearch/OpenSearch backend is deployed on a trusted network and secured by the operator."
+        },
+        {
+          "description": "Attackers who already control the host, the Karaf container, the config, the plugins, or the search backend are out of model (operator-trusted)."
+        },
+        {
+          "description": "unomi-site, samples/, and itests/ are not production trust surfaces; unomi-tracker is a client-side satellite of this model."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-public-expression-rce",
+        "name": "Public input reaching OGNL/MVEL expression evaluation (RCE)",
+        "description": "The load-bearing historical break: attacker-controlled input from the public context endpoint reaching OGNL/MVEL expression evaluation that can instantiate or call arbitrary Java, as in CVE-2020-11975, CVE-2020-13942, and CVE-2021-31164, fixed by constraining the public surface. A regression of this class is treated as valid and critical; the standing invariant is that no code execution is possible from public/untrusted input.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-context-endpoint",
+          "asset-rule-engine"
+        ],
+        "mitigations": [
+          "control-expression-allowlist",
+          "control-public-event-allowlist",
+          "control-schema-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-schema-validation-bypass",
+        "name": "Bypass of JSON-Schema event validation",
+        "description": "An unvalidated or unknown event shape reaches processing despite the registered JSON Schemas that should reject non-conforming input at the public boundary. Violates the input-validation property; severity security-critical to moderate.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-context-endpoint"
+        ],
+        "mitigations": [
+          "control-schema-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-profile-access",
+        "name": "Cross-profile or cross-scope data access",
+        "description": "A public client reads or modifies profile data outside what the context/scope model permits, or an authenticated API client exceeds its authority (including the open tenant-isolation question UNOMI-139: whether a client with credentials for tenant A can reach tenant B's profiles, segments, or rules). Security-critical PII exposure.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-context-endpoint",
+          "asset-admin-apis",
+          "asset-persistence"
+        ]
+      },
+      {
+        "bom-ref": "threat-event-flood-dos",
+        "name": "Resource exhaustion via public event floods",
+        "description": "A flood of events, large payloads, or expensive segments/conditions exhausts the server. The model leaves the resource-bound line unspecified (whether this is a bug or expected-and-operator-managed is an open maintainer question); the draft recommends rate limiting or a CDN/WAF in front of the public endpoint.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-context-endpoint"
+        ],
+        "mitigations": [
+          "control-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-expression-power",
+        "name": "Dangerous conditions authored by a trusted admin",
+        "description": "An authenticated privileged user defining server-side logic through conditions/rules is the intended (if powerful) feature, not an attack on Unomi; the expression/scripting allow-list protects the public surface and is not a sandbox that makes arbitrary admin-authored expressions safe. Out of model as trusted input.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rule-engine"
+        ],
+        "mitigations": [
+          "control-restrict-authoring"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-exposed-admin-api",
+        "name": "Admin APIs exposed unauthenticated or with default credentials",
+        "description": "Keeping the admin REST/GraphQL surface off the public network, authenticated, and free of default credentials is the operator's job (pending the draft's insecure-default ruling on whether a default-credential report is valid or a documented must-configure).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-apis"
+        ],
+        "mitigations": [
+          "control-admin-auth"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-exposed-backend",
+        "name": "Exposed or unsecured Elasticsearch/OpenSearch backend",
+        "description": "Unomi assumes a secured backend and does not defend an exposed Elasticsearch/OpenSearch or its network; confidentiality of profile data at rest in the search backend is deployment hardening, the operator's responsibility. A backend finding is in model only if reachable through Unomi's API.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-persistence"
+        ],
+        "mitigations": [
+          "control-secure-backend"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-segmentation-corruption",
+        "name": "Corruption of analytics/segmentation by adversarial event injection",
+        "description": "Unomi does not guarantee correctness of analytics or segmentation under adversarial event injection beyond the access-control boundary; injected but schema-valid events skewing segments is a disclaimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-context-endpoint"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-context",
+        "boundary": "boundary-context",
+        "name": "Public context endpoint boundary",
+        "description": "Event payloads arrive unauthenticated from browsers and are untrusted; they flow through JSON-Schema validation, event/condition processing, and profile update to persistence. The schema-validation step and the public-event allow-list are the gate, not authentication; the endpoint being unauthenticated is by design.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-public-expression-rce",
+          "threat-schema-validation-bypass",
+          "threat-cross-profile-access",
+          "threat-event-flood-dos",
+          "threat-segmentation-corruption"
+        ],
+        "controlsAtBoundary": [
+          "control-schema-validation",
+          "control-public-event-allowlist",
+          "control-expression-allowlist",
+          "control-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin",
+        "boundary": "boundary-admin",
+        "name": "Admin API boundary",
+        "description": "The authenticated REST/GraphQL surface where conditions, rules, and scopes are defined; trusted to the credential, and expression power available only to a trusted authenticated author is out of model.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-admin-expression-power",
+          "threat-exposed-admin-api"
+        ],
+        "controlsAtBoundary": [
+          "control-admin-auth",
+          "control-restrict-authoring"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-persistence",
+        "boundary": "boundary-persistence",
+        "name": "Persistence boundary",
+        "description": "Unomi talks to an Elasticsearch/OpenSearch backend assumed trusted and operator-secured; findings on the backend are in model only when reachable through Unomi's API.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-exposed-backend"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-backend"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-schema-validation",
+      "name": "JSON-Schema validation of incoming events",
+      "description": "Incoming events are validated against registered JSON Schemas so non-conforming input is rejected rather than processed; the intended primary input defense at the public boundary. Keep it enabled and register schemas for the events you accept (default strictness is an open maintainer question in the draft).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-context"
+      ]
+    },
+    {
+      "bom-ref": "control-public-event-allowlist",
+      "name": "Public-event allow-list and third-party server keys",
+      "description": "The protected-events / third-party server key mechanism (server id, key, IP allow-list, allowed-event-types configuration) distinguishes events a public client may send from those requiring a trusted key; keep it enabled rather than disabling it to ease integration.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-context"
+      ]
+    },
+    {
+      "bom-ref": "control-expression-allowlist",
+      "name": "Expression/scripting restrictions on the public surface",
+      "description": "The post-CVE restrictions constrain which classes and methods condition expressions may reference so that public input cannot reach arbitrary OGNL/MVEL evaluation; they protect the public surface and are not a sandbox for admin-authored expressions.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rule-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-auth",
+      "name": "Keep admin APIs private and authenticated",
+      "description": "Keep the admin REST/GraphQL APIs off the public network and authenticated, and change any default credentials.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-authoring",
+      "name": "Restrict condition/rule/scripting authoring authority",
+      "description": "Restrict who holds condition, rule, and scripting authoring authority: it is equivalent to server-side code definition.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-backend",
+      "name": "Secure the search backend and its network",
+      "description": "Secure the Elasticsearch/OpenSearch backend and the network between Unomi and it; do not expose the backend alongside Unomi without backend authentication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-persistence"
+      ]
+    },
+    {
+      "bom-ref": "control-rate-limiting",
+      "name": "Rate limiting / CDN / WAF in front of the public endpoint",
+      "description": "Put the public context endpoint behind rate limiting or a CDN/WAF appropriate to public exposure, since flood protection may fall to the operator.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-context"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,590 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-rampart",
+      "name": "Apache Rampart",
+      "description": "WS-Security implementation for Apache Axis2/Java, providing message-level security for SOAP web services: XML Signature, XML Encryption, UsernameToken authentication, SAML 1.1/2.0 assertion processing, Kerberos token support, WS-Trust (Secure Token Service), and WS-SecureConversation. Deployed as an Axis2 module (MAR) adding inbound and outbound security handlers to the Axis2 pipeline. Delegates cryptographic operations to Apache WSS4J (4.0.1) and SAML processing to OpenSAML (5.2.1). Rampart is the security enforcement layer: if it is bypassed or misconfigured, Axis2 services have no message-level security. Rampart has no independently assigned CVEs; its security posture depends heavily on WSS4J and OpenSAML.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/axis-axis2-java-rampart/security/policy",
+          "comment": "Source security threat model (SECURITY.md); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://axis.apache.org/axis2/java/rampart/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "axis"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/axis-axis2-java-rampart/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/axis-axis2-java-rampart/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-rampart",
+      "name": "Rampart message security deployment",
+      "description": "Message processing flow described by the threat model: an incoming SOAP message passes from the Axis2 transport-in phase to RampartReceiver and RampartEngine, which extract the WS-Security header; WSS4J's WSSecurityEngine validates signatures (XML-DSIG via Apache Santuario), decrypts encrypted parts, validates UsernameToken via password callback, SAML assertions via OpenSAML, Kerberos tokens via JDK JAAS/GSS, and timestamps with clock-skew tolerance; PolicyBasedResultsValidator then matches WSS4J results against WS-SecurityPolicy assertions before the service method is invoked. RampartSender and MessageBuilder apply outbound signatures, encryption, timestamps, and nonces.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-rampart-handlers",
+          "type": "module",
+          "name": "Rampart handlers and engine",
+          "description": "RampartReceiver/RampartEngine (inbound) and RampartSender/MessageBuilder (outbound) in the Axis2 pipeline, plus PolicyBasedResultsValidator enforcing WS-SecurityPolicy.",
+          "zone": "zone-service"
+        },
+        {
+          "bom-ref": "asset-crypto-dependencies",
+          "type": "component",
+          "name": "Cryptographic dependencies",
+          "description": "WSS4J 4.0.1 (core WS-Security processing), OpenSAML 5.2.1 (SAML parsing, validation, issuance), Apache Santuario (XML Signature and Encryption, via WSS4J), and Bouncy Castle (JCE provider).",
+          "zone": "zone-service"
+        },
+        {
+          "bom-ref": "asset-sts",
+          "type": "service",
+          "name": "Security Token Service (rahas module)",
+          "description": "WS-Trust STS issuing SAML assertions and security context tokens; may be local (rahas module) or remote. TokenIssuer implementations must validate RequestSecurityToken requests against policy before issuing tokens.",
+          "zone": "zone-sts"
+        },
+        {
+          "bom-ref": "asset-keystores",
+          "type": "data-store",
+          "name": "Keystores and key material",
+          "description": "Keystore files, private keys, and session keys used for signature, encryption, and trust validation; managed by the server administrator.",
+          "zone": "zone-service"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "SOAP clients",
+          "type": "trust",
+          "description": "Anonymous clients (untrusted, send SOAP messages without security headers; rejected if policy requires security) and authenticated clients (partially trusted, present valid security tokens: X.509 signature, SAML assertion, UsernameToken, Kerberos ticket)."
+        },
+        {
+          "bom-ref": "zone-service",
+          "name": "Rampart-secured service",
+          "type": "trust",
+          "description": "The Axis2 service with the Rampart module engaged, its handlers, cryptographic dependencies, and keystores."
+        },
+        {
+          "bom-ref": "zone-sts",
+          "name": "Security Token Service",
+          "type": "trust",
+          "description": "Trusted (configurable) token issuer; trust established via certificate validation."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-soap",
+          "name": "SOAP client to Rampart-secured service",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-service"
+          ]
+        },
+        {
+          "bom-ref": "boundary-sts",
+          "name": "STS to Rampart-secured service",
+          "type": "trust",
+          "zones": [
+            "zone-sts",
+            "zone-service"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-server-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Server Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. Configures Rampart policies, manages keystores, deploys MAR modules."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-deployer",
+          "party": {
+            "roles": [
+              {
+                "name": "Service Deployer"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Attaches WS-SecurityPolicy to services via WSDL or programmatic configuration."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-sts",
+          "party": {
+            "roles": [
+              {
+                "name": "Security Token Service (STS)"
+              }
+            ],
+            "persona": {
+              "description": "Trusted (configurable). Issues SAML assertions and security context tokens; may be local (rahas module) or remote. Trust established via certificate validation."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated Client"
+              }
+            ],
+            "persona": {
+              "description": "Partially trusted. Presents valid security tokens (X.509 signature, SAML assertion, UsernameToken, Kerberos ticket); Rampart validates tokens against policy."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-anonymous-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous Client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. Sends SOAP messages without security headers; Rampart rejects them if policy requires security."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-signature-wrapping",
+        "name": "Signature wrapping attacks",
+        "description": "An attacker manipulates the XML structure so that a valid signature covers a different element than intended, allowing modification of unsigned message parts. WSS4J has historical signature-wrapping CVEs (e.g. CVE-2011-2487); Rampart 2.0.0 uses WSS4J 4.0.1, which addresses all known issues.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-crypto-dependencies"
+        ],
+        "mitigations": [
+          "control-wss4j-signature-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XML External Entity injection in security processing",
+        "description": "XXE in SAML assertion parsing, WS-SecurityPolicy processing, or any XML parsing performed by Rampart or its dependencies (WSS4J, OpenSAML). SAML2Utils.getSAML2KeyInfo() creates a DocumentBuilderFactory without visible XXE hardening flags; if the OpenSAML AxiomParserPool does not enforce XXE protections, this is a vulnerability (flagged for review).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers",
+          "asset-crypto-dependencies"
+        ],
+        "mitigations": [
+          "control-dependency-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-signature-encryption-bypass",
+        "name": "Signature/encryption bypass against policy",
+        "description": "A flaw that allows a message to pass Rampart validation without the security tokens required by policy, including policy downgrade or confusion attacks.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers"
+        ],
+        "mitigations": [
+          "control-policy-based-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-key-confusion",
+        "name": "Key confusion or certificate substitution",
+        "description": "An attacker presents a valid certificate for a different identity to pass signature validation, including expired certificates and revocation bypass.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers",
+          "asset-keystores"
+        ],
+        "mitigations": [
+          "control-certificate-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-saml-forgery",
+        "name": "SAML assertion forgery or replay",
+        "description": "Crafting or replaying SAML assertions that Rampart accepts as valid: forged signatures, expired assertions accepted, or issuer spoofing. OpenSAML has CVE history including XXE in assertion parsing and assertion replay; Rampart 2.0.0 uses OpenSAML 5.2.1.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-crypto-dependencies"
+        ],
+        "mitigations": [
+          "control-saml-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-crypto-defaults",
+        "name": "Weak cryptographic defaults",
+        "description": "Default algorithm suites that use deprecated algorithms (3DES, SHA-1 for signing) make deployed services vulnerable to cryptographic attacks; XML Encryption is exposed to padding oracle, chosen-ciphertext, and CBC mode weaknesses. Policy samples include sp:Basic128 which uses 3DES; any code path where weak algorithms are accepted by default without explicit policy opt-in requires extra scrutiny.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers",
+          "asset-crypto-dependencies"
+        ],
+        "mitigations": [
+          "control-algorithm-suite-enforcement",
+          "control-dependency-review"
+        ]
+      },
+      {
+        "bom-ref": "threat-replay",
+        "name": "Nonce/timestamp replay",
+        "description": "Replaying previously valid security headers because nonce caching or timestamp validation is inadequate, including clock skew exploitation and replay of previously valid nonces.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers"
+        ],
+        "mitigations": [
+          "control-nonce-timestamp-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-private-key-exposure",
+        "name": "Private key exposure",
+        "description": "Rampart leaking keystore passwords, private keys, or session keys through error messages, logs, or SOAP faults.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-keystores"
+        ]
+      },
+      {
+        "bom-ref": "threat-deserialization",
+        "name": "Deserialization of untrusted data",
+        "description": "Any path where Rampart or its dependencies deserialize Java objects from message content.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers",
+          "asset-crypto-dependencies"
+        ]
+      },
+      {
+        "bom-ref": "threat-crypto-dos",
+        "name": "Denial of service via cryptographic operations",
+        "description": "Crafted messages that cause excessive CPU consumption during signature verification, decryption, or certificate chain validation; also DoS against WS-Trust token issuance.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers",
+          "asset-sts"
+        ]
+      },
+      {
+        "bom-ref": "threat-sts-policy-bypass",
+        "name": "WS-Trust token issuance policy bypass",
+        "description": "Token issuance policy bypass or privilege escalation via a crafted RequestSecurityToken (RST) against the rahas STS module; TokenIssuer implementations must validate RSTs against policy before issuing tokens.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sts"
+        ],
+        "mitigations": [
+          "control-sts-rst-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-transport-binding-trust",
+        "name": "HTTPS bypass through container trust in TransportBinding",
+        "description": "RampartUtil.validateTransport() checks the servlet container's isSecure() flag and optionally extracts the client certificate from the jakarta.servlet.request.X509Certificate attribute, trusting the container entirely without re-validating the certificate chain; container misconfiguration could bypass client certificate authentication. TransportBinding policy requires HTTPS but does not enforce it. Flagged as an area requiring extra scrutiny; transport-layer security itself is out of Rampart's scope.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rampart-handlers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-missing-rampart-engagement",
+        "name": "Missing Rampart engagement",
+        "description": "If a service deployer does not engage the Rampart module or attach a security policy, messages are processed without security. This is a deployment configuration issue, not a Rampart vulnerability.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-rampart-handlers"
+        ],
+        "mitigations": [
+          "control-engage-rampart"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-misc",
+        "name": "Other explicitly out-of-scope items",
+        "description": "Not Rampart security issues: transport-layer security (TLS termination is the servlet container's responsibility); application-level authorization (deciding whether an authenticated principal is authorized for a specific operation is the application's responsibility); vulnerabilities in the Axis2 core engine (XML parsing, HTTP transport, deployment issues are in the Axis2/Java core repository's scope); and keystore management (protecting keystore files with proper filesystem permissions and strong passwords is the administrator's responsibility). Kerberos keytab/realm configuration is likewise an admin responsibility, with ticket validation handled by the JDK Kerberos SPI.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-protect-keystores"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-soap",
+        "boundary": "boundary-soap",
+        "name": "SOAP message trust boundary",
+        "description": "Incoming SOAP messages from anonymous or authenticated clients are untrusted until the WS-Security header has been processed by WSS4J and the results validated against the WS-SecurityPolicy by PolicyBasedResultsValidator.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-signature-wrapping",
+          "threat-xxe",
+          "threat-signature-encryption-bypass",
+          "threat-key-confusion",
+          "threat-saml-forgery",
+          "threat-replay",
+          "threat-deserialization",
+          "threat-crypto-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-wss4j-signature-validation",
+          "control-policy-based-validation",
+          "control-saml-validation",
+          "control-nonce-timestamp-validation",
+          "control-certificate-validation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-sts",
+        "boundary": "boundary-sts",
+        "name": "STS trust boundary",
+        "description": "The STS is trusted (configurable), with trust established via certificate validation; crafted RequestSecurityToken messages against the token issuance path are the main threat.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-sts-policy-bypass"
+        ],
+        "controlsAtBoundary": [
+          "control-sts-rst-validation"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-wss4j-signature-validation",
+      "name": "WSS4J 4.0.1 signature reference validation",
+      "description": "WSS4J 4.0.1 signature reference validation and Santuario's strict reference processing defend against signature wrapping, reference manipulation, and HMAC truncation.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-crypto-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-policy-based-validation",
+      "name": "PolicyBasedResultsValidator policy enforcement",
+      "description": "PolicyBasedResultsValidator matches WSS4J results against WS-SecurityPolicy assertions, verifies required tokens are present, verifies signed/encrypted parts match policy, and enforces all required assertions against downgrade and policy-confusion attacks.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rampart-handlers"
+      ]
+    },
+    {
+      "bom-ref": "control-saml-validation",
+      "name": "SAML assertion validation",
+      "description": "OpenSAML 5.2.1 unmarshalling, assertion signature validation, NotBefore/NotOnOrAfter enforcement, and issuer certificate pinning defend against forged, expired, or replayed assertions and issuer spoofing.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-crypto-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-nonce-timestamp-validation",
+      "name": "Nonce caching and timestamp validation",
+      "description": "WSS4J timestamp processing with configurable clock-skew tolerance and an in-memory nonce cache with TTL configuration defend against replay attacks. UsernameToken validation uses TransportBinding-required HTTPS for plaintext passwords, nonce+created for hashed ones, and callback-based validation (RampartUsernameTokenValidator overrides WSS4J's default password verification; the override must not weaken validation).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rampart-handlers"
+      ]
+    },
+    {
+      "bom-ref": "control-certificate-validation",
+      "name": "Certificate trust validation",
+      "description": "CertificateValidator extends WSS4J's SignatureTrustValidator, with chain validation delegated to the JDK; CachedCrypto provides TTL-bounded, thread-safe crypto caching against stale key material.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rampart-handlers",
+        "asset-keystores"
+      ]
+    },
+    {
+      "bom-ref": "control-algorithm-suite-enforcement",
+      "name": "Algorithm suite enforcement (GCM over CBC)",
+      "description": "Algorithm suite enforcement in policy, with GCM recommended over CBC; avoid algorithm suites with deprecated algorithms such as 3DES and SHA-1 (e.g. sp:Basic128 in policy samples).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rampart-handlers"
+      ]
+    },
+    {
+      "bom-ref": "control-sts-rst-validation",
+      "name": "Validate RequestSecurityToken against policy before issuance",
+      "description": "TokenIssuer implementations must validate RequestSecurityToken messages against policy before issuing tokens.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sts"
+      ]
+    },
+    {
+      "bom-ref": "control-dependency-review",
+      "name": "Rigorous security dependency updates (RAMPART-454)",
+      "description": "When updating WSS4J, OpenSAML, Santuario, or Bouncy Castle, reviewers must read every intermediate CVE release note (not just the latest version), ensure no weak algorithm or key size is reintroduced as a default, and re-run all policy samples to verify no regression. Verify that Rampart's integration does not reintroduce vulnerabilities the libraries have fixed, particularly where Rampart wraps or preprocesses data before passing it to WSS4J/OpenSAML (Axis2Util.getDocumentFromSOAPEnvelope(), SAML2Utils.getSAML2KeyInfo()).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-crypto-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-engage-rampart",
+      "name": "Engage the Rampart module and attach a security policy",
+      "description": "Service deployers must engage the Rampart module and attach a WS-SecurityPolicy (via WSDL or programmatic configuration); without engagement, messages are processed with no message-level security.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rampart-handlers"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-keystores",
+      "name": "Protect keystore files",
+      "description": "Protect keystore files with proper filesystem permissions and strong passwords; this is the administrator's responsibility.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-keystores"
+      ]
+    }
+  ]
+}

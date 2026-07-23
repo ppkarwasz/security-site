@@ -1,0 +1,547 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-opendal",
+      "name": "Apache OpenDAL",
+      "description": "In-process storage access library that gives a host application a uniform Operator API over many storage backends. It is not a daemon, gateway, identity provider, authorization service, sandbox, or multi-tenant broker. The core premises: OpenDAL trusts storage services for fulfilling storage capabilities defined per documentation, and trusts users to provide secure configuration and use OpenDAL as their storage layer. OpenDAL has no principal model: an Operator takes control of a backend service via user-provided credentials, root, and other configuration, and every operation through an Operator instance shares the same OpenDAL-level authority. OpenDAL must still preserve its API contracts, isolate credentials, avoid leaking secrets in debug or observability output, and avoid memory-safety violations reachable through its public API.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/opendal/blob/main/SECURITY-THREAT-MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://opendal.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "opendal"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/opendal/blob/main/SECURITY-THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/opendal/main/SECURITY-THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-opendal",
+      "name": "OpenDAL deployment",
+      "description": "System model described by the threat model: a trusted host application creates Builders, supplies config, applies Layers, and decides which end-user input may reach OpenDAL; OpenDAL normalizes public API inputs, builds and signs service requests, parses responses; the configured storage backend is trusted for backend-side authentication, object bytes, metadata, consistency, and durability; the end user of the host application and network attackers are outside OpenDAL's direct model.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-operator-api",
+          "type": "api",
+          "name": "Public Operator API",
+          "description": "Operator, blocking::Operator, raw::Access, and operation options: path normalization per the documented rules, request construction, response handling, and memory safety are in scope.",
+          "zone": "zone-opendal"
+        },
+        {
+          "bom-ref": "asset-credentials",
+          "type": "data",
+          "name": "Credentials and signer state",
+          "description": "Access keys, secret keys, OAuth and bearer tokens, session tokens, private key material, credential-provider caches, and signer context configured per Operator.",
+          "zone": "zone-opendal"
+        },
+        {
+          "bom-ref": "asset-local-fs-surfaces",
+          "type": "data-store",
+          "name": "Local filesystem surfaces",
+          "description": "Host filesystem paths, cache directories, temporary files, and local database paths that OpenDAL itself constructs: the services::Fs root, Foyer cache storage, atomic_write_dir, and temporary-write behavior.",
+          "zone": "zone-opendal"
+        },
+        {
+          "bom-ref": "asset-observability",
+          "type": "data",
+          "name": "Observability output",
+          "description": "Debug output, error chains, log lines, tracing spans, and metrics labels emitted by builders and layers; credentials must be redacted, while paths, roots, and namespaces are operational context, not credentials by default.",
+          "zone": "zone-opendal"
+        },
+        {
+          "bom-ref": "asset-bindings",
+          "type": "interface",
+          "name": "FFI and language bindings",
+          "description": "C ABI and the language bindings (C, C++, D, Dart, .NET, Go, Haskell, Java, Lua, Node.js, OCaml, PHP, Python, Ruby, Swift, Zig); ownership, lifetime rules, and contract parity are in scope for each binding, which has its own version.",
+          "zone": "zone-opendal"
+        },
+        {
+          "bom-ref": "asset-backend",
+          "type": "service",
+          "name": "Configured storage backend",
+          "description": "The remote object store, protocol service, SaaS service, database/KV service, or local filesystem service selected by trusted caller configuration; trusted for authentication, authorization, object bytes, metadata, consistency, and durability.",
+          "zone": "zone-backend"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-host-app",
+          "name": "Host application",
+          "type": "trust",
+          "description": "The trusted caller: creates Builders, supplies config, applies Layers, and must authenticate, authorize, and sanitize end-user requests before calling OpenDAL."
+        },
+        {
+          "bom-ref": "zone-opendal",
+          "name": "OpenDAL library",
+          "type": "trust",
+          "description": "The in-process code surface: public API handling, path normalization, request construction and signing, response parsing, credentials, local file effects, observability, and bindings."
+        },
+        {
+          "bom-ref": "zone-backend",
+          "name": "Storage backend",
+          "type": "trust",
+          "description": "The backend service the host application chose; trusted by configuration."
+        },
+        {
+          "bom-ref": "zone-end-user",
+          "name": "End user of the host application",
+          "type": "trust",
+          "description": "Out of OpenDAL's direct model; the host application owns end-user authentication, authorization, and sanitization."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-public-api",
+          "name": "Public library API boundary",
+          "type": "trust",
+          "zones": [
+            "zone-host-app",
+            "zone-opendal"
+          ]
+        },
+        {
+          "bom-ref": "boundary-backend",
+          "name": "Backend request/response boundary",
+          "type": "trust",
+          "zones": [
+            "zone-opendal",
+            "zone-backend"
+          ]
+        },
+        {
+          "bom-ref": "boundary-end-user",
+          "name": "End user to host application boundary",
+          "type": "trust",
+          "zones": [
+            "zone-end-user",
+            "zone-host-app"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "OpenDAL trusts storage services for fulfilling storage capabilities defined per documentation, and trusts users to provide secure configuration and use OpenDAL as their storage layer; a user who intentionally configures an untrusted backend is responsible for the consequences."
+        },
+        {
+          "description": "TLS certificate validation, CA bundles, proxies, and custom HTTP clients are properties of the HTTP client and host environment, not of OpenDAL."
+        },
+        {
+          "description": "Sharing OpenDAL operators across processes (for example via fork) while reusing configurations and credentials remains the user's responsibility."
+        },
+        {
+          "description": "A report should be triaged against the threat model version present in the affected release tag or maintenance branch, and a security property confirmed for Rust core version X is not automatically confirmed for every binding release named X."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-path-mapping-escape",
+        "name": "OpenDAL path construction maps outside the configured location",
+        "description": "OpenDAL is responsible for the filesystem effects of its own path construction: a normalized path that escapes the configured services::Fs root through OpenDAL's lexical path construction, cache data written outside the configured Foyer cache location, credentials leaked into cache metadata, corruption of unrelated local files, or atomic_write_dir/temporary-write misbehavior are in scope. Once the host application passes a path in, OpenDAL must not map it to a different backend location than the backend's API contract describes. services::Fs follows normal host filesystem semantics and is not a sandbox against symlinks that already exist under the configured root, unless a service document later promises stronger confinement; symlink reports are triaged against the service's documented local filesystem contract.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-local-fs-surfaces",
+          "asset-operator-api"
+        ],
+        "mitigations": [
+          "control-path-normalization"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-cross-contamination",
+        "name": "Credential leakage between operators, services, or layers",
+        "description": "A request from Operator B must not be signed with credentials from Operator A; OAuth tokens, temporary credentials, signer contexts, and credential-provider caches must not be shared across operators unless explicitly configured by the caller; and disable_config_load, disable_ec2_metadata, and disable_vm_metadata must prevent the ambient credential sources they document.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-credentials"
+        ],
+        "mitigations": [
+          "control-credential-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-leak-observability",
+        "name": "Credential exposure through debug and observability output",
+        "description": "Credentials exposed through Debug implementations, error chains, log lines, tracing spans, or metrics labels. Builder Debug implementations redact credential fields; LoggingLayer may emit paths as operation context but must not emit access keys, secret keys, bearer tokens, session tokens, private key material, or signer state; metrics labels carry service-level dimensions, not credentials. Paths, namespaces, and roots can be sensitive in some deployments but are not treated as credentials by default; callers needing stronger privacy choose their observability layers and sinks accordingly.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-observability",
+          "asset-credentials"
+        ],
+        "mitigations": [
+          "control-credential-redaction"
+        ]
+      },
+      {
+        "bom-ref": "threat-request-misconstruction",
+        "name": "Request construction or signing deviates from configured semantics",
+        "description": "OpenDAL must construct requests matching the configured service, endpoint, root, path, and operation: skip_signature = true must only skip signing, not silently change HTTPS to HTTP, disable endpoint validation, or weaken unrelated transport behavior; a service must not send credentials to an endpoint other than the one selected by trusted caller config. If the caller configures a malicious endpoint, sending requests there is caller responsibility; ignoring the configured endpoint or mixing in another operator's credentials is in scope.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api",
+          "asset-credentials"
+        ],
+        "mitigations": [
+          "control-request-construction"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-response-handling",
+        "name": "Malformed backend response breaks library invariants",
+        "description": "OpenDAL trusts the configured backend for semantic correctness, but must handle responses without violating its own invariants: XML and JSON parsers must not cause memory-safety violations or uncontrolled panics reachable through the public API, error parsing must not leak credentials, and HTTP response body accounting must follow the implemented contract (for non-HEAD responses without Content-Encoding, Content-Length is recorded and the consumed body length checked). A malicious backend returning false data is not by itself an OpenDAL vulnerability; a parser bug that turns a malformed response into memory unsafety, credential disclosure, or process compromise may be.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api",
+          "asset-backend"
+        ],
+        "mitigations": [
+          "control-response-robustness"
+        ]
+      },
+      {
+        "bom-ref": "threat-ffi-contract-violation",
+        "name": "Binding or FFI violation of the documented API contract",
+        "description": "Language bindings and FFI shims are in scope when they expose OpenDAL through a documented API: C ABI functions must uphold documented ownership and lifetime rules, and binding-level crashes or use-after-free bugs reachable from safe binding APIs are in scope. Bare unsafe blocks are not findings by themselves; a finding must show a reachable violation of the documented contract.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-bindings"
+        ],
+        "mitigations": [
+          "control-ffi-contracts"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-backend",
+        "name": "Malicious or incorrect storage service selected by the caller",
+        "description": "The caller is responsible for choosing the storage service and endpoint. An attacker-controlled S3-compatible endpoint receiving signed requests, or a WebDAV/FTP/SFTP/HTTP/database/SaaS endpoint lying about object contents, metadata, ETags, timestamps, or consistency, is out of scope unless OpenDAL violates its own parser, credential, or memory-safety boundary. OpenDAL provides no cryptographic authentication of backend bytes; applications needing end-to-end integrity must add it above OpenDAL. Backend correctness is likewise not guaranteed: ETag is provider-defined and not a MAC, listing order and consistency are backend properties, and Content-Type, Content-Length, timestamps, and user metadata are backend responses, not cryptographic truth.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-backend"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-caller-authz-bypass",
+        "name": "Host application forwards unauthorized end-user input",
+        "description": "OpenDAL does not authenticate end users, authorize per-user access, or decide whether end-user input may become a path, endpoint, metadata value, or body. A web service forwarding '../../secret' from an HTTP route into Operator::read without its own authorization or sanitization, a host application letting a tenant choose arbitrary Builder::endpoint values, or multiple tenants sharing the same Operator over the same backend root may be serious host-application vulnerabilities, but they are not OpenDAL vulnerabilities unless an in-scope boundary is violated.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-backend-policy-misconfiguration",
+        "name": "Backend-side authorization and configuration weaknesses",
+        "description": "Storage-provider policy is owned by the backend and operator: public S3 bucket policies, HDFS permissions, POSIX file mode bits outside OpenDAL's own path construction, OAuth scopes granted to SaaS services, and database user privileges are out of scope.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-backend"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Resource exhaustion without a violated documented bound",
+        "description": "OpenDAL provides streaming APIs and optional layers but is not a default DoS shield: a backend returning a very large object or many listing pages, or a caller materializing data in memory instead of streaming, or not applying TimeoutLayer, ConcurrentLimitLayer, or ThrottleLayer, is out of scope. Resource-exhaustion reports are vulnerabilities only when OpenDAL violates a documented bound or consumes resources independently of the operation requested by the trusted caller and backend.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api"
+        ],
+        "mitigations": [
+          "control-limiting-layers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-transport-policy",
+        "name": "Transport policy weaknesses selected outside OpenDAL",
+        "description": "TLS certificate validation, CA bundles, proxies, and custom HTTP clients are properties of the HTTP client and host environment; a network attacker is out of scope unless a report shows an OpenDAL option silently weakened the configured transport contrary to its documented meaning.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-integration-deployment",
+        "name": "Integrations deployed without their intended authentication layer",
+        "description": "Integrations such as dav-server and unftp-sbe can expose an Operator over a network listener; authentication and authorization for that listener belong to the host process and deployment. Code-level bugs in the integration are in scope for that integration, but a deployment exposing it without the intended authn/authz layer is not an OpenDAL core vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-operator-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-infrastructure",
+        "name": "Supply chain, release, and project infrastructure issues",
+        "description": "Dependency freshness, GitHub Actions hardening, release signing, branch protection, and ASF infrastructure policy are outside this library threat boundary unless a separate project policy says otherwise. Bugs in examples, benches, fixtures, and edge tests are usually not OpenDAL vulnerabilities unless copied into shipped library behavior.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-public-api",
+        "boundary": "boundary-public-api",
+        "name": "Public API trust boundary",
+        "description": "OpenDAL must handle inputs accepted by the public API without memory-safety violations, data races, panics across FFI boundaries, or inconsistent internal state; the host application is trusted and owns the policy for what reaches this boundary.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-path-mapping-escape",
+          "threat-ffi-contract-violation",
+          "threat-caller-authz-bypass",
+          "threat-resource-exhaustion"
+        ],
+        "controlsAtBoundary": [
+          "control-path-normalization",
+          "control-ffi-contracts",
+          "control-limiting-layers"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-backend",
+        "boundary": "boundary-backend",
+        "name": "Backend trust boundary",
+        "description": "The configured backend is trusted for semantic correctness (bytes, metadata, authorization decisions, durability), but OpenDAL owns request construction and signing on the way out and parser robustness plus credential hygiene on the way back.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-request-misconstruction",
+          "threat-malformed-response-handling",
+          "threat-malicious-backend",
+          "threat-backend-policy-misconfiguration"
+        ],
+        "controlsAtBoundary": [
+          "control-request-construction",
+          "control-response-robustness",
+          "control-credential-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-end-user",
+        "boundary": "boundary-end-user",
+        "name": "End-user trust boundary",
+        "description": "The end user of the host application is out of OpenDAL's direct model; the host application must authenticate, authorize, and sanitize end-user requests before calling OpenDAL.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-caller-authz-bypass"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-path-normalization",
+      "name": "Deterministic path normalization and root confinement",
+      "description": "Operator path normalization is deterministic and consistent with the documented path rules (core/core/src/raw/path.rs); services::Fs documents root as the root under which operations happen, and OpenDAL must not map normalized operation paths outside the configured root through its own lexical path construction.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-local-fs-surfaces",
+        "asset-operator-api"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-isolation",
+      "name": "Per-operator credential isolation",
+      "description": "Credentials, tokens, signer contexts, and credential-provider caches are not shared across operators, services, or layers within the same process unless the caller explicitly configures sharing, and the disable_config_load / disable_ec2_metadata / disable_vm_metadata options prevent the ambient credential sources they document.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-credentials"
+      ]
+    },
+    {
+      "bom-ref": "control-credential-redaction",
+      "name": "Credential redaction in debug and observability output",
+      "description": "Builder Debug implementations redact credential fields; logging, tracing, metrics, and other observability layers follow the same credential-redaction rule and emit only operational context such as scheme, namespace, root, operation, error, and status code.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-observability"
+      ]
+    },
+    {
+      "bom-ref": "control-request-construction",
+      "name": "Faithful request construction and signing",
+      "description": "Requests are constructed to match the configured service, endpoint, root, path, and operation; options such as skip_signature affect only their documented behavior, allow_anonymous is a deprecated compatibility alias, and credentials are sent only to the endpoint selected by trusted caller config.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-backend"
+      ]
+    },
+    {
+      "bom-ref": "control-response-robustness",
+      "name": "Robust backend response handling",
+      "description": "Service parsers handle backend responses without memory unsafety or uncontrolled panics reachable through the public API, error parsing does not leak credentials, and HTTP response body accounting records Content-Length and checks the consumed body length for non-HEAD responses without Content-Encoding.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-backend"
+      ]
+    },
+    {
+      "bom-ref": "control-ffi-contracts",
+      "name": "Documented FFI ownership and lifetime contracts",
+      "description": "C ABI functions uphold the ownership and lifetime rules documented for that ABI, and bindings maintain contract parity with the core API; each binding is versioned and assessed separately.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-bindings"
+      ]
+    },
+    {
+      "bom-ref": "control-limiting-layers",
+      "name": "Streaming APIs and optional limiting layers",
+      "description": "Callers should use streaming APIs instead of materializing data in memory and apply TimeoutLayer, ConcurrentLimitLayer, or ThrottleLayer where resource bounding is needed; OpenDAL is not a default DoS shield.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-operator-api"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,633 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-grails",
+      "name": "Apache Grails",
+      "description": "Opinionated, full-stack web application framework for the JVM composing Apache Groovy, Spring Framework, Spring Boot, GORM data mapping, and GSP/JSON view rendering, plus CLI tools and the separately operated grails-forge application generator. Grails is embedded into a user-authored web application; the unit of trust modeled is an application using the Grails framework, not a Grails server. The threat model is versioned against the 8.0.x branch and is a draft not yet ratified by maintainers.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/grails-core/blob/8.0.x/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://grails.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "grails"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/grails-core/blob/8.0.x/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/grails-core/8.0.x/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-grails",
+      "name": "Grails application",
+      "description": "The principal trust boundary is the HTTP request boundary: data crossing from an untrusted end user into the application's controller layer at GrailsDispatcherServlet, where request parameters, headers, cookies, and bodies are treated as attacker-controlled. A secondary boundary is the filesystem/environment boundary at application startup, where configuration is loaded; the framework's most powerful capabilities (Groovy DSL evaluation, classloader injection) are guarded by the assumption that code on the classpath is trusted.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-http-ingress",
+          "type": "endpoint",
+          "name": "HTTP request ingress",
+          "description": "GrailsDispatcherServlet, UrlMappingsHandlerMapping, and interceptors, receiving requests from the Spring Boot embedded container.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-data-binding",
+          "type": "component",
+          "name": "Data binding (GrailsWebDataBinder)",
+          "description": "Binds request parameters and bodies to command objects and domain classes; identified as the highest-risk surface. Collection growth is capped by autoGrowCollectionLimit (default 256) and multipart uploads by maxFileSize/maxRequestSize (128000 bytes each by default).",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-view-rendering",
+          "type": "component",
+          "name": "View rendering and codecs",
+          "description": "GSP, JSON, and Markup views plus the grails-encoder codec subsystem (HTMLCodec, URLCodec, JavaScriptCodec, Base64Codec); the output-side trust transition, encoding data per the view's content type.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-gorm",
+          "type": "component",
+          "name": "GORM mapping and validation integration",
+          "description": "Data mapping to Hibernate/MongoDB/Neo4j; parameterized queries and the criteria/where DSL escape values safely, while HQL string concatenation is the canonical risk path.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-config-loading",
+          "type": "component",
+          "name": "Configuration loading and plugin discovery",
+          "description": "Loads application.yml and application.groovy (evaluated as Groovy), external config from grails.config.locations, and plugins/artefacts from the classpath at startup; all are trusted operator/developer inputs.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-cli",
+          "type": "tool",
+          "name": "CLI and shell (grails-shell-cli)",
+          "description": "Developer-run tooling that downloads profile JARs via Maven resolution and executes their Groovy command scripts; end users do not invoke it.",
+          "zone": "zone-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-end-users",
+          "name": "End users (HTTP clients)",
+          "type": "trust",
+          "description": "Remote, unauthenticated HTTP clients; the source of all attacker-controllable input considered in the model."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Grails application process",
+          "type": "trust",
+          "description": "Framework, developer-authored code, and plugins running with full application privileges; no sandbox or isolation between them."
+        },
+        {
+          "bom-ref": "zone-host",
+          "name": "Host environment",
+          "type": "trust",
+          "description": "Filesystem, classpath, environment variables, and system properties controlled by the trusted operator and developer."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http",
+          "name": "HTTP request boundary",
+          "type": "trust",
+          "zones": [
+            "zone-end-users",
+            "zone-application"
+          ]
+        },
+        {
+          "bom-ref": "boundary-startup",
+          "name": "Filesystem / environment boundary at startup",
+          "type": "trust",
+          "zones": [
+            "zone-host",
+            "zone-application"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "End user (HTTP client)"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. Sends HTTP requests to a deployed Grails application; crafts arbitrary headers, cookies, parameters, JSON/XML bodies, and multipart uploads up to operator-configured limits, and may enumerate URL spaces including guessable IDs. You must assume that every unprotected URL is publicly accessible one way or another."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-developer-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer / operator"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Writes controllers, services, domain classes, URL mappings, and GSP templates; configures application.yml/application.groovy; runs the CLI; chooses plugins."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-plugin-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Plugin / profile author"
+              }
+            ],
+            "persona": {
+              "description": "Trusted-by-association. Code from a third-party plugin or profile runs with full application privileges; the framework does not isolate plugin code."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "JDK 21 or higher, Apache Groovy 4.0.x, Spring Boot 4.0.x / Spring Framework 7.0.x, Jakarta EE 10 servlet API."
+        },
+        {
+          "description": "The application is deployed by a trusted operator on hardware and OS the operator controls; transport security (TLS) is provided by the embedded container or a fronting reverse proxy."
+        },
+        {
+          "description": "The application classpath contains only artifacts the operator or developer chose; plugin code, application.groovy, doWithSpring closures, AST transforms, and every JAR on the classpath are fully trusted and execute with application privileges, with no sandbox or provenance verification beyond Maven resolution."
+        },
+        {
+          "description": "Thread-per-request servlet model with one logical request per thread, and one application per JVM; no cross-process or cross-tenant isolation is assumed."
+        },
+        {
+          "description": "Environment variables and system properties consulted at startup (GRAILS_ENV, grails.env, grails.config.locations, and the standard Spring Boot set) reflect operator intent; deployments use GRAILS_ENV=production, since development mode loosens stack-trace exposure and dev-tool behavior."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-gorm-injection",
+        "name": "SQL/HQL injection through GORM queries",
+        "description": "Parameterized GORM queries (named or positional parameters, criteria DSL, where DSL with bound values) are claimed to be SQL/HQL-injection safe; a violation (attacker-controlled data appearing unescaped in executed SQL) is security-critical and CVE-eligible. Queries built by string concatenation, such as Book.find with GString interpolation of params, are documented as unsafe and are the developer's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-gorm"
+        ],
+        "mitigations": [
+          "control-parameterized-queries"
+        ]
+      },
+      {
+        "bom-ref": "threat-output-encoding-bypass",
+        "name": "Bypass of default output encoding (XSS and URL injection)",
+        "description": "Default GSP expression output is HTML-encoded, Grails-supplied link/form tag helpers URL-encode their parameter values, and the codecs (HTMLCodec, URLCodec, JavaScriptCodec, Base64Codec) encode for their stated context; violations of any of these are security-critical and CVE-eligible. XSS in templates rendered with the codec disabled (grails.views.default.codec=none) or values explicitly passed through raw() is disclaimed: the opt-out is the developer's stated intent, and reports requiring non-default codec settings are out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-view-rendering"
+        ],
+        "mitigations": [
+          "control-default-codecs"
+        ]
+      },
+      {
+        "bom-ref": "threat-csrf",
+        "name": "CSRF against forms using the synchronizer token",
+        "description": "A form rendered with useToken=\"true\" whose receiving action uses withForm blocks naive CSRF and double-submit; token validation accepting a missing, reused, or attacker-supplied token is security-critical. CSRF protection for requests not protected by useToken is disclaimed: useToken is opt-in per form, and state-mutating actions without it are not CSRF-protected by the framework.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-ingress"
+        ],
+        "mitigations": [
+          "control-usetoken"
+        ]
+      },
+      {
+        "bom-ref": "threat-mass-assignment",
+        "name": "Mass assignment through data binding",
+        "description": "Data binding is claimed to respect bindable=false and explicit include/exclude lists; a field marked unbindable being set from request input is security-critical. Binding the request map directly to a domain class (new DomainClass(params), properties = params) without an allow-list is a known misuse pattern that lets the request set fields the developer never intended, including id, version, role booleans, and association references.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-binding"
+        ],
+        "mitigations": [
+          "control-binding-allowlists"
+        ]
+      },
+      {
+        "bom-ref": "threat-databinding-resource-exhaustion",
+        "name": "Resource exhaustion through data binding limits",
+        "description": "maxFileSize, maxRequestSize, and autoGrowCollectionLimit provide bounded data-binding memory when the operator does not raise them past application needs; memory growth proportional to attacker input regardless of the limit is a bug. Hangs or unbounded memory growth driven by bounded request input is a bug; super-linear CPU in unbounded developer-authored regex (ReDoS in URL mappings or constraint regexes) is a developer responsibility, and slow-but-completes is not a framework bug at any input size.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-binding"
+        ],
+        "mitigations": [
+          "control-binding-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-no-builtin-auth",
+        "name": "Missing authentication, authorization, and session management",
+        "description": "The framework ships no built-in user store, login flow, or session-based auth; authentication, authorization, session management, and password storage are disclaimed by design and delegated to the Spring Security plugin, Apache Shiro, or an equivalent. @Secured annotations are integration-shaped sugar for the Spring Security plugin and are inert without it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-ingress"
+        ],
+        "mitigations": [
+          "control-auth-plugin"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-guessable-ids",
+        "name": "Unauthorized domain-object access via guessable IDs",
+        "description": "The framework does not check that the requesting user is permitted to view the object identified by params.id; authorization for individual domain-object access is disclaimed and must be enforced by the developer against the authenticated principal.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-ingress"
+        ],
+        "mitigations": [
+          "control-authorize-object-access"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-open-redirect",
+        "name": "Open redirect from request-derived targets",
+        "description": "Using a request parameter as a redirect target (redirect(url: params.next)) is a documented misuse pattern and open-redirect/phishing pivot; the framework will not add an allow-list to redirect() itself.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-ingress"
+        ],
+        "mitigations": [
+          "control-redirect-allowlist"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-config-code-execution",
+        "name": "Groovy code execution via trusted configuration and classpath",
+        "description": "application.groovy, grails.config.locations targets, domain mapping closures, Liquibase Groovy change logs, and every JAR on the classpath are evaluated or executed with full application privileges; Groovy on the classpath is trusted, full stop, with no sandbox. Reports requiring attacker control of these surfaces are out of model as trusted input; pointing grails.config.locations at attacker-writable storage is equivalent to classpath compromise and is the operator's mistake.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-config-loading"
+        ],
+        "mitigations": [
+          "control-protect-config-sources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-console-exposure",
+        "name": "Exposure of interactive consoles",
+        "description": "The interactive consoles (GrailsShell, GroovyConsole) provide arbitrary Groovy code execution with full application-context access by design; they are developer-only tools, and reachability from a deployed application is a deployment-configuration finding against the operator, not a framework vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-config-loading"
+        ],
+        "mitigations": [
+          "control-disable-consoles"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-request-volume-dos",
+        "name": "Denial of service by request volume",
+        "description": "Rate limiting and DoS protection against request volume are disclaimed: there is no built-in throttling; operators must add it at the proxy or via Spring Security or bucket4j, and developers must sanitize and bound parameters that size query results (max, offset).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-ingress"
+        ],
+        "mitigations": [
+          "control-proxy-rate-limiting"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cli-supply-chain",
+        "name": "Supply-chain compromise of CLI profiles and plugins",
+        "description": "The CLI downloads profile JARs via standard Maven resolution and executes their Groovy command scripts; the framework does not verify provenance beyond what Maven Resolver provides, and trust in the configured repository is operator-supplied. A typosquat or repository compromise, and compromised plugins on the classpath generally, are operator/developer responsibility and out of scope, as is the build-time supply chain.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-cli"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-undefended-attack-classes",
+        "name": "Well-known attack classes the framework does not defend against",
+        "description": "One sentence per class in the source document: SSRF (no built-in URL-fetch allow-list), XXE in XML data binding (parser's responsibility), ReDoS in developer-authored URL mappings and constraint regexes, zip-bomb/archive expansion, path traversal through MultipartFile.originalFilename used as a filesystem path, JSON/XML DoS via deep nesting, session fixation/replay/sidejacking (auth plugin's responsibility), and cache-key poisoning in Spring Boot caching layers. Constant-time cryptographic operations are also not provided.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-http-ingress",
+          "asset-data-binding"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http",
+        "boundary": "boundary-http",
+        "name": "HTTP request trust boundary",
+        "description": "The trust transition occurs at GrailsDispatcherServlet: request parameters, headers, cookies, and request bodies are treated as attacker-controlled within the framework, and the output codec layer is the matching transition on the response side.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-gorm-injection",
+          "threat-output-encoding-bypass",
+          "threat-csrf",
+          "threat-mass-assignment",
+          "threat-databinding-resource-exhaustion",
+          "threat-no-builtin-auth",
+          "threat-guessable-ids",
+          "threat-open-redirect",
+          "threat-request-volume-dos",
+          "threat-undefended-attack-classes"
+        ],
+        "controlsAtBoundary": [
+          "control-parameterized-queries",
+          "control-default-codecs",
+          "control-usetoken",
+          "control-binding-allowlists",
+          "control-binding-limits",
+          "control-auth-plugin"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-startup",
+        "boundary": "boundary-startup",
+        "name": "Startup configuration trust boundary",
+        "description": "Configuration loading and plugin discovery are reachable only with control of grails.config.locations, environment variables, or the classpath, all of which require local privilege at or above the application process; code and configuration crossing this boundary are trusted by design.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-config-code-execution",
+          "threat-console-exposure",
+          "threat-cli-supply-chain"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-config-sources",
+          "control-disable-consoles"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-parameterized-queries",
+      "name": "Parameterized GORM queries",
+      "description": "Named or positional parameters, the criteria DSL, and the where DSL with bound values are injection-safe; developers must never concatenate request parameters into HQL/SQL/JPQL/Groovy strings.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-gorm"
+      ]
+    },
+    {
+      "bom-ref": "control-default-codecs",
+      "name": "Default output encoding and codecs",
+      "description": "GSP expression and scriptlet contexts default to the html codec (XSS protection on by default), tag helpers URL-encode parameter values, and the codec subsystem encodes for each stated context. Keep grails.views.default.codec and the GSP context codecs at their HTML-encoding defaults; setting them to none disables automatic output encoding.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-view-rendering",
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-usetoken",
+      "name": "Synchronizer token (useToken / withForm)",
+      "description": "Apply useToken (or equivalent CSRF protection from the auth plugin) on every state-mutating form, handled with withForm. It blocks naive cross-site form submissions and accidental double-submits; it is not a replay-protection mechanism.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-binding-allowlists",
+      "name": "Binding allow-lists (bindable, include/exclude, command objects)",
+      "description": "Data binding respects bindable=false and explicit include/exclude lists across bindData, command-object binding, domain-class constructor binding, and properties assignment. Bind request data through command objects or explicit allow-lists, never by passing params directly into a domain class. bindable=false is not an access control or validation constraint: it only prevents setting from request-binding sources.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-data-binding"
+      ]
+    },
+    {
+      "bom-ref": "control-binding-limits",
+      "name": "Bounded data-binding resources",
+      "description": "autoGrowCollectionLimit defaults to 256, capping automatic collection growth from deeply indexed parameters; grails.controllers.upload.maxFileSize and maxRequestSize default to 128000 bytes each. Operators who raise these past application needs expose themselves to DoS.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-data-binding"
+      ]
+    },
+    {
+      "bom-ref": "control-auth-plugin",
+      "name": "Use a real authentication and authorization layer",
+      "description": "Integrate the Spring Security plugin, Apache Shiro, or an equivalent; the framework provides no replacement for authentication, authorization, or session management.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-authorize-object-access",
+      "name": "Authorize every domain-object access by ID",
+      "description": "Authorize each loaded object against the authenticated principal (via ACL support, a per-action interceptor, or an explicit ownership check) before returning, rendering, or mutating it; never rely on guessable IDs as an access control.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-redirect-allowlist",
+      "name": "Allow-list redirect targets",
+      "description": "Never use a request parameter as a redirect target without an allow-list of permitted destinations.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-config-sources",
+      "name": "Protect configuration and code sources",
+      "description": "Treat application.groovy, plugin doWithSpring blocks, and all classpath code as part of the trusted computing base; source grails.config.locations only from trusted operator-controlled paths (never user input or attacker-writable storage such as world-writable directories or unprotected buckets); keep Liquibase Groovy change logs in the versioned source tree; and deploy with GRAILS_ENV=production.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-startup"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-consoles",
+      "name": "Keep interactive consoles off the network",
+      "description": "Bind GrailsShell, GroovyConsole, and any Groovy-evaluating actuator endpoint to localhost or disable them in production; do not expose grails-console artefacts through the embedded container.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-startup"
+      ]
+    },
+    {
+      "bom-ref": "control-proxy-rate-limiting",
+      "name": "Rate limiting at the proxy",
+      "description": "Cap request rate at the proxy or via Spring Security or bucket4j, cap multipart upload size at the application boundary, and sanitize any request parameter used to size query results.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-uploads",
+      "name": "Validate multipart uploads",
+      "description": "Validate MultipartFile.originalFilename and contentType before use; never use the original filename as a filesystem path, and verify content type server-side against the actual bytes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-creadur-rat",
+      "name": "Apache Creadur RAT",
+      "description": "Build-time / CLI license-auditing tool: RAT (Release Audit Tool) walks a source tree, matches files against configurable license/header definitions, and reports unapproved or unknown licenses. It runs as a CLI, an Ant task, or a Maven plugin, always in the developer's or CI's own process, never as a network service. The threat model is written in creadur-rat and covers the Creadur dev-tool family; the sibling tools Whisker (license-documentation generator) and Tentacles (release-bundle analyzer) share RAT's trust profile.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/creadur-rat/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://creadur.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "creadur"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/creadur-rat/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/creadur-rat/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-creadur-rat",
+      "name": "RAT audit run",
+      "description": "Data flow described by the threat model: a trusted caller invokes RAT (CLI/Ant/Maven) on a directory and a configuration; RAT reads the configuration, walks the tree, descends into archives, matches licenses, and writes a report. The boundary is the input RAT is pointed at; RAT's security questions only arise when that input is untrusted (for example CI auditing an untrusted contribution or a downloaded third-party artifact).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-rat-process",
+          "type": "tool",
+          "name": "RAT process",
+          "description": "The RAT run inside the developer's or CI's own process: the Reporter and walkers, the XMLConfigurationReader, and the ArchiveWalker (Apache Commons Compress ArchiveStreamFactory) that reads archive entries into an in-memory buffer, never extracting them to disk.",
+          "zone": "zone-invocation"
+        },
+        {
+          "bom-ref": "asset-scanned-input",
+          "type": "data",
+          "name": "Scanned tree, archives, and configuration",
+          "description": "The tree being audited (file content and paths, including zip/jar/tar archives RAT descends into) and the RAT configuration (XML/text license and matcher definitions). The configuration is operator-trusted; the scanned files may be untrusted.",
+          "zone": "zone-scanned-input"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-scanned-input",
+          "name": "Scanned input",
+          "type": "trust",
+          "description": "Files, archives, and (if attacker-supplied) configuration processed by a RAT run; untrusted when RAT audits third-party contributions or artifacts."
+        },
+        {
+          "bom-ref": "zone-invocation",
+          "name": "Trusted invocation",
+          "type": "trust",
+          "description": "The developer or CI job invoking RAT, the invocation arguments, and the build environment; trusted by assumption."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-input",
+          "name": "Untrusted-input boundary",
+          "type": "trust",
+          "zones": [
+            "zone-scanned-input",
+            "zone-invocation"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A JRE; RAT reads the filesystem it is pointed at and writes a report. It opens no network connections and runs no services; the one operator-reachable exception is an XSLT stylesheet using xsl:include to pull a remote resource, and XSLT stylesheets are trusted, operator-controlled configuration."
+        },
+        {
+          "description": "RAT configuration (XSLT stylesheets, config files, license definitions, custom matchers) is trusted and operator-controlled; the scanned files may be untrusted (maintainer-confirmed in the PR #677 review)."
+        },
+        {
+          "description": "XML parser behaviour depends on the platform JAXP and is configurable via the standard JAXP system properties; RAT disables external entities by default."
+        },
+        {
+          "description": "The CLI, Ant task, and Maven plugin front-ends are generated from a common option core, so any security-relevant behaviour or gap in that core transfers automatically to all three UIs."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-archive-decompression-bomb",
+        "name": "Decompression bomb / archive resource exhaustion",
+        "description": "The archive walker extracts entry contents into an in-memory buffer (Apache Commons Compress ArchiveStreamFactory) held until the document is processed, with no decompression, size, depth, or entry-count bound, so a crafted archive can exhaust memory (OOM). Maintainer-confirmed as not bounded; the model records this as a disclaimed gap plus a downstream responsibility: runs over untrusted archives must be sandboxed or resource-limited. Path traversal on archive entry names does not apply because entries are never extracted to disk.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rat-process"
+        ],
+        "mitigations": [
+          "control-sandbox-untrusted-runs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-config-xxe",
+        "name": "XXE via attacker-supplied XML configuration",
+        "description": "A crafted RAT XML configuration triggers external-entity resolution (file read / SSRF), critical when the configuration is untrusted. Mitigated: the config reader has external entities disabled (RAT-560), with DOCTYPE handling further hardened by PR #679. A break of this provided property via untrusted input on a realistic run is a VALID finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rat-process"
+        ],
+        "mitigations": [
+          "control-external-entities-disabled"
+        ]
+      },
+      {
+        "bom-ref": "threat-unexpected-network-egress",
+        "name": "Unexpected outbound connection from a RAT run",
+        "description": "RAT claims no ambient network or side effects: it does filesystem I/O only and opens no network connections on default settings (sole exception: an operator-supplied XSLT xsl:include pointing at a remote resource, which is trusted configuration). An unexpected outbound connection would violate this provided property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rat-process"
+        ],
+        "mitigations": [
+          "control-no-ambient-network"
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-input-runs",
+        "name": "Findings requiring input the operator already trusts",
+        "description": "Attacks that require the operator to feed RAT input they already control are out of model (OUT-OF-MODEL: trusted-input). This covers the dominant intended case of auditing one's own source tree, RAT's operator-invoked header-insertion write mode (--addLicense, whose header text comes from the operator-controlled license definition, not the scanned tree), operator-defined custom matchers reading scanned text, and operator-set XSLT stylesheets. An attacker who controls the RAT invocation or the trusted source tree already owns the build.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-rat-process"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rat-as-security-scanner",
+        "name": "Treating a clean RAT report as a security sign-off",
+        "description": "RAT checks license compliance; it is not a vulnerability scanner or a security gate, and a clean RAT report says nothing about security. 'RAT didn't catch X security issue' is out of purpose, and a missed or false license match is a correctness bug, not a vulnerability (unless it crosses a resource bound).",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-input",
+        "boundary": "boundary-input",
+        "name": "Untrusted-input trust boundary",
+        "description": "The boundary is the input RAT is pointed at (files and configuration). A finding is in-model only if it is triggered by untrusted input (a hostile file, archive, or config) that a realistic RAT deployment processes, for example CI auditing an untrusted PR.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-archive-decompression-bomb",
+          "threat-config-xxe"
+        ],
+        "controlsAtBoundary": [
+          "control-external-entities-disabled",
+          "control-sandbox-untrusted-runs"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-external-entities-disabled",
+      "name": "XML configuration parsing with external entities disabled",
+      "description": "The XML configuration reader disables external entities by default (RAT-560); DOCTYPE handling is further hardened by PR #679. This is a hardcoded behaviour, not an operator knob.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rat-process"
+      ]
+    },
+    {
+      "bom-ref": "control-no-ambient-network",
+      "name": "No ambient network or side effects",
+      "description": "RAT runs locally and only opens files; it opens no network connections and runs no services. Build tooling (Maven/Ant) may fetch dependencies, but RAT itself does not.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rat-process"
+      ]
+    },
+    {
+      "bom-ref": "control-sandbox-untrusted-runs",
+      "name": "Sandbox and resource-limit untrusted-input runs",
+      "description": "When auditing untrusted input (CI on untrusted PRs, third-party artifacts), run RAT with resource limits or in a sandbox, and do not feed it attacker-controlled configuration. For the operator's own trusted source tree (the normal case) no special handling is needed.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-input"
+      ]
+    },
+    {
+      "bom-ref": "control-keep-updated",
+      "name": "Keep RAT updated and pinned",
+      "description": "Keep RAT updated and pin the version in the build.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rat-process"
+      ]
+    }
+  ]
+}

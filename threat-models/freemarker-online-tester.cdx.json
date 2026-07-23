@@ -1,0 +1,131 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-freemarker-online-tester",
+      "name": "Apache FreeMarker Online Tester",
+      "description": "Public website (no login needed) where users submit an arbitrary FreeMarker template and a data-model description via an HTML form; the template is processed server-side and the resulting output or error message is shown on the website. Not used as a dependency of other projects and currently produces no official releases; it is only used as part of the Apache FreeMarker website. The relevant attack vectors are those via HTTP requests, such as through a web browser.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/freemarker-online-tester/security/policy",
+          "comment": "Source security model document (Security Scan Guidance); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://try.freemarker.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "freemarker"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/freemarker-online-tester/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/freemarker-online-tester/master/SECURITY.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-template-escapes-restrictions",
+        "name": "Submitted template escapes its server-side restrictions",
+        "description": "Because the submitted FreeMarker template runs on the server side, it must not be possible for it to return sensitive information from the server, to change the configuration of the server, or to deface the website. A template achieving any of these violates the security scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-template-restrictions"
+        ]
+      },
+      {
+        "bom-ref": "threat-xss-via-output",
+        "name": "XSS through template output",
+        "description": "It must not be possible to cause the website to run arbitrary JavaScript, or to implement other kinds of XSS attacks, through the submitted template and data model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-template-restrictions"
+        ]
+      },
+      {
+        "bom-ref": "threat-denial-of-service",
+        "name": "Denial of service via long-running templates or long output",
+        "description": "Because of the nature of the template language, denial-of-service attacks cannot be fully prevented. The main goal is to recover from user mistakes where a submitted template runs too long or produces long output; for malicious attacks, disruption of the service is accepted, as it is not a critical service and runs in its own VM so as not to drag down the main website.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-execution-limits",
+          "control-vm-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-template-restrictions",
+      "name": "Restrict what submitted templates can do",
+      "description": "Limit the capabilities of server-side execution of user-submitted templates so they cannot return sensitive information, change server configuration, deface the website, or inject scripts.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-execution-limits",
+      "name": "Terminate long-running templates and limit output size",
+      "description": "Make a reasonable effort to terminate long-running templates and to limit the size of the output, primarily to recover from user mistakes.",
+      "category": "corrective",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-vm-isolation",
+      "name": "Run in an isolated VM",
+      "description": "The service runs in its own VM so that disruption does not drag down the main FreeMarker website.",
+      "category": "compensating",
+      "status": "implemented"
+    }
+  ]
+}

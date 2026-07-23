@@ -1,0 +1,286 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-commons-xml",
+      "name": "Apache Commons XML",
+      "description": "Helper library for safely creating JAXP factories. Each XmlFactories.newXxxFactory() method returns a fresh, hardened factory whose parsers reject the common XML attacks (external entity / DTD resolution, XXE, SSRF through external references, and entity-expansion denial of service such as Billion Laughs). The hardening applies to the factory and to the parsers, readers, transformers, validators and schemas it produces. Threat model for the 0.1.x release line, versioned with the library.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://commons.apache.org/sandbox/commons-xml/threat_model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://commons.apache.org/sandbox/commons-xml/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "commons"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://commons.apache.org/sandbox/commons-xml/threat_model.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/commons-xml/main/src/site/markdown/threat_model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-commons-xml",
+      "name": "Commons XML hardened factory usage",
+      "description": "Trust structure described by the threat model: the adversary is whoever controls the XML an application parses, together with any external system an XML document tries to reach through an entity, DTD, schema, stylesheet, or XInclude reference. The trust boundary is the factory as returned by XmlFactories: the XML handed to a produced parser, reader, transformer, validator or schema is untrusted; the configuration of the factory is trusted, and keeping it as delivered is the caller's responsibility.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-xml-factories",
+          "type": "component",
+          "name": "XmlFactories hardened factories",
+          "description": "Hardened JAXP factories and the parsers, readers, transformers, validators and schemas they produce, for the JAXP implementations the library recognizes (stock JDK, Apache Xerces, Xalan, Saxon, Woodstox, and Android's Expat/KXmlParser).",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-untrusted-xml",
+          "type": "data",
+          "name": "Untrusted XML documents",
+          "description": "XML handed to a parser, reader, transformer, validator or schema produced by an XmlFactories factory, together with any external resource the document references through an entity, DTD, schema, stylesheet, or XInclude reference.",
+          "zone": "zone-untrusted-input"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-input",
+          "name": "Untrusted XML input",
+          "type": "trust",
+          "description": "XML documents controlled by the adversary and the external systems they try to reach through entity, DTD, schema, stylesheet, or XInclude references."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Application process",
+          "type": "trust",
+          "description": "The calling application, the factory configuration, and the JDK system properties. A caller running in the same process can always reconfigure or replace the factory and is not an adversary this model defends against."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-factory",
+          "name": "Hardened factory boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-input",
+            "zone-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The library does not open network connections, spawn processes, install signal handlers, or read environment variables of its own: each XmlFactories method only configures and returns a JAXP factory and reads the listed JDK system properties."
+        },
+        {
+          "description": "The JDK processing-limit system properties (jdk.xml.elementAttributeLimit, entityExpansionLimit, entityReplacementLimit, maxElementDepth, maxGeneralEntitySizeLimit, maxOccurLimit, maxParameterEntitySizeLimit, maxXMLNameLimit, totalEntitySizeLimit) are trusted deployment configuration; when unset, fixed values matching the JDK 25 secure defaults are pinned on every recognized parser."
+        },
+        {
+          "description": "Reserved features, attributes and properties (secure-processing, disallow-doctype-decl, external access properties, external entity features, supportDTD, allowedProtocols, overrideDefaultParser, the processing limits, and any other setting granting external resource access or relaxing DTD/entity processing) stay as configured; loosening any of them breaks the hardening for that instance."
+        },
+        {
+          "description": "Which hardening recipe applies depends on the JAXP implementation present on the classpath; XmlFactories throws rather than returning an unhardened factory for implementations it does not recognize."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-external-entity-access",
+        "name": "Untrusted document reads local resources or reaches the network (XXE, SSRF)",
+        "description": "An untrusted XML document uses an entity, DTD, schema, stylesheet, or XInclude reference to read local resources or reach external systems (external entity / DTD resolution, XXE, SSRF through external references). Blocking this is exactly what the hardening does; a factory used as delivered that fails to provide a guarantee its Javadoc states (for example a hardened parser still resolving an external entity) is a VALID finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xml-factories"
+        ],
+        "mitigations": [
+          "control-factory-hardening",
+          "control-resolver-floor"
+        ]
+      },
+      {
+        "bom-ref": "threat-entity-expansion-dos",
+        "name": "Entity-expansion denial of service (Billion Laughs)",
+        "description": "An untrusted XML document exhausts memory or CPU through entity expansion or similar pathological structure. The hardening pins JDK processing limits on every recognized parser; a documented processing limit that is not applied on a factory used as delivered is a VALID finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xml-factories"
+        ],
+        "mitigations": [
+          "control-processing-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-reconfigured-factory",
+        "name": "Attacks enabled by reconfiguring a returned factory",
+        "description": "Loosening any reserved feature, attribute or property on the returned factory or on a produced parser, reader, transformer, validator or schema breaks the hardening for that instance. Reconfiguring is a decision to take over hardening; reports against a reconfigured factory are out of scope (triage disposition OUT-OF-SCOPE: reconfigured).",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-xml-factories"
+        ],
+        "mitigations": [
+          "control-use-as-delivered"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-resolver-resolves-untrusted",
+        "name": "Caller-installed resolver resolves untrusted resources",
+        "description": "Installing a resolver does not lift the hardening floor, but the caller's resolver is consulted first, so any resource it returns content for is fetched, including one named by an untrusted identifier. Which resources it resolves is the caller's policy to enforce; such reports are out of scope.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-xml-factories"
+        ],
+        "mitigations": [
+          "control-resolver-floor"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-caller-supplied-uri",
+        "name": "Caller-supplied top-level URIs fetched as-is",
+        "description": "A URI passed directly to a parse call (DocumentBuilder.parse(String), StreamSource(systemId), a SAXSource built from a system id) is fetched as-is by the JAXP implementation without consulting the hardening layer. Restricting it is the caller's responsibility (triage disposition OUT-OF-SCOPE: caller input).",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-xml-factories"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-foreign-jaxp-implementation",
+        "name": "Defects in unrecognized or underlying JAXP implementations",
+        "description": "The behavior of a JAXP implementation that XmlFactories does not recognize (it throws rather than returning an unhardened factory), and any defect in the underlying JAXP implementation itself, are out of scope (triage disposition OUT-OF-SCOPE: foreign implementation).",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-scanner-pattern-matching",
+        "name": "Scanner findings that pattern-match on parser type",
+        "description": "XML-security scanners and static analyzers routinely flag the parsers this library produces. A claim that a factory or instance is unsafe without showing that a reserved setting was loosened, a resolver was installed, or an untrusted top-level URI was passed is a known non-finding; the bare presence of a SAXParser, DocumentBuilder, XMLReader, Transformer, Validator or Schema is not a finding.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-factory",
+        "boundary": "boundary-factory",
+        "name": "Hardened factory trust boundary",
+        "description": "The trust boundary is the factory as returned by XmlFactories: XML handed to a produced parser, reader, transformer, validator or schema is untrusted; the factory configuration is trusted and keeping it as delivered is the caller's responsibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-external-entity-access",
+          "threat-entity-expansion-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-factory-hardening",
+          "control-processing-limits",
+          "control-resolver-floor"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-factory-hardening",
+      "name": "Hardening recipes applied by XmlFactories",
+      "description": "Each XmlFactories.newXxxFactory() method returns a fresh, hardened factory whose parsers reject external entity / DTD resolution, XXE, SSRF through external references, and entity-expansion denial of service. The exact guarantee each factory makes is documented in the Javadoc; the hardening applies to the factory and everything it produces.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-factories",
+        "boundary-factory"
+      ]
+    },
+    {
+      "bom-ref": "control-processing-limits",
+      "name": "Pinned JDK processing limits",
+      "description": "When a factory or parser is created, the library reads the JDK processing-limit system properties and pins each value on every recognized parser, including bundled ones that ignore jdk.xml.* on their own. If a property is unset, a fixed value matching the JDK 25 secure default applies regardless of the JDK in use.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-factories"
+      ]
+    },
+    {
+      "bom-ref": "control-resolver-floor",
+      "name": "Non-removable resolver floor",
+      "description": "Installing a resolver through the typed set*Resolver methods, the DefaultHandler passed to SAXParser.parse, or the resolver properties does not loosen the hardening: those paths are wrapped by a non-removable floor. The caller's resolver is consulted first, but the floor denies or ignores whatever it leaves unresolved; a null return blocks the lookup rather than falling through to a fetch.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-factories"
+      ]
+    },
+    {
+      "bom-ref": "control-use-as-delivered",
+      "name": "Use the factory as returned",
+      "description": "Use the factory as returned. Callers who reconfigure it (loosening reserved settings) take over hardening for that instance and are responsible for re-establishing any protection they remove. Turning on validation or XInclude through the documented safe settings is permitted: the protection is enforced by the reserved settings, which a caller cannot lift, though the caller must then supply schemas or a secure resolver themselves.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-xml-factories"
+      ]
+    }
+  ]
+}

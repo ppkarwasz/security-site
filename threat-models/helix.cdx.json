@@ -1,0 +1,466 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-helix",
+      "name": "Apache Helix",
+      "description": "Generic cluster-management framework for partitioned, replicated, distributed resources: it assigns resource partitions to nodes, drives state transitions against a declarative state model, and reacts to node join/leave/failure. Helix is a coordination layer embedded by an operator's application; the ZooKeeper metadata store is the control-plane source of truth. It is not a standalone secure-by-default service.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/helix/blob/master/THREAT_MODEL.md",
+          "comment": "Source threat model (v1, authored by the ASF Security Team and ratified by the Helix PMC); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://helix.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "helix"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/helix/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/helix/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-helix",
+      "name": "Helix cluster-management deployment",
+      "description": "Deployment described by the threat model: an operator stands up a ZooKeeper ensemble, runs a Controller, embeds the Participant in application nodes hosting resources, and optionally runs helix-rest for cluster administration. Untrusted actors appear at the helix-rest HTTP surface and wherever the ZooKeeper ensemble is reachable.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-helix-rest",
+          "type": "api",
+          "name": "helix-rest admin service",
+          "description": "Network-facing HTTP API to create/modify clusters, resources, instances, and configs. Shipped as a skeleton: the operator implements the authentication mechanism and the default is no auth. The primary network trust boundary.",
+          "zone": "zone-helix-components"
+        },
+        {
+          "bom-ref": "asset-helix-core",
+          "type": "component",
+          "name": "Cluster-management core (Controller / Participant / Spectator)",
+          "description": "helix-core roles that compute and apply state transitions via the metadata store. They run independent of user data and are trusted in-domain components.",
+          "zone": "zone-helix-components"
+        },
+        {
+          "bom-ref": "asset-metadata-store",
+          "type": "data-store",
+          "name": "ZooKeeper metadata store",
+          "description": "The ZooKeeper-backed control plane Helix reads and writes (ideal state, external view, configs, messages). Whoever can write these znodes controls the cluster. ZooKeeper runs as a separate service; Helix sets no ACLs on the znodes it creates.",
+          "zone": "zone-metadata-store"
+        },
+        {
+          "bom-ref": "asset-gateway-agent",
+          "type": "interface",
+          "name": "Gateway / Agent integration surfaces",
+          "description": "helix-gateway and helix-agent are pluggable frameworks; the user supplies the implementation and its trust and network controls.",
+          "zone": "zone-helix-components"
+        },
+        {
+          "bom-ref": "asset-managed-resources",
+          "type": "resource",
+          "name": "Managed resources (operator's application)",
+          "description": "The databases/services/partitions hosted by Participants. Their security is the operator's application, not Helix; Helix coordinates placement and does not handle the resource payloads.",
+          "zone": "zone-operator-domain"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Remote callers of helix-rest and any actor able to reach the ZooKeeper ensemble; untrusted-capable."
+        },
+        {
+          "bom-ref": "zone-helix-components",
+          "name": "Helix components",
+          "type": "trust",
+          "description": "Controller, Participant, Spectator, helix-rest, and gateway/agent surfaces; in-domain components are trusted and run independent of user data."
+        },
+        {
+          "bom-ref": "zone-metadata-store",
+          "name": "ZooKeeper metadata store",
+          "type": "trust",
+          "description": "The real control plane, run as a separate service whose security (authN/authZ, ACLs, transport) is not Helix's responsibility."
+        },
+        {
+          "bom-ref": "zone-operator-domain",
+          "name": "Operator and embedding application",
+          "type": "trust",
+          "description": "The operator and the application embedding the Participant/Spectator are trusted; they already control the cluster and what it hosts."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-helix-rest",
+          "name": "Client to helix-rest",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-helix-components"
+          ]
+        },
+        {
+          "bom-ref": "boundary-metadata-store",
+          "name": "Any actor to the ZooKeeper metadata store",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-metadata-store"
+          ]
+        },
+        {
+          "bom-ref": "boundary-component-coordination",
+          "name": "Controller / Participant / Spectator coordination via the store",
+          "type": "trust",
+          "zones": [
+            "zone-helix-components",
+            "zone-metadata-store"
+          ]
+        },
+        {
+          "bom-ref": "boundary-embedding",
+          "name": "Operator/application to embedded Participant/Spectator",
+          "type": "trust",
+          "zones": [
+            "zone-operator-domain",
+            "zone-helix-components"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Environment: a JVM; a reachable ZooKeeper ensemble (the control plane); the helix-rest listen interface; network reachability between Controller, Participants, and the ensemble; the system trust store if TLS is used."
+        },
+        {
+          "description": "Cluster/resource/instance configuration and state-model definitions are operator-supplied trusted control input."
+        },
+        {
+          "description": "ZooKeeper znode data is trusted-by-reliance: ZooKeeper access is gated by the ZooKeeper client's own authorization mechanism, and Helix sets no ACLs on the znodes it creates."
+        },
+        {
+          "description": "Out of scope: recipes, website, tests, and build files (not the shipped runtime); ZooKeeper's own security; the security of the resources Helix manages; build/release/supply-chain hygiene."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-rest-auth-bypass",
+        "name": "Bypass of an operator-implemented helix-rest authentication layer",
+        "description": "For a deployment that has implemented authentication on helix-rest, an unauthenticated client mutating cluster state despite the operator's auth layer violates the access-control property; the model rates this critical. (An out-of-the-box unauthenticated deployment is the documented default, not a defect.)",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-helix-rest"
+        ],
+        "mitigations": [
+          "control-implement-rest-auth"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-rest-default",
+        "name": "Unauthenticated cluster administration on a default helix-rest deployment",
+        "description": "helix-rest ships as a skeleton without built-in authentication; the default is no auth, so on an unprotected deployment an unauthenticated caller can administer a cluster (create clusters, add/drop resources, change configs, enable/disable instances). This posture is by design; implementing auth and restricting exposure is the operator's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-helix-rest"
+        ],
+        "mitigations": [
+          "control-implement-rest-auth",
+          "control-network-isolation-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-zookeeper-takeover",
+        "name": "Control-plane takeover via writable ZooKeeper ensemble",
+        "description": "An actor who can write the cluster's znodes can redirect partitions, disable nodes, or rewrite the state model, bypassing helix-rest entirely. An open or unauthenticated ZooKeeper ensemble reachable from an untrusted network means full control-plane takeover. ZooKeeper is a separate service the operator secures; Helix sets no ACLs on the znodes it creates and has no defense if ZooKeeper is open.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-metadata-store",
+          "asset-helix-core"
+        ],
+        "mitigations": [
+          "control-secure-zookeeper"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-znode-data",
+        "name": "Crash or corruption from malformed znode data",
+        "description": "A conditional surface: an actor who can inject malformed or forged znode data that a Controller, Participant, or Spectator parses. Parsing store contents should fail safe rather than crash or corrupt; a crash on malformed znode data in in-scope code is a valid finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-helix-core"
+        ],
+        "mitigations": [
+          "control-failsafe-znode-parsing"
+        ]
+      },
+      {
+        "bom-ref": "threat-network-mitm",
+        "name": "Network man-in-the-middle between components or on the REST channel",
+        "description": "A network MITM between Helix components (Controller, Participants, ensemble) or on the helix-rest channel is an in-scope adversary. The TLS posture of the helix-rest listen interface and the ZooKeeper client connection is an open question in the model; network isolation and TLS on sensitive channels are operator responsibilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-helix-rest",
+          "asset-helix-core"
+        ],
+        "mitigations": [
+          "control-network-isolation-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-trusted-component",
+        "name": "Hostile Controller or Participant inside the trust domain",
+        "description": "Helix provides no guarantee against a hostile Controller or Participant already inside the trust domain: they hold ZooKeeper write access by design. The operator and the embedding application are out-of-scope adversaries.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-helix-core",
+          "asset-metadata-store"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-managed-resource-exposure",
+        "name": "Treating Helix as a security boundary for the resources it manages",
+        "description": "Helix is not a sandbox or isolation boundary for the databases, services, and partitions hosted by Participants; it places and transitions them, but their security (their own authentication and encryption) is the operator's application. Helix also adds no first-party authorization model or per-tenant RBAC; authorization is operator-implemented helix-rest auth plus ZooKeeper ACLs.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-managed-resources"
+        ],
+        "mitigations": [
+          "control-secure-managed-resources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-gateway-agent",
+        "name": "Insecure operator-supplied gateway or agent implementations",
+        "description": "helix-gateway and helix-agent are pluggable frameworks: the user supplies the implementation, so its trust and network controls are the operator's responsibility. Findings against the deprecated Helix UI are likewise not actionable.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-gateway-agent"
+        ],
+        "mitigations": [
+          "control-secure-gateway-agent"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-helix-rest",
+        "boundary": "boundary-helix-rest",
+        "name": "helix-rest trust boundary",
+        "description": "A network client issues cluster-admin operations. helix-rest ships as a skeleton with no default auth; the operator implements authentication. This is the high-value boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-rest-auth-bypass",
+          "threat-unauthenticated-rest-default",
+          "threat-network-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-implement-rest-auth",
+          "control-network-isolation-tls"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-metadata-store",
+        "boundary": "boundary-metadata-store",
+        "name": "ZooKeeper metadata-store trust boundary",
+        "description": "The real control plane: an actor who can write the cluster's znodes controls the cluster, bypassing helix-rest entirely. Access is gated only by the ZooKeeper client's own authorization; Helix sets no ACLs on the znodes it creates.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-zookeeper-takeover"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-zookeeper"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-component-coordination",
+        "boundary": "boundary-component-coordination",
+        "name": "Component coordination trust boundary",
+        "description": "Controller, Participant, and Spectator coordinate by reading/writing znodes and trust the store's contents; malformed or forged znode data is a conditional surface.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-malformed-znode-data",
+          "threat-hostile-trusted-component"
+        ],
+        "controlsAtBoundary": [
+          "control-failsafe-znode-parsing"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-embedding",
+        "boundary": "boundary-embedding",
+        "name": "Embedding trust boundary",
+        "description": "The operator/application to embedded Participant/Spectator interface is in-process and trusted; the application already controls what it hosts.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-managed-resource-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-managed-resources"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-implement-rest-auth",
+      "name": "Implement helix-rest authentication and restrict exposure",
+      "description": "helix-rest ships as a skeleton with no default auth: the operator implements the authentication mechanism, must not expose the admin API to an untrusted network, and restricts who can mutate clusters.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-helix-rest"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-zookeeper",
+      "name": "Secure the ZooKeeper ensemble",
+      "description": "ZooKeeper runs as a separate service that Helix does not manage; the operator handles its authorization (via the ZooKeeper client), authentication, and network isolation. Helix sets no ACLs on the znodes it creates, so any znode-level access control is the operator's.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-metadata-store"
+      ]
+    },
+    {
+      "bom-ref": "control-failsafe-znode-parsing",
+      "name": "Fail-safe parsing of metadata-store contents",
+      "description": "Parsing store contents should fail safe rather than crash or corrupt; robustness to malformed znode data is a security property the project provides.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-helix-core"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation-tls",
+      "name": "Network-isolate components and use TLS on sensitive channels",
+      "description": "Network-isolate the Controller, Participants, and the ZooKeeper ensemble, and use TLS on sensitive channels. (The TLS default for the helix-rest listen interface and the ZooKeeper client connection is an open question in the model.)",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-helix-rest"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-managed-resources",
+      "name": "Secure the managed resources themselves",
+      "description": "The resources Helix manages need their own authentication and encryption; Helix is not a security boundary for them.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-managed-resources"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-gateway-agent",
+      "name": "Supply and secure gateway/agent implementations",
+      "description": "helix-gateway and helix-agent are pluggable frameworks; the operator provides the implementation together with its trust and network controls.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateway-agent"
+      ]
+    }
+  ]
+}

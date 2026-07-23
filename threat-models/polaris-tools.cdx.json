@@ -1,0 +1,543 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-polaris-tools",
+      "name": "Apache Polaris Tools",
+      "description": "Collection of tools maintained in the Apache Polaris Tools repository: the Polaris Console UI (console/), Iceberg Catalog Migrator (iceberg-catalog-migrator/), Polaris Synchronizer (polaris-synchronizer/), Polaris MCP Server (mcp-server/), Polaris Benchmarks (benchmarks/), and the Apprunner Gradle and Maven plugins (apprunner/). The tools are independent projects for threat-model purposes, with different audiences, deployment models, interfaces, release status, and protected assets; a finding must be evaluated against the specific tool and configuration involved.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/polaris-tools/blob/main/SECURITY-THREAT-MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "polaris"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/polaris-tools/blob/main/SECURITY-THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/polaris-tools/main/SECURITY-THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-polaris-tools",
+      "name": "Polaris Tools deployment",
+      "description": "Deployment shapes described by the Polaris Tools threat model: browser users, MCP clients, and operators drive the tools from their own environments; the tools hold Polaris and catalog credentials and call the Polaris server, source and target catalogs, identity providers, and object stores. Tool inputs are untrusted unless they come from a trusted local operator or a validated upstream trust relationship.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-console-ui",
+          "type": "component",
+          "name": "Polaris Console UI",
+          "description": "Browser application with an API client, OIDC flow, local/browser storage, and container and Helm assets; user-facing or operator-facing web UI whose scope covers browser, session, token, origin, rendering, API-call, CORS, and deployment-boundary security.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-catalog-migrator",
+          "type": "tool",
+          "name": "Iceberg Catalog Migrator",
+          "description": "Operator CLI that moves or registers Iceberg tables across catalogs; scope covers source-to-target migration integrity, credentials, metadata handling, filesystem/config handling, and destructive operation safety.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-synchronizer",
+          "type": "tool",
+          "name": "Polaris Synchronizer",
+          "description": "Operator migration, backup, or synchronization CLI for Polaris entities; scope covers principal and role handling, credential output, source-to-target trust, and partial-failure behavior.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-mcp-server",
+          "type": "service",
+          "name": "Polaris MCP Server",
+          "description": "Wraps Polaris REST APIs for MCP-compatible clients over stdio or network transport; scope covers MCP client-to-server trust, tool invocation authorization, data exposure, prompt/tool input handling, and credential handling.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-benchmarks",
+          "type": "tool",
+          "name": "Polaris Benchmarks",
+          "description": "Gatling simulations and benchmark configuration; developer, performance, or test tool whose scope covers safe handling of benchmark credentials, generated datasets, logs, reports, and accidental production use.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-apprunner",
+          "type": "tool",
+          "name": "Apprunner Gradle and Maven plugins",
+          "description": "Integration-test helper that starts Polaris processes for tests; scope covers test process scope, interface, lifetime, cleanup, and safe handling of test credentials and configuration. Starting a Polaris process and opening HTTP or management ports for the scoped test task is intended behavior.",
+          "zone": "zone-tools"
+        },
+        {
+          "bom-ref": "asset-backends",
+          "type": "system",
+          "name": "Polaris server and external systems",
+          "description": "Polaris server, Iceberg REST catalogs, source and target catalogs, object stores, identity providers, and policy services the tools connect to.",
+          "zone": "zone-backends"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-users",
+          "name": "User environments",
+          "type": "trust",
+          "description": "Browsers, local operator machines, MCP clients and agents, and build/CI environments that drive the tools."
+        },
+        {
+          "bom-ref": "zone-tools",
+          "name": "Polaris Tools",
+          "type": "trust",
+          "description": "The tool processes, holding credentials and handling protected assets such as tokens, catalog metadata, and generated artifacts."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "Polaris and external systems",
+          "type": "trust",
+          "description": "Polaris server, source and target catalogs, identity providers, object stores, and policy services reached by the tools."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-user-to-tool",
+          "name": "User or client to tool boundary",
+          "type": "trust",
+          "zones": [
+            "zone-users",
+            "zone-tools"
+          ]
+        },
+        {
+          "bom-ref": "boundary-tool-to-backend",
+          "name": "Tool to Polaris and catalog backends boundary",
+          "type": "trust",
+          "zones": [
+            "zone-tools",
+            "zone-backends"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-anonymous-browser-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous browser user"
+              }
+            ],
+            "persona": {
+              "description": "A user without a valid session or token accessing a browser-exposed tool."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-tool-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated tool user"
+              }
+            ],
+            "persona": {
+              "description": "A user or operator authenticated to the tool or to the Polaris server through the tool."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-tool-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Tool operator"
+              }
+            ],
+            "persona": {
+              "description": "A person or automation that configures, runs, deploys, or upgrades a tool; trusted for the machine they control, but the tool must still avoid accidental disclosure, unsafe defaults, and surprising cross-boundary behavior."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-migration-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Migration operator"
+              }
+            ],
+            "persona": {
+              "description": "A user running migrator or synchronizer commands with credentials for source and target systems."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-mcp-client",
+          "party": {
+            "roles": [
+              {
+                "name": "MCP client or agent"
+              }
+            ],
+            "persona": {
+              "description": "A client that can invoke MCP tools and supply structured tool input."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-benchmark-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Benchmark user / build or test runner"
+              }
+            ],
+            "persona": {
+              "description": "A developer or operator running benchmark workloads, or a local, CI, Gradle, Maven, npm, uv, or container build environment executing tool code."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The tools are independent projects for threat-model purposes; behavior, configuration, dependencies, deployment model, release status, and security expectations in one tool do not apply to another."
+        },
+        {
+          "description": "Tool inputs are untrusted unless they come from a trusted local operator or a validated upstream trust relationship."
+        },
+        {
+          "description": "Compromise of the host, browser, CI system, Kubernetes cluster, object store, database, identity provider, external catalog, or network infrastructure is out of scope."
+        },
+        {
+          "description": "Benchmark-only, test-only, or local-development behavior is out of scope unless documented for non-test use, handling real protected assets, or likely to be copied into production."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-secret-exposure",
+        "name": "Exposure of tokens, secrets, or generated credentials through outputs and artifacts",
+        "description": "Exposure of Polaris access tokens, bearer tokens, client IDs, client secrets, OIDC artifacts, refresh tokens, or generated principal credentials through logs, stdout, browser storage, local profiles, .env files, generated reports, benchmark output, backup outputs, or build artifacts without clear operator intent.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-console-ui",
+          "asset-catalog-migrator",
+          "asset-synchronizer",
+          "asset-mcp-server",
+          "asset-benchmarks"
+        ],
+        "mitigations": [
+          "control-secret-output-hygiene",
+          "control-operator-protection"
+        ]
+      },
+      {
+        "bom-ref": "threat-console-browser-attacks",
+        "name": "Browser security issues in the Console UI",
+        "description": "Cross-site scripting, output encoding and rendering issues on catalog or metadata values, route handling, dependency exposure, and OIDC authorization-code/PKCE, redirect URI, issuer, realm, scope, CORS, origin, and API endpoint handling issues that expose sessions, tokens, privileged API access, or protected metadata in documented or reachable deployments.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-console-ui"
+        ],
+        "mitigations": [
+          "control-browser-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-source-target-confusion",
+        "name": "Source/target confusion in migration and synchronization",
+        "description": "Migration and synchronization tools confusing source and target systems, realms, catalogs, credentials, endpoints, or destructive operations (migration, registration, deletion from the source catalog, partial failure, retries); a synchronizer granting broader access than intended, exposing generated credentials, confusing source and target authority, or corrupting authorization-relevant metadata; migrator behavior when a table remains reachable from more than one catalog or during concurrent commits.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-catalog-migrator",
+          "asset-synchronizer"
+        ],
+        "mitigations": [
+          "control-source-target-separation",
+          "control-operator-protection"
+        ]
+      },
+      {
+        "bom-ref": "threat-mcp-overexposure",
+        "name": "MCP tool invocation beyond the intended surface",
+        "description": "An MCP client invoking unintended Polaris operations, obtaining data beyond what the configured Polaris credentials and intended tool surface allow, redirecting credentials, or causing sensitive data to be exposed to an unauthorized client or model context; includes tool input validation, operation allowlists, path construction, output filtering, and prompt/tool injection risks.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-mcp-server"
+        ],
+        "mitigations": [
+          "control-mcp-surface-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-endpoint-redirection",
+        "name": "Configuration silently redirecting credentials or traffic",
+        "description": "Tool configuration or externally configured endpoints silently redirecting credentials, tokens, catalog metadata, storage requests, migration traffic, or API requests to an unintended endpoint outside the intended trust relationship.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-catalog-migrator",
+          "asset-synchronizer",
+          "asset-mcp-server",
+          "asset-console-ui"
+        ],
+        "mitigations": [
+          "control-endpoint-integrity"
+        ]
+      },
+      {
+        "bom-ref": "threat-injection-untrusted-input",
+        "name": "Injection reachable through untrusted tool input",
+        "description": "Injection, path traversal, command execution, unsafe deserialization, unsafe template or rendering behavior, or server-side request forgery reachable through untrusted tool input.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-console-ui",
+          "asset-mcp-server",
+          "asset-catalog-migrator",
+          "asset-synchronizer"
+        ]
+      },
+      {
+        "bom-ref": "threat-benchmark-test-misuse",
+        "name": "Benchmark and test-helper findings",
+        "description": "A benchmark finding is usually not a production Polaris vulnerability by itself, and an apprunner finding is usually test-tool or build-tool scoped; starting a Polaris process and opening ports for the scoped test task is intended behavior. Either may still be security-relevant when it handles real credentials, connects to non-test deployments, exposes services, leaks credentials, persists after the test, or encourages unsafe copied configuration.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-benchmarks",
+          "asset-apprunner"
+        ],
+        "mitigations": [
+          "control-operator-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-compromised-environment",
+        "name": "Compromised user or deployment environment",
+        "description": "A compromised workstation, browser, CI system, container platform, host, source catalog, target catalog, Polaris server, identity provider, or object store is not normally treated as a Polaris Tools vulnerability.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-misconfiguration",
+        "name": "Operator misconfiguration despite documentation",
+        "description": "A local operator choosing weak credentials, unsafe endpoints, or broad network exposure despite documentation, and information visible to a user or tool explicitly authorized to access it, are not normally vulnerabilities.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-operator-protection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unreachable-dependency-advisories",
+        "name": "Dependency advisories not reachable through a tool",
+        "description": "A dependency advisory that is not present in a released or documented tool, not reachable through the tool, or not used for a security decision is out of scope; dependency, browser, Python, Java, Node, container, and build-tool findings must be evaluated for reachability through the affected tool and deployment model.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-user-to-tool",
+        "boundary": "boundary-user-to-tool",
+        "name": "User/client to tool trust boundary",
+        "description": "Covers browser to Console UI, MCP client or agent to MCP server, local configuration/environment/.env files and profiles to tool runtime, and build/CI/test environments to released artifacts. Tool inputs are untrusted unless from a trusted local operator or validated upstream trust relationship.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-console-browser-attacks",
+          "threat-mcp-overexposure",
+          "threat-injection-untrusted-input",
+          "threat-secret-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-browser-security",
+          "control-mcp-surface-limits",
+          "control-secret-output-hygiene"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-tool-to-backend",
+        "boundary": "boundary-tool-to-backend",
+        "name": "Tool to backend trust boundary",
+        "description": "Covers Console UI to Polaris server API, OIDC identity provider integration, CLI local process to source and target catalog APIs, migration/synchronization source catalog to target catalog, MCP server to Polaris server API, and benchmark or apprunner process to local or remote Polaris deployments.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-source-target-confusion",
+          "threat-endpoint-redirection",
+          "threat-benchmark-test-misuse"
+        ],
+        "controlsAtBoundary": [
+          "control-source-target-separation",
+          "control-endpoint-integrity",
+          "control-operator-protection"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-secret-output-hygiene",
+      "name": "No secrets in logs, rendering, storage, or generated artifacts",
+      "description": "Tokens, client secrets, generated credentials, and other secrets must not be logged, rendered, stored, cached, or emitted to generated artifacts unless the behavior is explicit, necessary, and documented for the operator; tools that create, reset, rotate, or display credentials must make the output and operational responsibility clear; generated logs, reports, profiles, test output, and build artifacts are treated as potentially sensitive.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-console-ui",
+        "asset-catalog-migrator",
+        "asset-synchronizer",
+        "asset-mcp-server",
+        "asset-benchmarks",
+        "asset-apprunner"
+      ]
+    },
+    {
+      "bom-ref": "control-browser-security",
+      "name": "Browser-facing protections in the Console UI",
+      "description": "Browser-facing code protects tokens, sessions, redirects, origins, and rendered user-controlled content according to the deployment model, including OIDC authorization-code and PKCE flow configuration, token handling in memory and browser storage, and redirect URI, issuer, realm, scope, CORS, origin, and API endpoint handling.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-console-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-source-target-separation",
+      "name": "Source and target systems kept distinct",
+      "description": "Migration and synchronization tools keep source and target systems distinct and must not confuse credentials, endpoints, realms, catalog scopes, or destructive operations.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-catalog-migrator",
+        "asset-synchronizer"
+      ]
+    },
+    {
+      "bom-ref": "control-mcp-surface-limits",
+      "name": "MCP exposure limited to configured credentials and intended surface",
+      "description": "MCP tools must not expose data or actions to an MCP client beyond what the configured Polaris credentials and intended tool surface allow, across transport mode, local stdio usage, network exposure, environment variables, .env files, and client configuration.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-mcp-server"
+      ]
+    },
+    {
+      "bom-ref": "control-endpoint-integrity",
+      "name": "No silent redirection of credentials or traffic",
+      "description": "Tool configuration must not silently redirect credentials, tokens, catalog metadata, storage requests, or migration traffic to an unintended endpoint.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-tool-to-backend"
+      ]
+    },
+    {
+      "bom-ref": "control-operator-protection",
+      "name": "Operator responsibilities for configuration and artifacts",
+      "description": "Operators and downstream integrators protect local configuration, .env files, profiles, logs, reports, generated credentials, backups, and migration artifacts; configure TLS, CORS, OIDC, Polaris API endpoints, source and target catalog endpoints, object-store access, and network exposure safely; separate source and target credentials, realms, catalogs, and storage locations; and treat benchmark, test, and sample configuration as non-production unless explicitly reviewed and protected.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-catalog-migrator",
+        "asset-synchronizer",
+        "asset-benchmarks",
+        "asset-apprunner"
+      ]
+    }
+  ]
+}

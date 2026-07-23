@@ -1,0 +1,241 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-db-jdo",
+      "name": "Apache JDO",
+      "description": "Java Data Objects (JDO), a specification for transparent persistence of plain Java objects, maintained by the Apache DB PMC. The apache/db-jdo repository publishes the jdo-api jar (interfaces, helper classes, exception types, identity classes, and annotations that applications compile against and that persistence implementations such as DataNucleus implement), plus the TCK, the exectck Maven plugin, and the specification document. The published artifact is an API-definition library loaded in-process by trusted application code: it does not execute queries, open datastore connections, manage credentials, or persist data; those are the implementation's job and out of this model. Threat model APPROVED by three PMC members.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/db-jdo/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://db.apache.org/jdo/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "db"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/db-jdo/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/db-jdo/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-jdoconfig-xxe",
+        "name": "XXE during jdoconfig.xml parsing",
+        "description": "An external entity resolved (SSRF or file read) while parsing jdoconfig.xml would violate the claimed property that XML config parsing rejects DOCTYPE and external entities. getDefaultDocumentBuilderFactory() sets disallow-doctype-decl to true, blocking DTDs entirely and therefore external-entity and entity-expansion attacks; security-critical if ever broken.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-doctype-disallowed"
+        ]
+      },
+      {
+        "bom-ref": "threat-unconfined-reflection",
+        "name": "Bootstrap reflection escaping trusted configuration",
+        "description": "Loading or invoking a class not named by trusted JDO configuration would violate the claimed property that bootstrap reflection is confined: Class.forName / getMethod / invoke are used only to load the configured implementation/enhancer class and call its documented static factory method, each inside a doPrivileged block, resolved via the thread context ClassLoader. Security-critical if broken.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-reflection-confinement"
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-deserialization",
+        "name": "Java deserialization of JDO objects from untrusted sources",
+        "description": "Identity classes, detached instances, and JDO*Exception types are Serializable, and the API does not defend against Java deserialization of attacker-controlled bytes: deserializing untrusted data into these types is a classic gadget risk and the embedding application's responsibility (maintainer-confirmed: no safe-deserialization guarantee). A JDO object identity is not a capability or authorization token.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-safe-deserialization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jdoql-injection",
+        "name": "JDOQL/SQL injection",
+        "description": "The API jar does not parse or sanitize JDOQL/SQL; injection safety is entirely the implementation's responsibility, and building queries by string-concatenating untrusted input is unsafe regardless of JDO. Query parsing and execution live in the implementation (DataNucleus and others), so injection reports are routed to the implementation's threat model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-parameterized-queries"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-configuration",
+        "name": "Attacker-influenced JDO configuration or classpath",
+        "description": "A threat that requires control of jdoconfig.xml, the JDO properties, the implementation class name, connection properties, or the classpath is out of model: JDO bootstrap configuration is operator-supplied and trusted, exactly as for any JDBC/JPA bootstrap. Sourcing the implementation class or connection URL from request data turns trusted-config bootstrap into arbitrary class loading / SSRF; a deployment that lets an untrusted party influence JDO config has a deployment flaw, not a jdo-api flaw.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-operator-controlled-config"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-exposure",
+        "name": "Exposure of connection credentials in configuration",
+        "description": "ConnectionUserName / ConnectionPassword are passed through as plain configuration properties; the API does not encrypt, mask, or vault them. Credential storage is the operator's responsibility (supply secrets from a secret manager, not in the clear config resource). The property names in Constants.java are configuration keys, not stored secrets.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-secret-manager"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jdo-as-authorization",
+        "name": "Treating JDO as an authorization layer",
+        "description": "JDO is not a security or authorization boundary: PersistenceManager, Query, and Transaction are persistence interfaces, and the API does not authenticate callers or authorize data access. Relying on 'the object isn't returned' for access control instead of enforcing authorization explicitly in the application or datastore layer is a known misuse pattern.",
+        "origin": "accidental",
+        "mitigations": [
+          "control-application-authorization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-implementation-findings",
+        "name": "Findings in the JDO implementation, TCK, or exectck",
+        "description": "Query (JDOQL/SQL) parsing and execution, connection pooling, credential handling, datastore I/O, caching, the L2 cache, connection-string abuse, datastore-side resource exhaustion, and ORM-mapping flaws live in the implementation, not jdo-api. The TCK is a certification test suite run by implementers and the exectck Maven plugin is a build-time tool; the specification document is reference material. Reports there are OUT-OF-MODEL: unsupported-component.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-doctype-disallowed",
+      "name": "DOCTYPE disallowed in XML config parsing",
+      "description": "JDOHelper.getDefaultDocumentBuilderFactory() sets http://apache.org/xml/features/disallow-doctype-decl to true, blocking DTDs entirely (and therefore external-entity and entity-expansion attacks) when parsing jdoconfig.xml. Hardcoded to the safe value; there is no insecure-default knob in the API jar.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-reflection-confinement",
+      "name": "Reflection confined to configured names",
+      "description": "Bootstrap reflection (Class.forName / getMethod / invoke) is used only to load the configured implementation or enhancer class via the thread context ClassLoader and call its documented static factory method, each inside a doPrivileged block.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-no-ambient-side-effects",
+      "name": "No ambient host side effects",
+      "description": "The API jar opens no sockets, spawns no processes, installs no signal handlers, and performs no datastore or network I/O of its own beyond reading the configured JDO config resource/file, System properties for JDO configuration keys, and registered class metadata (maintainer-confirmed).",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-operator-controlled-config",
+      "name": "Keep JDO configuration operator-controlled",
+      "description": "Keep jdoconfig.xml, *.properties, the implementation class name, and connection properties operator-controlled; never let an untrusted party set them, and never source the implementation class or connection URL from untrusted input.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-secret-manager",
+      "name": "Supply credentials from a secret manager",
+      "description": "Supply ConnectionPassword and other secrets from a secret manager; do not commit them to the config resource in the clear.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-parameterized-queries",
+      "name": "Use query parameters, never concatenation",
+      "description": "Treat JDOQL/SQL the way you treat SQL: use parameters, never concatenate untrusted input. Enforced by the implementation, but the caller chooses whether to misuse it.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-safe-deserialization",
+      "name": "Do not deserialize JDO objects from untrusted sources",
+      "description": "Do not deserialize JDO identity or detached objects from untrusted sources without an allow-list / safe-deserialization filter.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-application-authorization",
+      "name": "Apply authorization outside JDO",
+      "description": "Apply authorization in the application or datastore layer; JDO is not an access-control layer.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,775 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-impala",
+      "name": "Apache Impala",
+      "description": "Distributed massively-parallel C++ SQL query engine for data in HDFS, Apache Iceberg, Apache Kudu, Apache HBase, Amazon S3, Azure Data Lake Storage, Apache Ozone, and other Hadoop-compatible storage. Clients submit SQL over HiveServer2 (HS2) Thrift or HS2-over-HTTP; the coordinator impalad plans and distributes query fragments to worker impalad instances; metadata is served by catalogd and propagated via statestored; data is read and written directly against the underlying storage. Authentication is via Kerberos, LDAP, SAML, JWT, or OAuth; authorization is delegated to Apache Ranger. The threat model is that of a distributed service deployed by an operator inside a network perimeter the operator controls, not a library.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/impala/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://impala.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "impala"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/impala/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/impala/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-impala",
+      "name": "Impala cluster deployment",
+      "description": "Deployment architecture described by the Impala threat model: untrusted-but-authenticated end-user clients reach the HS2/Beeswax/HS2-HTTP ports and the Web UI; impalad, statestored, and catalogd form a mutually Kerberos-authenticated cluster; the Hive Metastore and Ranger are a trusted control plane; underlying storage is trusted by virtue of operator-granted credentials; the operator configures startup flags and owns keytabs and password files.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-hs2-endpoints",
+          "type": "endpoint",
+          "name": "HS2 / Beeswax / HS2-HTTP client endpoints",
+          "description": "Client-facing SQL ports (Beeswax :21000, HS2 binary :21050, HS2-HTTP :28000) accepting SQL over TCP, optionally with TLS; identity verified by Kerberos, LDAP, SAML, JWT, or OAuth when configured.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-webui",
+          "type": "endpoint",
+          "name": "Web UI, metrics, and /admin/ endpoints",
+          "description": "Web UI ports (:25000/:25010/:25020), optionally TLS + SPNEGO + .htpasswd protected. The Web UI exposes operator-grade endpoints; any authenticated .htpasswd user sees all Web UI contents, including query bytes and profiles.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-impalad",
+          "type": "service",
+          "name": "impalad (coordinator and workers)",
+          "description": "Coordinator and worker daemons: query frontend (Java parser, analyzer, planner, Ranger checker) and query backend (C++ exec engine, LLVM codegen, expression evaluation, scanners). Internal KRPC (:27000) and Thrift RPC connect the daemons.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-statestored-catalogd",
+          "type": "service",
+          "name": "statestored and catalogd",
+          "description": "Central catalog server and statestore propagating metadata to workers (:23000/:24000/:26000); internal component authentication is Kerberos-only, gated by internal_principals_whitelist.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-hms-ranger",
+          "type": "service",
+          "name": "Hive Metastore and Ranger",
+          "description": "Trusted control plane: source of metadata and policy decisions, assumed honest.",
+          "zone": "zone-control-plane"
+        },
+        {
+          "bom-ref": "asset-storage",
+          "type": "data-store",
+          "name": "Underlying storage",
+          "description": "HDFS, S3, ADLS, Ozone, Kudu, HBase; Impala holds delegation tokens or static credentials and reads/writes as the impala Unix user (or impersonated user when Ranger is enabled). Trusted by virtue of operator-granted credentials; table file bytes are partially attacker-controlled when an authorized writer has INSERT privilege on a table that other users read.",
+          "zone": "zone-storage"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "End-user clients",
+          "type": "trust",
+          "description": "JDBC/ODBC clients, impala-shell, BI tools, and Hue: untrusted but authenticated network peers, plus unauthenticated peers who can reach the listening ports."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Impala cluster",
+          "type": "trust",
+          "description": "impalad, statestored, and catalogd daemons on an operator-controlled network, mutually authenticated with Kerberos in production. The cluster trusts its own membership; Impala is not Byzantine fault tolerant."
+        },
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Trusted control plane",
+          "type": "trust",
+          "description": "Hive Metastore and Ranger Admin; assumed honest."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Underlying storage",
+          "type": "trust",
+          "description": "HDFS, S3, ADLS, Ozone, Kudu, HBase with storage-side ACLs enforced by the storage provider."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operator",
+          "type": "trust",
+          "description": "Cluster admin setting startup flags, managing keytabs, configuring Ranger, and owning the Web UI .htpasswd; anyone with root, sudo, the impala Unix account, the keytab, the cookie-secret file, or the .htpasswd already has unbounded power."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-hs2",
+          "name": "B1: end-user client to HS2 / Beeswax / HS2-HTTP",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-client-webui",
+          "name": "B2: end-user client to Web UI",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-control-plane",
+          "name": "B5/B6: coordinator and catalogd to Hive Metastore and Ranger",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-control-plane"
+          ]
+        },
+        {
+          "bom-ref": "boundary-storage",
+          "name": "B7: worker impalad to underlying storage",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-storage"
+          ]
+        },
+        {
+          "bom-ref": "boundary-operator-config",
+          "name": "B8: operator to startup flags and configuration files",
+          "type": "trust",
+          "zones": [
+            "zone-operator",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "End-user client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted but authenticated; connects via HS2 / HS2-HTTP / Beeswax; identity verified by Kerberos, LDAP, SAML, JWT, or OAuth; constrained by Ranger on submitted SQL."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / cluster admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; sets startup flags, manages keytabs, configures Ranger, owns the Web UI .htpasswd. Impala does not defend against the operator."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-proxy-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Delegated proxy user"
+              }
+            ],
+            "persona": {
+              "description": "Conditionally trusted: when authorized_proxy_user_config is set, an authenticated front-end (Hue, BI tool) may forward queries as a different end user (doas)."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Linux operating system (Ubuntu 20.04/22.04/24.04, Rocky/RHEL 8/9 are the declared supported set), x86_64 or arm64; at least three long-lived daemons (impalad, statestored, catalogd) run as the impala Unix user."
+        },
+        {
+          "description": "Operator-controlled L2/L3 network with mutually reachable cluster members; no NAT or middlebox assumed to inspect KRPC payloads."
+        },
+        {
+          "description": "Kerberos requires loosely-synchronized clocks across the realm (KDC tolerance, default 5 min), which is the operator's responsibility, and assumes a working MIT KDC with renewable-ticket support."
+        },
+        {
+          "description": "Keytab and .htpasswd files have OS-level permissions restricted to the impala user and admins; the OpenSSL library shipped with the OS provides TLS, cryptographic primitives, and RNG."
+        },
+        {
+          "description": "A number of security flags ship in an off-by-default posture that must be turned on for production (authentication, TLS, Ranger authorization, Web UI password file); findings that only manifest without them are operator misconfigurations, not Impala bugs."
+        },
+        {
+          "description": "Impala is not a Byzantine-fault-tolerant system: a compromised impalad/catalogd/statestored peer with a valid Kerberos identity can cause unbounded damage; the cluster trusts its own membership."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthenticated-sql-execution",
+        "name": "SQL execution by a network peer without valid credentials",
+        "description": "When an authentication mode is enabled (LDAP, Kerberos principal+keytab, JWT, OAuth, or SAML), a network peer holding no valid credential must not be able to execute SQL (property P1). With none of these set, Impala accepts unauthenticated SQL, and reports depending on that posture are operator misconfigurations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hs2-endpoints"
+        ],
+        "mitigations": [
+          "control-enable-client-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-ranger-authorization-bypass",
+        "name": "Ranger authorization bypass or confusion",
+        "description": "With authorization_provider=ranger set, a query must not read or modify data not licensed by the authenticated principal's Ranger policy (property P2). Failure modes include the authorization-bypass case (Impala fails to apply a policy) and the authorization-confusion case (Impala applies the wrong policy). With the flag unset, no authorization is enforced and all queries run as the impala user.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad"
+        ],
+        "mitigations": [
+          "control-enable-ranger-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-failure",
+        "name": "Cleartext or weak TLS on the wire after TLS is configured",
+        "description": "With ssl_server_certificate and ssl_private_key set, cleartext on the wire, or a TLS handshake completing with a deprecated cipher despite ssl_minimum_version=tlsv1.2 (the default since Impala 4.0), violates property P3.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hs2-endpoints",
+          "asset-impalad"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-internal-rpc-spoofing",
+        "name": "Internal RPC accepted from a principal outside the whitelist",
+        "description": "In production, Kerberos is mandatory between internal components; an internal RPC completing successfully from a principal not on internal_principals_whitelist violates property P4. A flat 'internal RPC has no auth' finding against a deployment without Kerberos is an operator violation of the downstream responsibilities, not an Impala bug.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad",
+          "asset-statestored-catalogd"
+        ],
+        "mitigations": [
+          "control-kerberos-internal-rpc"
+        ]
+      },
+      {
+        "bom-ref": "threat-doas-scope-violation",
+        "name": "Delegated impersonation (doas) outside the configured allow-list",
+        "description": "With authorized_proxy_user_config / authorized_proxy_group_config set, an authenticated principal must not successfully run a query as a delegated user not in their allow-list (property P5). A mis-scoped proxy list is a confused-deputy misuse pattern.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hs2-endpoints"
+        ],
+        "mitigations": [
+          "control-scope-proxy-configuration"
+        ]
+      },
+      {
+        "bom-ref": "threat-log-redaction-failure",
+        "name": "Sensitive literals appearing unredacted despite configured redaction",
+        "description": "With redaction rules configured, literal values matching configured redaction patterns must not appear un-redacted in logs or Web UI query profiles (property P6). Log redaction is a display feature, not a confidentiality boundary: it cannot retroactively cleanse leaked log files, and a regex miss leaks the literal.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad",
+          "asset-webui"
+        ],
+        "mitigations": [
+          "control-log-redaction"
+        ]
+      },
+      {
+        "bom-ref": "threat-webui-auth-bypass",
+        "name": "Web UI access bypassing configured authentication",
+        "description": "With webserver_password_file set (optionally with Kerberos SPNEGO), an unauthenticated peer accessing an authenticated Web UI endpoint violates property P7. An unprotected Web UI exposed publicly lets anyone read in-flight query bytes, server flags, and table names, but that posture is an operator hardening failure. Note that .htpasswd authentication provides no per-user authorization: any authenticated user sees all Web UI contents.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webui"
+        ],
+        "mitigations": [
+          "control-protect-webui",
+          "control-cookie-secret"
+        ]
+      },
+      {
+        "bom-ref": "threat-memory-corruption",
+        "name": "Memory corruption from documented-surface inputs",
+        "description": "Heap or stack corruption, out-of-bounds read/write, use-after-free, or double-free reachable from a documented input surface (HS2/Beeswax/Thrift/KRPC protocols, Parquet/ORC/Avro/text/Iceberg-manifest scanners) violates property P8. Security-critical when reachable from network input or from table data crossing the storage boundary; hardening-only when reachable solely by a writer who already controls the bytes.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad",
+          "asset-hs2-endpoints"
+        ]
+      },
+      {
+        "bom-ref": "threat-remote-sql-injection",
+        "name": "End-user SQL text un-escaped in remote queries to other systems",
+        "description": "In flows where Impala emits SQL to a remote system on behalf of a client (JDBC external tables; ai_generate_text with prompt-as-SQL patterns), end-user SQL text appearing un-escaped in a remote query string violates property P9. Severity depends on whether the remote system is Impala-trusted or a tenant boundary.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad"
+        ],
+        "mitigations": [
+          "control-treat-external-endpoints-untrusted"
+        ]
+      },
+      {
+        "bom-ref": "threat-writer-controlled-file-dos",
+        "name": "Decompression and decoding bombs in scanned table files",
+        "description": "A malicious or buggy table writer can land Parquet/ORC/Avro/text files designed to maximize CPU and memory; the reader has no built-in cap on per-file resource use. Raw runtime exceptions, slow paths on adversarial inputs, and OOM on pathological files are robustness work unless they cross a trust boundary; a writer landing files that crash a downstream reader is hardening at most, because the writer could simply have written wrong data. Memory corruption remains in scope under property P8.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-storage",
+          "asset-impalad"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-udf-code-execution",
+        "name": "Arbitrary code execution in impalad via user-defined functions",
+        "description": "Native (C++) UDFs, Hive Java UDFs, and user-defined data sources run in-process with the privileges of the impalad daemon; UDF sandboxing is not provided and this is documented and intentional. Defining binaries or JARs to be loaded by Impala is gated by Ranger requiring ALL privileges on the location, and admission of a CREATE FUNCTION is Ranger-gated; the privilege check that admits the UDF remains in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad"
+        ],
+        "mitigations": [
+          "control-ranger-gate-udfs"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-expensive-query-dos",
+        "name": "SQL-engine-amplified denial of service by authorized users",
+        "description": "A user with SELECT privilege issuing a Cartesian product across petabyte tables can cause arbitrary wall-clock and memory burn; Impala provides no quotas on per-query or per-user resource consumption beyond admission control. The fix surface is admission control configuration, not the engine.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad"
+        ],
+        "mitigations": [
+          "control-admission-control"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-internal-peer",
+        "name": "Byzantine internal peer with a valid Kerberos identity",
+        "description": "A compromised impalad/catalogd/statestored peer with a valid Kerberos identity can read any data the cluster can read, produce wrong results, and leak intermediate state. Impala is not Byzantine fault tolerant; the cluster trusts its own membership and reports requiring a Byzantine internal peer are out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-impalad",
+          "asset-statestored-catalogd"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-control-plane",
+        "name": "Hostile Hive Metastore or Ranger Admin",
+        "description": "The Hive Metastore and Ranger are a trusted control plane; Impala assumes truthful responses. Reports requiring the HMS or Ranger to be hostile to Impala are out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hms-ranger"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-acl-misconfiguration",
+        "name": "Over-broad storage-level permissions",
+        "description": "Impala is not the root authority for storage-level authorization: HDFS POSIX permissions, S3 IAM, ADLS RBAC, and Ozone ACLs are enforced by the storage provider with the credentials the operator hands to Impala. Reports depending primarily on over-broad bucket or IAM permissions are deployment-sensitive, not Impala-side. Ranger column-masking and row-filter policies operate at the planner level, not the storage level: anyone bypassing the planner is not constrained by them.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-storage"
+        ],
+        "mitigations": [
+          "control-secure-underlying-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-and-side-channels",
+        "name": "Operator adversaries, same-host root, and side channels",
+        "description": "Impala does not defend against the operator: anyone with root, sudo, the impala Unix account, the keytab, the cookie-secret file, or the Web UI .htpasswd already has unbounded power. Side-channel observers (cache timing, network timing) and quantum adversaries are out of scope; same-host attackers with a non-impala UID are only partially considered (Impala defends across the network surface, not against same-host UID-0 attackers). There is no data-at-rest encryption at the Impala layer and no constant-time comparison of authentication secrets beyond what the underlying SASL/Kerberos libraries provide.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-impalad",
+          "asset-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-hs2",
+        "boundary": "boundary-client-hs2",
+        "name": "Client SQL boundary (B1)",
+        "description": "End-user clients authenticate via Kerberos/LDAP/SAML/JWT/OAuth (or a trusted-domain header when explicitly configured) and are authorized by Ranger on submitted SQL. SQL text is attacker-controllable by design; the Ranger envelope, not SQL-text sanitization, is the authorization boundary. Reachable by unauthenticated network peers who may attempt authentication or attempt to violate the protocol pre-auth.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-sql-execution",
+          "threat-ranger-authorization-bypass",
+          "threat-tls-failure",
+          "threat-doas-scope-violation",
+          "threat-memory-corruption",
+          "threat-expensive-query-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-client-authentication",
+          "control-enable-ranger-authorization",
+          "control-enable-tls",
+          "control-scope-proxy-configuration",
+          "control-cookie-secret",
+          "control-admission-control"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-client-webui",
+        "boundary": "boundary-client-webui",
+        "name": "Web UI boundary (B2)",
+        "description": "The Web UI authenticates against a .htpasswd file plus optional SPNEGO and TLS; authentication is the only gate, with no per-user authorization beyond it. Sensitive query bytes appear in profiles unless log redaction is enabled.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-webui-auth-bypass",
+          "threat-log-redaction-failure"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-webui",
+          "control-log-redaction"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-control-plane",
+        "boundary": "boundary-control-plane",
+        "name": "Control plane boundary (B5/B6)",
+        "description": "Coordinator and catalogd authenticate to the Hive Metastore with Kerberos or delegation tokens and fetch Ranger policies with a service principal; both are assumed honest.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-hostile-control-plane"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-storage",
+        "boundary": "boundary-storage",
+        "name": "Storage boundary (B7)",
+        "description": "Workers reach storage with Kerberos, IAM, service-account keys, or delegation tokens; storage-side ACLs govern access. Scanned file bytes are partially attacker-controlled when an authorized writer has INSERT on a table that other users read; compromise of the storage layer itself is out of model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-writer-controlled-file-dos",
+          "threat-memory-corruption",
+          "threat-storage-acl-misconfiguration"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-underlying-storage"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-operator-config",
+        "boundary": "boundary-operator-config",
+        "name": "Operator configuration boundary (B8)",
+        "description": "Startup flags and configuration files are protected by filesystem permissions on the host; the operator is trusted and out of scope as an adversary.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-operator-and-side-channels"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-client-authentication",
+      "name": "Enable client authentication",
+      "description": "Enable an authentication mode on the client-facing surfaces: enable_ldap_auth, Kerberos principal+keytab-file, jwt_token_auth, oauth_token_auth, or a SAML configuration. Leave JWT/OAuth signature validation on (the default), never set the allow-without-TLS debug flags in production, and never set trusted_domain / trusted_auth_header / trusted_domain_use_xff_header unless the port is only reachable from a load balancer that strips and resets the relevant header.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-ranger-authorization",
+      "name": "Enable Ranger authorization",
+      "description": "Set authorization_provider=ranger and configure Ranger; without this flag no authorization is enforced and all queries run as the impala user. Ranger also gates CREATE FUNCTION and data-source locations.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable TLS on all daemons",
+      "description": "Set ssl_server_certificate and ssl_private_key on all daemons and ssl_client_ca_certificate to authenticate the peer of internal RPC; ssl_minimum_version defaults to tlsv1.2 since Impala 4.0. impala-shell users must configure ssl plus ca_cert or verify_cert to validate the server certificate.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2",
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-kerberos-internal-rpc",
+      "name": "Kerberos on internal RPC with a restricted principal whitelist",
+      "description": "Set principal and keytab-file on impalad, statestored, and catalogd (without these, internal RPC has no authentication) and restrict membership in internal_principals_whitelist to the actual Kerberos principals of cluster members; misconfiguration permits an external service to speak as a peer.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-impalad",
+        "asset-statestored-catalogd"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-webui",
+      "name": "Protect the Web UI",
+      "description": "Set webserver_password_file (.htpasswd) and webserver_certificate_file so the Web UI is authenticated and TLS-served, and restrict the Web UI ports (:25000/:25010/:25020) at the network layer to a trusted operator subnet.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-webui",
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-scope-proxy-configuration",
+      "name": "Scope delegated impersonation narrowly",
+      "description": "Set authorized_proxy_user_config / authorized_proxy_group_config to the smallest set of front-end principals that need doas, with the smallest set of impersonated users.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-hs2"
+      ]
+    },
+    {
+      "bom-ref": "control-log-redaction",
+      "name": "Configure log redaction",
+      "description": "Configure log redaction patterns for any sensitive literal that may appear in WHERE-clause queries; redaction obfuscates literals in new log entries when patterns match and is a display feature, not a confidentiality boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-impalad",
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-cookie-secret",
+      "name": "Set a strong cluster-wide cookie secret",
+      "description": "Set cookie_secret_file to a long, random, cluster-wide secret with filesystem permissions restricted to the impala user; rotate it if compromised, and never re-use it across clusters of different trust levels. When unset, HS2-HTTP cookies fall back to a per-process random secret (sessions do not survive restarts but are not forgeable).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hs2-endpoints",
+        "asset-webui"
+      ]
+    },
+    {
+      "bom-ref": "control-admission-control",
+      "name": "Configure admission control",
+      "description": "Configure admission control (default_pool_max_requests, default_pool_max_queued, default_pool_mem_limit) to bound per-query and per-pool resource use; Impala does not enforce DoS protection by itself. max_statement_length_bytes and fe_service_threads provide limited additional bounds.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-impalad"
+      ]
+    },
+    {
+      "bom-ref": "control-ranger-gate-udfs",
+      "name": "Ranger-gate CREATE FUNCTION to administrators",
+      "description": "UDFs run in-process; gate CREATE FUNCTION and the locations of binaries or JARs loaded by Impala (Ranger requires ALL privileges on the location) to administrators only.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-impalad"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-underlying-storage",
+      "name": "Secure the underlying storage with native ACLs",
+      "description": "Secure HDFS, S3, ADLS, and Ozone with native ACLs; Impala enforces only what it can see, performing all read and write operations under the filesystem privileges of the impala user. Also secure the OS-level impala Unix user and the root/sudoers set on every Impala host.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-treat-external-endpoints-untrusted",
+      "name": "Treat external data endpoints as crossing a trust boundary",
+      "description": "Treat ai_generate_text results and JDBC external-table rows as data crossing a trust boundary; do not assume the remote LLM or JDBC endpoint is honest, and do not pipe LLM output to executable contexts.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-impalad"
+      ]
+    }
+  ]
+}

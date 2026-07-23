@@ -1,0 +1,483 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-logging",
+      "name": "Apache Logging Services",
+      "description": "Common threat model for the logging frameworks maintained by Apache Logging Services (Log4cxx, Log4j, and Log4net). The frameworks read data from operator-controlled configuration, developer-controlled structural identifiers, and user-controlled content, and write formatted log events to operator-configured sinks (files, consoles, sockets, databases, message brokers). Reports that do not adhere to the documented assumptions are not accepted and are not eligible for the YesWeHack Log4j Bug Bounty Program.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://logging.apache.org/security.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://logging.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "logging"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://logging.apache.org/security.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/logging-site/main/src/site/antora/modules/ROOT/pages/_threat-model-common.adoc"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-logging",
+      "name": "Logging framework data flow",
+      "description": "Trust classification described by the common threat model: sources are classified by who controls them (operator-controlled configuration and developer-controlled structural identifiers are trusted; user-controlled content is untrusted), and every sink is trusted because a sink exists only where the operator has configured an appender that writes to it.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-framework",
+          "type": "component",
+          "name": "Logging framework (Log4cxx, Log4j, Log4net)",
+          "description": "The in-process logging framework that reads sources, formats log events through layouts, and delivers them to configured sinks.",
+          "zone": "zone-framework"
+        },
+        {
+          "bom-ref": "asset-configuration",
+          "type": "data",
+          "name": "Configuration (operator-controlled)",
+          "description": "Environment variables, configuration properties, and configuration files supplied by the operator (deployer or administrator); trusted. Interpolation features (Log4j Lookups) must only use trusted data sources; context-map values may contain user-provided data such as HTTP headers.",
+          "zone": "zone-trusted"
+        },
+        {
+          "bom-ref": "asset-structural-inputs",
+          "type": "data",
+          "name": "Structural identifiers and control inputs (developer-controlled)",
+          "description": "Logger names, levels, markers, structured-message identifiers (such as RFC 5424 MSGID and SD-ID fields), and format strings of parameterized log statements; trusted, expected to be compile-time constants or developer-chosen values. The frameworks may reject a malformed value instead of silently altering it; routing untrusted data into these inputs is application misuse and out of scope.",
+          "zone": "zone-trusted"
+        },
+        {
+          "bom-ref": "asset-content",
+          "type": "data",
+          "name": "Content (user-controlled)",
+          "description": "Data an application logs on behalf of its users: log messages, the string representation of log parameters, and thread context values. Not trusted; the frameworks accept arbitrary content and must not reject it, because rejecting user-controlled input would turn a malicious value into a denial of service. The trust level of thread context keys is a known open gap under discussion in logging-log4j2#4132.",
+          "zone": "zone-untrusted"
+        },
+        {
+          "bom-ref": "asset-sinks",
+          "type": "data-store",
+          "name": "Sinks (operator-configured destinations)",
+          "description": "Destinations to which an appender delivers formatted log events: files, consoles, sockets, databases, message brokers. Defined by the operator as part of the configuration and therefore trusted, including destinations created dynamically at runtime (for example a Routing appender path interpolated from a lookup).",
+          "zone": "zone-trusted"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-trusted",
+          "name": "Trusted users and resources",
+          "type": "trust",
+          "description": "Application developers and administrators are trusted users with unrestricted access to all features of the logging framework and its environment; their configuration, structural inputs, and configured sink destinations are trusted."
+        },
+        {
+          "bom-ref": "zone-untrusted",
+          "name": "Untrusted users",
+          "type": "trust",
+          "description": "All other users are untrusted; their data reaches the framework exclusively through user-controlled content."
+        },
+        {
+          "bom-ref": "zone-framework",
+          "name": "Logging framework process",
+          "type": "trust",
+          "description": "The logging framework running inside the application process. Code running in the same process shares the framework's trust level; there is no boundary to enforce against it."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-content-ingestion",
+          "name": "Content ingestion",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted",
+            "zone-framework"
+          ]
+        },
+        {
+          "bom-ref": "boundary-sink-output",
+          "name": "Formatted output to sinks",
+          "type": "trust",
+          "zones": [
+            "zone-framework",
+            "zone-trusted"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Untrusted parties do not have write access to configuration resources; ensuring this is a deployer responsibility, and configuration is transmitted only over confidential channels (HTTPS, secure file systems)."
+        },
+        {
+          "description": "Untrusted parties do not have write access to log destinations (for example the directory or file a file appender writes to); this is a deployer responsibility exactly as for configuration resources. An adversary who can write to a destination can already tamper with the logs directly, so the frameworks do not defend a destination they were configured to trust."
+        },
+        {
+          "description": "Structural identifiers and control inputs are compile-time constants or values otherwise chosen by the developer, not data derived from end users."
+        },
+        {
+          "description": "Objects passed to a log statement can be safely converted to strings; the frameworks should not be used to log deserialized data from untrusted sources, and converting self-referential or non-terminating structures is the calling code's responsibility."
+        },
+        {
+          "description": "An in-scope adversary's data reaches the framework exclusively through user-controlled content: arbitrary byte sequences (including malformed encodings and control characters such as CR, LF, NUL), excessively long inputs within application-enforced limits, and input resembling the framework's own interpolation or lookup syntax, including recursive interpolation."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-log-injection",
+        "name": "Log injection through untrusted content (CWE-117)",
+        "description": "A common attack vector to hide malicious activity by breaking the structure of log output. Unstructured layouts such as Pattern Layout do not protect users from log injection; they are meant for human, not computer, consumption and make no injection guarantee even for a passive sink. The frameworks must prevent log injection in structured layouts (XML, JSON, RFC 5424, HTML) consumed by a passive sink: a failure to escape a metacharacter for the format the layout emits is a defect the projects own (for example CVE-2025-54812, fixed in Log4cxx because its HTML layout produced malformed HTML).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-content",
+          "asset-sinks"
+        ],
+        "mitigations": [
+          "control-structured-layout-escaping"
+        ]
+      },
+      {
+        "bom-ref": "threat-active-sink-reinterpretation",
+        "name": "Re-interpretation of well-formed output by an active sink",
+        "description": "An active sink re-interprets the framework's output in a language it did not produce and acts on that interpretation: a terminal executing ANSI escape sequences embedded in plain text, a spreadsheet evaluating formula syntax, a shell expanding metacharacters. The frameworks do not emit terminal control language, spreadsheet formulas, or shell scripts and cannot enumerate or neutralize every downstream re-interpretation; defending against an active sink is out of scope. This is why the console ANSI-escape-sequence class (CVE-2025-55754 as reported against Apache Tomcat) is not treated as a vulnerability: the Pattern layout emits correct plain text, and an ANSI-interpreting console is an active sink whose behavior belongs to the operator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sinks"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-supply-chain",
+        "name": "Supply chain attacks (CWE-1357)",
+        "description": "Compromise through dependencies or tampered release artifacts. The projects check the quality of their dependencies; deprecated components such as the Cassandra, Kafka, and CouchDB appenders are provided for backward compatibility only, are de facto unmaintained, and are discouraged in production. Artifacts without a valid signature from the Logging Services PMC KEYS file are not supported.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-framework"
+        ],
+        "mitigations": [
+          "control-dependency-vetting",
+          "control-release-signing"
+        ]
+      },
+      {
+        "bom-ref": "threat-information-disclosure",
+        "name": "Information disclosure through log output (CWE-200)",
+        "description": "Logging frameworks implement information disclosure by design. Preventing unauthorized access to log files and configuring appropriate log levels is the deployer's job; documenting which log levels and markers might contain sensitive data is the programmer's job (libraries a program depends on may follow different level and marker conventions). Log masking techniques are out of scope for Log4cxx, Log4j, and Log4net: the developer must mask sensitive data before it is passed to the logging implementation, using third-party frameworks such as Safe-Logging.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sinks"
+        ],
+        "mitigations": [
+          "control-protect-logs-and-levels",
+          "control-mask-before-logging"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-log-event-loss",
+        "name": "Loss of log events (insufficient logging reliability, CWE-778)",
+        "description": "Log4j is designed with reliability in mind: by default it should deliver log events to the appropriate resource even during a reconfiguration event, or will log an error. Not all resources provide a confirmation mechanism, so end-to-end reliability depends on the deployer using reliable transmission components (files, loopback network sockets, or message-queue-based systems). Configuration options that discard log events under high load invalidate the reliability guarantees.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          }
+        ],
+        "affectedAssets": [
+          "asset-framework",
+          "asset-sinks"
+        ],
+        "mitigations": [
+          "control-reliable-delivery"
+        ]
+      },
+      {
+        "bom-ref": "threat-logging-denial-of-service",
+        "name": "Denial of service through logging load (CWE-779)",
+        "description": "The frameworks minimize performance overhead and latency and maximize throughput, with many configuration options to adapt performance characteristics to a specific application. It is up to the deployer to ensure appenders can keep up with the logs written (appropriate appenders and log levels) and up to the developer to ensure disabled log statements generate minimal overhead.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-framework"
+        ],
+        "mitigations": [
+          "control-performance-configuration"
+        ]
+      },
+      {
+        "bom-ref": "threat-special-elements",
+        "name": "Improper neutralization of special elements (CWE-138)",
+        "description": "Log4cxx, Log4j, and Log4net allow users to pass untrusted strings to log statements and thread context; no particular input validation for log messages is necessary. The exception is the format string of parameterized logging, which is a developer-controlled trusted input: programmers should use compile-time constants as format strings to prevent message tampering and log injection.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-content",
+          "asset-structural-inputs"
+        ],
+        "mitigations": [
+          "control-constant-format-strings"
+        ]
+      },
+      {
+        "bom-ref": "threat-deserialization",
+        "name": "Deserialization of untrusted data (CWE-502)",
+        "description": "The frameworks do not deserialize data from any source as part of normal operation. For backward compatibility several classes in Log4j 2 and Log4net 2 still implement Serializable or carry the [Serializable] attribute, and log4j-api ships an allowlist-based FilteredObjectInputStream utility. No guarantee is made that deserializing a stream containing classes from these projects is safe, regardless of the stream's source; filtering by the org.apache.logging package, the log4net namespace, or any project-derived allowlist is not sufficient. The shipped hardening utilities are partial and not exhaustive: bypasses are treated as opportunities for further hardening, not as vulnerabilities. The application performing the deserialization is responsible for ensuring the byte stream originates from a trusted source.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-framework"
+        ],
+        "mitigations": [
+          "control-filtered-object-input-stream"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-adversaries",
+        "name": "Attacks requiring out-of-scope adversary capabilities",
+        "description": "Reports relying on any of the following capabilities are not accepted: modifying environment variables, configuration properties, or configuration files (trusted sources); controlling structural identifiers or control inputs such as logger names, levels, markers, structured-message identifiers, or format strings (populating them from untrusted data is application misuse); executing arbitrary code in the same process as the framework, including code introduced through plugins, custom appenders, or other application extensions; causing a self-referential or non-terminating object structure to be logged; observing side channels such as timing or memory behavior; a malicious appender destination (hostile database, message broker, or mail server, treated as an extension of the deployer); write access to a log destination, including planting a symbolic link where a file appender expects to create its output; and reliance on an active sink re-interpreting well-formed output.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-configuration",
+          "asset-structural-inputs",
+          "asset-sinks"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-content-ingestion",
+        "boundary": "boundary-content-ingestion",
+        "name": "Content ingestion trust boundary",
+        "description": "The only path by which an in-scope adversary's data reaches the frameworks: log messages, string representations of log parameters, and thread context values are untrusted and accepted without validation, and must not be rejected.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-log-injection",
+          "threat-special-elements",
+          "threat-logging-denial-of-service"
+        ],
+        "controlsAtBoundary": [
+          "control-structured-layout-escaping",
+          "control-constant-format-strings"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-sink-output",
+        "boundary": "boundary-sink-output",
+        "name": "Sink output trust boundary",
+        "description": "Every sink is trusted because it exists only where the operator has configured an appender that writes to it. The frameworks own well-formedness of the output in the format the configured layout emits; what a passive or active destination does with that output determines responsibility.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-log-injection",
+          "threat-active-sink-reinterpretation",
+          "threat-information-disclosure",
+          "threat-log-event-loss"
+        ],
+        "controlsAtBoundary": [
+          "control-structured-layout-escaping",
+          "control-protect-logs-and-levels",
+          "control-reliable-delivery"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-structured-layout-escaping",
+      "name": "Prevent log injection in structured layouts",
+      "description": "Structured layouts (XML, JSON, RFC 5424, HTML) must ensure untrusted content cannot break the structure of the emitted document when consumed by a passive sink; a layout that emits a format must emit safe output in that format. Unstructured layouts such as Pattern Layout make no such guarantee.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-content-ingestion",
+        "boundary-sink-output"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-nonconfidential-channels",
+      "name": "Non-confidential configuration channels disabled by default",
+      "description": "Non-confidential channels such as HTTP or JMX are disabled by default to prevent accidental exposure of configuration resources.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-configuration"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-config-and-destinations",
+      "name": "Protect configuration resources and log destinations",
+      "description": "The deployer must ensure untrusted parties have no write access to configuration resources or log destinations, transmit configuration only over confidential channels, and, when interpolation features such as Log4j Lookups are used, ensure only trusted data sources are interpolated (context-map values may contain user-provided data such as HTTP headers).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-configuration",
+        "asset-sinks"
+      ]
+    },
+    {
+      "bom-ref": "control-constant-format-strings",
+      "name": "Use compile-time constant format strings",
+      "description": "Programmers should use compile-time constants as format strings of parameterized log statements to prevent message tampering and log injection; do not build log messages by string concatenation with untrusted data.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-structural-inputs"
+      ]
+    },
+    {
+      "bom-ref": "control-dependency-vetting",
+      "name": "Dependency quality checks and deprecated-component policy",
+      "description": "The projects check the quality of their dependencies and actively check for vulnerabilities in deprecated components (Cassandra, Kafka, CouchDB appenders), which are provided for backward compatibility only and discouraged in production.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-release-signing",
+      "name": "Verify release signatures",
+      "description": "All Apache Logging Services releases are signed with a key from the Logging Services PMC KEYS file; artifacts without a valid signature are not supported, and users are encouraged to always check the integrity of downloaded components.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-logs-and-levels",
+      "name": "Restrict log access and configure appropriate levels",
+      "description": "The deployer prevents unauthorized access to log files and ensures appropriate log levels are configured; the programmer documents which log levels and markers might contain sensitive data, accounting for differing conventions in dependency libraries.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-sinks"
+      ]
+    },
+    {
+      "bom-ref": "control-mask-before-logging",
+      "name": "Mask sensitive data before logging",
+      "description": "Log masking is out of scope for the frameworks; developers must ensure sensitive data is properly masked before it is passed to the logging implementation, using third-party frameworks such as Safe-Logging.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-content"
+      ]
+    },
+    {
+      "bom-ref": "control-reliable-delivery",
+      "name": "Reliable event delivery and reliable transmission components",
+      "description": "By default Log4j delivers log events to the appropriate resource even during reconfiguration or logs an error. For reliability along the entire pipeline the deployer should use reliable transmission components such as files, loopback network sockets, or message-queue-based systems, and avoid the configuration options that discard events under load.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sinks"
+      ]
+    },
+    {
+      "bom-ref": "control-performance-configuration",
+      "name": "Tune performance configuration",
+      "description": "Use the documented performance configuration options to adapt throughput and latency to the application; the deployer ensures appenders keep up with the written logs, and the developer ensures disabled log statements generate minimal overhead per the Log4j API best practices.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-filtered-object-input-stream",
+      "name": "Allowlist-based deserialization filtering utility",
+      "description": "log4j-api ships an allowlist-based FilteredObjectInputStream utility to assist applications that deserialize log event streams. The shipped hardening utilities are partial and not exhaustive; bypasses are treated as hardening opportunities, and the deserializing application remains responsible for trusting the byte stream's source.",
+      "category": "compensating",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-framework"
+      ]
+    }
+  ]
+}

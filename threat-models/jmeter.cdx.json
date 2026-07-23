@@ -1,0 +1,437 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-jmeter",
+      "name": "Apache JMeter",
+      "description": "Java load/performance-testing tool. A user builds a test plan (a .jmx file) in the GUI or by hand, then runs it in the GUI, in non-GUI/CLI mode, or distributed across a controller and remote engines, to drive load at a system under test. Test plans may contain scripting (JSR223/Groovy/BeanShell) and therefore arbitrary code; the user running JMeter is the trusted operator.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jmeter/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source builds on jmeter.apache.org/security.html and folds in the JMeter PMC review of 2026-06."
+        },
+        {
+          "type": "website",
+          "url": "https://jmeter.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jmeter"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jmeter/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jmeter/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-jmeter",
+      "name": "JMeter deployment shapes",
+      "description": "Architecture described by the threat model: a user-run tool on the operator's machine; a distributed mode where a controller drives jmeter-server remote engines over RMI (the real network boundary, protected by default RMI-over-SSL with mutual client auth); a user-initiated HTTPS recording proxy backed by a locally generated Root CA (a local trust boundary); and the system under test that JMeter drives as a client.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-jmeter-tool",
+          "type": "tool",
+          "name": "JMeter GUI/CLI",
+          "description": "Loads and executes test plans; opening a .jmx deserializes the plan via XStream, running it executes its code including scripting elements.",
+          "zone": "zone-operator-hosts"
+        },
+        {
+          "bom-ref": "asset-remote-engine",
+          "type": "service",
+          "name": "jmeter-server remote engine",
+          "description": "A node that accepts a serialized test plan and commands from a controller over RMI and executes them; a listening network surface in distributed mode. RMI-over-SSL with mutual client auth is on by default and the keystore is not shipped, so the engine will not start unprotected.",
+          "zone": "zone-operator-hosts"
+        },
+        {
+          "bom-ref": "asset-recording-proxy-ca",
+          "type": "data",
+          "name": "HTTPS recording proxy Root CA key",
+          "description": "Locally generated Root CA (ApacheJMeterTemporaryRootCA) stored in a keystore on the operator's machine, used to mint per-host certificates (default validity 7 days) that the operator's browser trusts during recording sessions.",
+          "zone": "zone-operator-hosts"
+        },
+        {
+          "bom-ref": "asset-sut",
+          "type": "system",
+          "name": "System under test",
+          "description": "The target JMeter sends requests to and whose responses it parses; the operator's own or authorised target. A hostile SUT is out of the adversary model.",
+          "zone": "zone-sut"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-network",
+          "name": "Untrusted network",
+          "type": "trust",
+          "description": "Network parties that can reach a jmeter-server RMI port or sit on the controller-to-engine path."
+        },
+        {
+          "bom-ref": "zone-operator-hosts",
+          "name": "Operator-controlled hosts",
+          "type": "trust",
+          "description": "The machines running JMeter, the controller, and remote engines, plus user.properties and installed plugins; controlled by the trusted user/operator."
+        },
+        {
+          "bom-ref": "zone-sut",
+          "name": "System under test",
+          "type": "trust",
+          "description": "Targets the operator owns or is authorised to test; JMeter is the client here."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-rmi",
+          "name": "Distributed-testing RMI boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-network",
+            "zone-operator-hosts"
+          ]
+        },
+        {
+          "bom-ref": "boundary-sut",
+          "name": "JMeter to system-under-test boundary",
+          "type": "trust",
+          "zones": [
+            "zone-operator-hosts",
+            "zone-sut"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "User / operator"
+              }
+            ],
+            "persona": {
+              "description": "Supplies the .jmx and runs JMeter; the trusted party. The JMeter security model assumes you trust jmx input files; isolating untrusted plans is the user's responsibility. Also covers authorized penetration testers, for whom the operator-trust model is unchanged."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-network-attacker",
+          "party": {
+            "roles": [
+              {
+                "name": "Distributed-mode network attacker"
+              }
+            ],
+            "persona": {
+              "description": "Can reach a jmeter-server RMI port or MITM the controller-engine link, aiming at code execution on a remote engine; defeated by the default SSL plus mutual-TLS posture."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "JMeter 6.0 sets JDK 17 as the minimum; users may run on JDK 24+ where the Java Security Manager is fully removed (JEP 486), so Security-Manager isolation is not actionable and OS-level isolation is the replacement."
+        },
+        {
+          "description": "The user controls the host, the .jmx, user.properties, installed plugins, and (in distributed mode) the controller and engines."
+        },
+        {
+          "description": "JMeter makes outbound requests to the SUT by design; in distributed mode it listens for RMI; in recording mode it listens on a local proxy port and writes a CA keystore."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-rmi-engine-rce",
+        "name": "Remote code execution on a distributed remote engine",
+        "description": "A network party drives a jmeter-server engine to execute code over RMI. In the default configuration this is defeated: RMI-over-SSL is on (server.rmi.ssl.disable=false), the server hard-codes mutual client authentication, and the keystore is not shipped so the engine will not start until the operator generates one. An RCE on an engine while SSL is enabled would be a security-critical violation; this closes the CVE-2019-0187 class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-engine"
+        ],
+        "mitigations": [
+          "control-rmi-ssl-mtls",
+          "control-bind-interface",
+          "control-os-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-jmx-open-gadget",
+        "name": "Code execution from merely opening a crafted .jmx file",
+        "description": "Opening (not running) a .jmx deserializes the plan via XStream. The in-model guarantee is that opening is safe with respect to the existing JMeter distribution classes; a crafted file that instantiates or executes a class outside the distribution (an XStream gadget chain, or code synthesised before the user clicks Run) is a valid vulnerability. Currently under-enforced: setupXStreamSecurityPolicy() sets NoTypePermission.NONE then immediately overrides it with AnyTypePermission.ANY (a no-op carrying a 12-year-old CVE-2013-7285 TODO), so the boundary is aspirational until a scoped allow-list lands.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jmeter-tool"
+        ],
+        "mitigations": [
+          "control-xstream-allowlist",
+          "control-isolate-untrusted-plans"
+        ]
+      },
+      {
+        "bom-ref": "threat-recording-ca-key-theft",
+        "name": "MITM via a stolen recording-proxy CA private key",
+        "description": "The HTTPS recording proxy generates a local Root CA whose key is stored on the operator's machine; the operator installs the CA into the OS/browser trust store. If the CA private key is compromised while still trusted, an attacker could mint certificates for any domain accepted silently by the browser. The default proxy.cert.validity of 7 days bounds the exposure window; a long validity is an opt-in misconfiguration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-recording-proxy-ca"
+        ],
+        "mitigations": [
+          "control-proxy-cert-validity",
+          "control-remove-ca-after-recording"
+        ]
+      },
+      {
+        "bom-ref": "threat-run-untrusted-jmx",
+        "name": "Arbitrary code execution by running a test plan",
+        "description": "The purpose of JMeter is to execute the workload specified in the input jmx file, which may include arbitrary code (JSR223/Groovy/BeanShell). Running the plan the user is given is intended behaviour, not an attack; if you want to evaluate untrusted jmx files, it is up to you to provide the required isolation. By design, disclaimed.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jmeter-tool"
+        ],
+        "mitigations": [
+          "control-isolate-untrusted-plans",
+          "control-os-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-rmi-ssl-disabled",
+        "name": "Exposed engine after the operator disabled RMI SSL",
+        "description": "An unprotected jmeter-server reached after the operator explicitly set server.rmi.ssl.disable=true (a widespread quick-start antipattern) is out of model as a non-default runtime configuration opt-out; the defaults refuse to run without SSL, keystore, and client auth. Note the RMI port is not restricted to a single interface by default, so bind-interface and firewall settings matter especially when SSL is disabled.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-remote-engine"
+        ],
+        "mitigations": [
+          "control-rmi-ssl-mtls",
+          "control-bind-interface"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-sut-responses",
+        "name": "Hostile system-under-test exploiting JMeter's response parsers",
+        "description": "A malicious SUT crafting responses to exploit JMeter's extractors (XXE on the XPath Extractor, ReDoS on regex patterns, unbounded response sizes) is out of the adversary model: the tester points JMeter only at systems they own or are authorised to test. Hardening the parsers is desirable (internal-audit track) but not a claimed security property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jmeter-tool",
+          "asset-sut"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-result-files",
+        "name": "Opening untrusted result/JTL files",
+        "description": "Opening result files for display should not instantiate arbitrary classes (the stronger guarantee, still inferred); re-opening a result file from an untrusted source is the operator's responsibility.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-jmeter-tool"
+        ],
+        "mitigations": [
+          "control-isolate-untrusted-plans"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-rmi",
+        "boundary": "boundary-rmi",
+        "name": "Distributed-testing RMI trust boundary",
+        "description": "jmeter-server accepts a serialized test plan and commands from a controller over RMI; the protective defaults (SSL on, mutual client auth required, no shipped keystore) mean an attacker cannot reach an unprotected engine unless the operator explicitly opted out.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-rmi-engine-rce",
+          "threat-rmi-ssl-disabled"
+        ],
+        "controlsAtBoundary": [
+          "control-rmi-ssl-mtls",
+          "control-bind-interface"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-sut",
+        "boundary": "boundary-sut",
+        "name": "System-under-test boundary",
+        "description": "JMeter is the client; the SUT is the operator's own or authorised target, and the SUT-to-JMeter response path is not an in-model boundary. Classifying it in-model would amount to claiming JMeter is safe to point at attacker-controlled infrastructure, which is not the intended use.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-hostile-sut-responses"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-rmi-ssl-mtls",
+      "name": "RMI-over-SSL with mutual client authentication by default",
+      "description": "server.rmi.ssl.disable defaults to false, the server hard-codes setNeedClientAuth(true), and the rmi_keystore.jks is not shipped, so the engine will not start until the operator generates one (create-rmi-keystore.sh) or explicitly disables SSL. Keep the secure defaults; never set server.rmi.ssl.disable=true on an engine reachable from an untrusted network.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-rmi",
+        "asset-remote-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-bind-interface",
+      "name": "Restrict the RMI bind interface and firewall the ports",
+      "description": "The RMI registry and server socket bind to the address java.rmi.server.hostname resolves to, not loopback-only; set it to 127.0.0.1 for loopback-only operation, fix server.rmi.port/server.rmi.localport, and apply perimeter firewall rules, especially when SSL is disabled.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-remote-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-xstream-allowlist",
+      "name": "Scoped XStream deserialization allow-list",
+      "description": "Replace the effective AnyTypePermission.ANY policy with a classloader-based, manifest-declared, or targeted-denylist scheme that still admits third-party plugin classes (a static org.apache.jmeter.** list would break plugin test plans). A tracked follow-up that would upgrade the open-time guarantee from aspirational to enforced and close the CVE-2013-7285 TODO.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-jmeter-tool"
+      ]
+    },
+    {
+      "bom-ref": "control-isolate-untrusted-plans",
+      "name": "Isolate untrusted test plans and result files",
+      "description": "Only open and run .jmx files you trust; isolate (separate OS user, container, or VM) if you must evaluate an untrusted plan, and treat opening an untrusted .jmx as not fully safe until the XStream allow-list lands. Do not open untrusted result/JTL files.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jmeter-tool"
+      ]
+    },
+    {
+      "bom-ref": "control-os-isolation",
+      "name": "OS-level isolation for distributed engines on JDK 24+",
+      "description": "With the Java Security Manager removed on JDK 24+ (JEP 486), isolate jmeter-server outside the JVM: preferably a container (non-root user, read-only root FS, tmpfs /tmp, cap-drop ALL, network scoped to the controller), else systemd hardening (NoNewPrivileges, CapabilityBoundingSet, PrivateTmp, ProtectSystem=strict), else a dedicated locked-down OS user.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-remote-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-proxy-cert-validity",
+      "name": "Short recording-proxy certificate validity",
+      "description": "The recording proxy issues short-lived per-host certificates (proxy.cert.validity=7 days by default), limiting the window in which a stolen CA key is useful; do not set a longer validity than the session needs.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-recording-proxy-ca"
+      ]
+    },
+    {
+      "bom-ref": "control-remove-ca-after-recording",
+      "name": "Remove the JMeter CA from the trust store after recording",
+      "description": "Remove the JMeter recording-proxy CA certificate from the OS/browser trust store after recording sessions so a stolen key cannot be misused while still trusted.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-recording-proxy-ca"
+      ]
+    },
+    {
+      "bom-ref": "control-authorized-targets-only",
+      "name": "Test only authorised systems and vet plugins",
+      "description": "Only point JMeter at systems you are authorised to test, treat responses from untrusted targets as potentially hostile to the parsers (hardening posture, not a guarantee), and vet third-party plugins before installing.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-sut"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,268 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-spark",
+      "name": "Apache Spark",
+      "description": "Unified engine for large-scale data analytics: driver and executor processes communicating over Spark RPC, with standalone Master/Worker daemons, YARN and Kubernetes resource managers, web UIs, a History Server, and shuffle services. The security documentation's headline statement: security features are not enabled by default, no deployment type is secure by default, and when deploying a cluster open to the internet or an untrusted network it is important to secure access to prevent malicious applications from running; Spark only protects against the threats its documented features cover.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://spark.apache.org/docs/latest/security.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://spark.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "spark"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://spark.apache.org/docs/latest/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unsecured-cluster-exposure",
+        "name": "Malicious applications on a cluster open to untrusted networks",
+        "description": "Security features are not enabled by default and no deployment type is secure by default. When deploying a cluster open to the internet or an untrusted network, securing access is important to prevent malicious applications from running on the cluster. Administrators must evaluate their environment and enable the appropriate documented features; Spark does not protect against threats outside those features.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-rpc-authentication",
+          "control-restrict-ports",
+          "control-jwt-rest-auth"
+        ]
+      },
+      {
+        "bom-ref": "threat-rpc-plaintext-interception",
+        "name": "Interception of unencrypted Spark RPC traffic",
+        "description": "Spark RPC connections are unencrypted unless the operator enables one of the two mutually exclusive encryption forms: SSL/TLS (preferred, must be explicitly enabled via spark.ssl.rpc.enabled) or the legacy AES-based protocol (spark.network.crypto.enabled, which requires RPC authentication). The default AES cipher AES/CTR/NoPadding lacks authentication (AES/GCM/NoPadding is recommended), and auth engine version 1 omits a key derivation function for backward compatibility (version 2 is recommended). SASL-based encryption is deprecated.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-rpc-encryption",
+          "control-rpc-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-ui-unauthorized-access",
+        "name": "Unauthorized access to web UIs",
+        "description": "Web UI authentication uses Jakarta servlet filters, and Spark provides no built-in authentication filter; administrators must implement one. ACLs (view and modify permissions for users and groups) only take effect once an authentication filter is present. By default only the application submitter is in the ACLs. The History Server has its own ACL options (spark.history.ui.acls.enable, admin ACLs) that apply to all applications it serves.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-ui-acls",
+          "control-jwt-rest-auth",
+          "control-http-security-headers"
+        ]
+      },
+      {
+        "bom-ref": "threat-local-storage-disclosure",
+        "name": "Disclosure of temporary data on local disks",
+        "description": "Spark writes shuffle files, shuffle spills, cached data blocks, and broadcast variables to local disks in plaintext unless local storage encryption (spark.io.encryption.enabled) is turned on. Encrypting output data generated by applications through APIs such as saveAsHadoopFile or saveAsTable, and temporary files the user creates, is explicitly out of scope of this feature.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-io-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-event-log-tampering",
+        "name": "Tampering with or unauthorized reading of event and driver logs",
+        "description": "The event log directory (spark.eventLog.dir) and the driver logs directory (spark.driver.log.dfsDir) must be manually created by the operator with permissions drwxrwxrwxt, owned by the super user running the History Server, so that all users can write but unprivileged users cannot read, remove, or rename files they do not own. Spark creates the log files themselves with read/write restricted to user and group.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-log-directory-permissions"
+        ]
+      },
+      {
+        "bom-ref": "threat-shared-secret-multitenancy",
+        "name": "Shared authentication secret across applications and daemons",
+        "description": "With the default spark.authenticate.secret mechanism, the same secret is shared by all applications and daemons, which limits its security especially on multi-tenant clusters. This is a documented limitation of the file/config-based secret mechanism; on YARN and Kubernetes, Spark instead generates and distributes a unique secret per application. Spark also does not mount secret files: securely generating and deploying the secret files agreed between driver and executors is the deployer's responsibility.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "mitigations": [
+          "control-rpc-authentication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-k8s-secret-visibility",
+        "name": "Kubernetes authentication secret visible to pod listers",
+        "description": "On Kubernetes the per-application authentication secret is propagated to executor pods via environment variables; any user able to list pods in the namespace can see the secret. Access control rules must be set up by the Kubernetes admin so that the secret is protected; this is the deployer's responsibility.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-proxy-user-client-mode",
+        "name": "Superuser-side file access with proxy-user in client mode",
+        "description": "With spark-submit --proxy-user, authentication happens on the target cluster and resource allocation and filesystem access happen on the proxy user's behalf, but in client mode the driver JVM is started by the superuser (in cluster mode it is started by the proxy user), which impacts local filesystem access permissions. The documentation notes this is not a CVE but important to be aware of; multi-tenant Spark services (such as Apache Kyuubi) should consult their documentation to prevent server-side local files being read or leaked by the superuser to other tenants, with cluster mode recommended for security.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-kerberos-integration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-rpc-authentication",
+      "name": "Enable RPC authentication (shared secret)",
+      "description": "Enable spark.authenticate for authentication of RPC channels using a shared secret. On YARN, Spark automatically generates and distributes a unique secret per application (relying on YARN RPC encryption for secure distribution; spark.yarn.shuffle.server.recovery.disabled can be set for higher security on the shuffle service). On Kubernetes, a unique secret per application is propagated to executor pods. Otherwise the secret is configured via spark.authenticate.secret or the spark.authenticate.secret.file / .driver.file / .executor.file options.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-jwt-rest-auth",
+      "name": "JWT authorization for REST submission and UI ports",
+      "description": "The REST Submission Server and all UI ports support the HTTP Authorization header with a signed JSON Web Token via JWSFilter: set spark.master.rest.filters=org.apache.spark.ui.JWSFilter (or spark.ui.filters for UIs) and spark.org.apache.spark.ui.JWSFilter.param.secretKey=BASE64URL-ENCODED-KEY.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-rpc-encryption",
+      "name": "Encrypt RPC connections",
+      "description": "Prefer SSL/TLS for RPC (Netty-based, explicitly enabled via spark.ssl.rpc.enabled, with keystore/truststore or OpenSSL PEM configuration; SSL takes precedence if both forms are enabled). The legacy AES-based encryption (spark.network.crypto.enabled) requires authentication; use cipher AES/GCM/NoPadding (authenticated encryption) rather than the default AES/CTR/NoPadding, and auth engine version 2 (applies a KDF) rather than the backward-compatible version 1. spark.network.sasl.serverAlwaysEncrypt can deny unencrypted connections on SASL ports.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-io-encryption",
+      "name": "Enable local storage encryption",
+      "description": "Enable spark.io.encryption.enabled to encrypt shuffle files, shuffle spills, and cached data blocks and broadcast variables written to local disks (key size 128/192/256 bits); it is recommended to also enable RPC encryption.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-ui-acls",
+      "name": "Configure UI authentication filters and ACLs",
+      "description": "Install an authentication servlet filter (Spark ships none built-in) and enable spark.acls.enable with view and modify ACLs (spark.ui.view.acls, spark.modify.acls, spark.admin.acls and their .groups variants; wildcard * grants all users). Group membership comes from the configurable group mapping provider (default ShellBasedGroupsMappingProvider, Unix/Linux only). On YARN, ACLs are passed to and enforced by YARN. For the History Server, enable spark.history.ui.acls.enable and the spark.history.ui.admin.acls options; the application owner is always authorized.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-ssl-ui",
+      "name": "Configure SSL for web UIs",
+      "description": "Configure the hierarchical spark.ssl.* namespaces (spark.ssl.ui, spark.ssl.standalone, spark.ssl.historyServer) with protocol, ciphers, keystores, and truststores; passwords can be retrieved from a Hadoop Credential Provider. Key stores are prepared per node and the trust store distributed to the cluster (via --files on YARN, or SPARK_MASTER_OPTS/SPARK_WORKER_OPTS system properties and spark.ssl.useNodeLocalConf in standalone mode).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-http-security-headers",
+      "name": "Enable HTTP security headers",
+      "description": "Spark can set headers to prevent XSS, cross-frame scripting, and MIME sniffing and to enforce HSTS: spark.ui.xXssProtection (default 1; mode=block), spark.ui.xContentTypeOptions.enabled (nosniff, default true), spark.ui.allowFramingFrom (X-Frame-Options, default SAMEORIGIN), spark.ui.strictTransportSecurity (with SSL/TLS), and spark.ui.contentSecurityPolicy.enabled (CSP, default false).",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-restrict-ports",
+      "name": "Restrict network access to Spark ports",
+      "description": "Spark clusters are generally private services within the organizational network; limit access to the documented ports (standalone Master 8080/7077/6066, Worker 8081, application UI 4040, History Server 18080, driver/block manager random ports) strictly to the hosts that need to access the services.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-kerberos-integration",
+      "name": "Use Kerberos and delegation tokens in secured environments",
+      "description": "Spark supports Kerberos-authenticated environments (Local, YARN, and Kubernetes modes): automatic delegation token acquisition for Hadoop filesystems, HBase, and Hive; custom providers via HadoopDelegationTokenProvider; extra filesystems via spark.kerberos.access.hadoopFileSystems. Long-running applications maintain credentials via a keytab (--principal/--keytab, with the keytab staged securely) or a renewed ticket cache (spark.kerberos.renewal.credentials=ccache). On Kubernetes, Kerberos jobs use krb5 config, KDC-visible networking, and pre-populated delegation token secrets or ConfigMaps. The --proxy-user feature performs impersonation configured on the target cluster.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-log-directory-permissions",
+      "name": "Create log directories with restrictive permissions",
+      "description": "Manually create spark.eventLog.dir and (when spark.driver.log.persistToDfs.enabled is set) spark.driver.log.dfsDir with permissions drwxrwxrwxt, owned by the super user running the History Server, so files cannot be read, removed, or renamed by unprivileged users who do not own them.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

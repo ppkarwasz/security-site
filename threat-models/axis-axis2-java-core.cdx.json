@@ -1,0 +1,663 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-axis2-core",
+      "name": "Apache Axis2/Java",
+      "description": "SOAP and REST web services engine: a message-processing pipeline with pluggable transports (HTTP/HTTPS, JMS, TCP, local), a module system for cross-cutting concerns (WS-Security via Rampart, WS-Addressing), hot-deployment of service archives (AAR/MAR), and multi-protocol serving (JSON-RPC, REST/OpenAPI, MCP) from a single service deployment. Runs inside a Jakarta Servlet container (Tomcat, Jetty, WildFly) or embedded via Spring Boot.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/axis-axis2-java-core/security/policy",
+          "comment": "Source security threat model (SECURITY.md); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://axis.apache.org/axis2/java/core/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "axis"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/axis-axis2-java-core/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/axis-axis2-java-core/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-axis2-core",
+      "name": "Axis2 message processing deployment",
+      "description": "Architecture described by the threat model: remote clients send untrusted input through the servlet container (TLS termination, optional authentication) to the AxisServlet/HTTPWorker HTTP entry point; a MessageContext is created and flows through transport-in handlers, dispatchers (URI, SOAPAction, WS-Addressing, JSON method, HTTP location), handler phases (where security modules like Rampart execute), message builders (SOAP, XML, JSON, MTOM, multipart/form-data), and the MessageReceiver that invokes the service method. Deployment happens by dropping AAR/MAR archives into WEB-INF directories on the filesystem.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-http-entry",
+          "type": "endpoint",
+          "name": "AxisServlet / HTTP entry point",
+          "description": "URL patterns exposed from the servlet mapping: /services/{ServiceName} (JSON-RPC and SOAP), /services/{ServiceName}/{Operation} (REST-style), ?wsdl and ?xsd metadata and /services/ listing (anonymous if exposeServiceMetadata=true, the default), and /openapi.json, /swagger-ui, /openapi-mcp.json when the OpenAPI module is engaged.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-pipeline",
+          "type": "process",
+          "name": "Message processing pipeline",
+          "description": "Transport-in phase, dispatchers, global and per-service handler phases (security modules execute here), message builders, MessageReceiver, response phases and transport-out.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-parsers",
+          "type": "module",
+          "name": "Parsers and builders",
+          "description": "XML parsers (AXIOM/StAX, DocumentBuilderFactory), WSDL/XSD import resolution (wsdl4j, xmlschema-core), JSON parser (Gson), multipart/file upload (commons-fileupload2), MTOM/attachment handling, and context externalization via SafeObjectInputStream.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-deployment",
+          "type": "component",
+          "name": "Hot-deployment engine",
+          "description": "DeploymentEngine loading AAR/MAR archives from WEB-INF/services/ and WEB-INF/modules/. The trust boundary is filesystem access; there is no signature verification (deployment is an admin operation).",
+          "zone": "zone-deployment"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Remote clients",
+          "type": "trust",
+          "description": "Anonymous clients (untrusted, no credentials, can reach any endpoint exposed by the HTTP transport, all input is hostile) and authenticated clients (partially trusted, identity verified by the servlet container, a servlet filter, or a WS-Security module)."
+        },
+        {
+          "bom-ref": "zone-engine",
+          "name": "Axis2 engine",
+          "type": "trust",
+          "description": "The Axis2 framework running inside the servlet container: entry points, pipeline, parsers."
+        },
+        {
+          "bom-ref": "zone-deployment",
+          "name": "Deployment filesystem",
+          "type": "trust",
+          "description": "WEB-INF/services/ and WEB-INF/modules/ directories written by trusted service deployers and module developers; deployed code executes with full JVM privileges."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http",
+          "name": "Remote client to Axis2 engine",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-engine"
+          ]
+        },
+        {
+          "bom-ref": "boundary-deployment",
+          "name": "Deployment filesystem to Axis2 engine",
+          "type": "trust",
+          "zones": [
+            "zone-deployment",
+            "zone-engine"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-server-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Server Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. Configures axis2.xml, deploys/removes modules and services, controls the servlet container. Has filesystem and JVM-level access."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-deployer",
+          "party": {
+            "roles": [
+              {
+                "name": "Service Deployer"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Drops AAR archives into WEB-INF/services/. May be the same person as the administrator, or a CI pipeline."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-module-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Module Developer"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Builds and deploys MAR module archives that add handlers to the processing pipeline. Code executes with full JVM privileges."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated Client"
+              }
+            ],
+            "persona": {
+              "description": "Partially trusted. A remote caller whose identity has been verified by the servlet container, a servlet filter, or a WS-Security module (Rampart). Authorized actions depend on the application."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-anonymous-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous Client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. A remote caller with no credentials; can reach any endpoint exposed by the HTTP transport. All input is hostile."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-framework-rce",
+        "name": "Remote code execution via the Axis2 framework",
+        "description": "RCE through the Axis2 framework itself (not through user-written service logic) is a security issue. Historically the most severe class was deserialization of untrusted data; the removed Tribes-based clustering module exposed a network listener that deserialized Java objects from untrusted streams without validation, enabling RCE via standard gadget chains (AXIS2-6097). Any ObjectInputStream.readObject() on network input is a critical-severity finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-pipeline",
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-safe-object-input-stream",
+          "control-clustering-removed"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XML External Entity (XXE) injection",
+        "description": "The framework's XML parsers resolving external entities or allowing DOCTYPE declarations from untrusted input would enable file read, SSRF, or denial of service. CVE-2010-1632 was a DTD/XXE issue in the MTOMBuilder flow, fixed by strictly forbidding DOCTYPE declarations in SOAP and XML requests. Third-party XML libraries (wsdl4j 1.6.3, xmlschema-core) create their own parser factories that bypass framework-level hardening, so every XML parsing path, including transitive ones, must be audited.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-xml-hardening",
+          "control-secure-wsdl-locator"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf",
+        "name": "Server-side request forgery via framework features",
+        "description": "An attacker causing the server to make requests to arbitrary internal or external hosts through framework features such as WSDL/XSD import resolution, endpoint references, or transport senders, including file:// and gopher:// schemes in imports.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-secure-wsdl-locator",
+          "control-schema-import-resolvers"
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-dos",
+        "name": "Denial of service via parser abuse",
+        "description": "Billion-laughs XML bombs, deeply nested JSON, or other input causing unbounded memory or CPU consumption inside framework-level parsers, including large attachment DoS and temp file exhaustion in MTOM handling.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-xml-hardening",
+          "control-fuzz-testing"
+        ]
+      },
+      {
+        "bom-ref": "threat-multipart-upload-abuse",
+        "name": "Multipart/file upload abuse",
+        "description": "Unbounded file counts or sizes via multipart form data that exhaust server resources (the CVE-2023-24998 pattern in commons-fileupload 1.x).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-fileupload2"
+        ]
+      },
+      {
+        "bom-ref": "threat-pipeline-auth-bypass",
+        "name": "Authentication or authorization bypass in the handler pipeline",
+        "description": "A flaw in the handler/phase pipeline that allows a message to skip an engaged security module. Notably, a flaw in Axis2's handler pipeline that allows the Rampart module to be bypassed is a vulnerability in Axis2, even though flaws within Rampart itself belong to the Rampart project. Dispatch-level risks include routing to an unintended service, header spoofing, and JSON-RPC method name injection.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-pipeline"
+        ],
+        "mitigations": [
+          "control-dispatch-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-information-disclosure",
+        "name": "Information disclosure of server internals",
+        "description": "Stack traces, class names, or configuration details leaked to unauthenticated callers through fault messages or metadata endpoints when exposure has been disabled.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-entry"
+        ],
+        "mitigations": [
+          "control-fault-detail-suppression"
+        ]
+      },
+      {
+        "bom-ref": "threat-path-traversal",
+        "name": "Path traversal",
+        "description": "A crafted service name, URI component, or WSDL import location that allows reading or writing files outside expected directories.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-entry",
+          "asset-parsers"
+        ]
+      },
+      {
+        "bom-ref": "threat-user-service-vulnerabilities",
+        "name": "Vulnerabilities in user-written services",
+        "description": "SQL injection, broken access control, or insecure business logic in a deployed service are the service author's responsibility, not Axis2 security issues.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-missing-endpoint-authentication",
+        "name": "Missing authentication on endpoints",
+        "description": "Axis2 does not ship built-in authentication. Securing endpoints is the responsibility of the servlet container, servlet filters, or engaged security modules (Rampart).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-entry"
+        ],
+        "mitigations": [
+          "control-container-authentication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hot-deployment-abuse",
+        "name": "Arbitrary code deployment via weak filesystem permissions",
+        "description": "If an attacker has write access to WEB-INF/services/ or WEB-INF/modules/, they can deploy arbitrary code via a malicious AAR/MAR. The trust boundary is filesystem access; this is an OS/container configuration issue, not an Axis2 vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deployment"
+        ],
+        "mitigations": [
+          "control-protect-deployment-directories"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-service-enumeration",
+        "name": "Service enumeration via /services/ listing and metadata endpoints",
+        "description": "When exposeServiceMetadata is true (the default), service names, WSDL, and XML Schema are visible to anonymous callers. This is documented behavior controllable via axis2.xml.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-entry"
+        ],
+        "mitigations": [
+          "control-expose-service-metadata"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-network-level-dos",
+        "name": "Denial of service at the network level",
+        "description": "SYN floods, slowloris, or transport-layer attacks are mitigated by the servlet container, not Axis2.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-external-module-vulnerabilities",
+        "name": "Vulnerabilities within optional, external modules",
+        "description": "A flaw in Rampart's cryptographic implementation would be handled by the Rampart project. However, a flaw in Axis2's handler pipeline that allows the Rampart module to be bypassed is a vulnerability in Axis2. Dependency-level CVEs are historically the most frequent class (admin console CSRF/XSS CVE-2010-3981, HttpClient CVE-2012-6153/CVE-2014-3577, commons-fileupload CVE-2016-1000031 and CVE-2023-24998).",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-raw-transports",
+        "name": "Use of unencrypted, unauthenticated raw transports",
+        "description": "The TCP transport uses raw sockets with no encryption or authentication, and UDP has no encryption, authentication, or reliability; both are for trusted networks only. JMS authentication is delegated to the JMS broker, mail transport depends on mail server authentication, and HTTP TLS is handled by the servlet container.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-raw-transports"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http",
+        "boundary": "boundary-http",
+        "name": "HTTP entry trust boundary",
+        "description": "Remote client input passes through the servlet container (TLS termination, optional authentication) into the AxisServlet and message processing pipeline; anonymous client input is hostile.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-framework-rce",
+          "threat-xxe",
+          "threat-ssrf",
+          "threat-parser-dos",
+          "threat-multipart-upload-abuse",
+          "threat-pipeline-auth-bypass",
+          "threat-information-disclosure",
+          "threat-path-traversal",
+          "threat-service-enumeration"
+        ],
+        "controlsAtBoundary": [
+          "control-xml-hardening",
+          "control-secure-wsdl-locator",
+          "control-safe-object-input-stream",
+          "control-fileupload2",
+          "control-fault-detail-suppression",
+          "control-container-authentication",
+          "control-expose-service-metadata"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-deployment",
+        "boundary": "boundary-deployment",
+        "name": "Deployment trust boundary",
+        "description": "AAR/MAR archives dropped into WEB-INF directories execute with full JVM privileges; the trust boundary is filesystem access and there is no signature verification.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-hot-deployment-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-deployment-directories"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-xml-hardening",
+      "name": "Hardened XML parser factories",
+      "description": "All DocumentBuilderFactory and SAXParserFactory instances created by the framework disable DTDs and external entities (XMLUtils.java, SecureWSDLLocator.java, DefaultEntityResolver.java); DOCTYPE is disallowed and DefaultEntityResolver returns an empty source.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-wsdl-locator",
+      "name": "SecureWSDLLocator for WSDL imports",
+      "description": "SecureWSDLLocator pre-validates imported documents with a hardened SAX parser before passing them to wsdl4j, rejects DOCTYPE, protocol-whitelists to HTTP/HTTPS only, enforces a size limit (10MB default) and connect/read timeouts, and blocks the relative-path SSRF bypass.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-schema-import-resolvers",
+      "name": "Hardened schema import URI resolvers",
+      "description": "URI resolvers for AAR and WAR deployments block HTTP/HTTPS/FTP/JAR/file scheme resolution to prevent SSRF via xmlschema-core's DefaultURIResolver.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-safe-object-input-stream",
+      "name": "SafeObjectInputStream deserialization whitelist",
+      "description": "The remaining use of Java serialization (context externalization) goes through the whitelist-based SafeObjectInputStream, restricted to known Axis2 context classes.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-clustering-removed",
+      "name": "Clustering module removed",
+      "description": "The entire Tribes-based clustering module (inter-node communication with unvalidated deserialization enabling RCE) has been removed from the codebase in 40+ files (AXIS2-6097).",
+      "category": "corrective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-fileupload2",
+      "name": "commons-fileupload2 file count limits",
+      "description": "Migration from commons-fileupload 1.x to commons-fileupload2 in 2.0.0 (driven by CVE-2023-24998) enforces file count limits, preventing unbounded-file-count DoS. MTOM/attachment handling uses streaming processing with TempFileManager cleanup.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-dispatch-validation",
+      "name": "Dispatcher and method name validation",
+      "description": "Dispatchers validate service existence and unknown services return a fault; JSON-RPC method names are validated against deployed operations and unknown methods return a fault. The optional ?fields= query parameter validates field names against the declared response type with no dynamic class loading.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-fault-detail-suppression",
+      "name": "Fault detail suppression",
+      "description": "sendStacktraceDetailsWithFaults defaults to false, keeping stack traces out of fault messages.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-http-entry"
+      ]
+    },
+    {
+      "bom-ref": "control-fuzz-testing",
+      "name": "Fuzz testing of parsers",
+      "description": "Jazzer-based fuzzers cover XML, JSON, HTTP header, and URL parsers, with 45M+ iterations and zero crashes or security findings; the JSON parser has 1.7M+ iterations with Gson nesting limits. Axis2/C has an active OSS-Fuzz integration.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-container-authentication",
+      "name": "Authenticate endpoints at the container or module level",
+      "description": "Secure endpoints via the servlet container, servlet filters, or engaged security modules (Rampart); Axis2 ships no built-in authentication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-deployment-directories",
+      "name": "Protect hot-deployment directories",
+      "description": "Restrict filesystem write access to WEB-INF/services/ and WEB-INF/modules/, since anyone who can write there can deploy arbitrary code.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-deployment"
+      ]
+    },
+    {
+      "bom-ref": "control-expose-service-metadata",
+      "name": "Control metadata exposure via exposeServiceMetadata",
+      "description": "Service listing, WSDL, and schema disclosure are controllable via the exposeServiceMetadata parameter in axis2.xml (default true).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-http-entry"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-raw-transports",
+      "name": "Restrict raw TCP/UDP transports to trusted networks",
+      "description": "The TCP and UDP transports provide no encryption or authentication and are for trusted networks only.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-pipeline"
+      ]
+    }
+  ]
+}

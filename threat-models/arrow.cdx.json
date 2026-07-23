@@ -1,0 +1,212 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-arrow",
+      "name": "Apache Arrow",
+      "description": "Columnar in-memory data format and libraries. The security document addresses risks when consuming Arrow data from untrusted sources in standardized serialized formats (IPC streams), excluding implementation-specific concerns like API misuse. It addresses two audiences: users (developers building libraries or applications on Arrow APIs) and implementors (library developers providing abstractions over the Arrow formats and protocols).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://arrow.apache.org/docs/dev/format/Security.html",
+          "comment": "Source security document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://arrow.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "arrow"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://arrow.apache.org/docs/dev/format/Security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-invalid-columnar-data",
+        "name": "Memory access violations from invalid columnar data",
+        "description": "Binary Arrow representations can convert buffer contents into process memory pointers; malformed data may cause memory access violations or expose confidential information. For example, reading a Binary array requires valid offsets from the offsets buffer, and invalid offsets could access memory beyond the data buffer's intended range. Arrow implementations often assume inputs follow the specification to provide high-speed processing.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-validate-untrusted-data",
+          "control-validation-apis",
+          "control-robustness-testing"
+        ]
+      },
+      {
+        "bom-ref": "threat-uninitialized-data-disclosure",
+        "name": "Information disclosure via uninitialized buffer slots",
+        "description": "Null values in Arrow arrays create unused buffer slots that may retain sensitive residual data from previous process allocations, risking information disclosure when serialized data reaches untrusted parties.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-zero-initialize-buffers"
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-c-data-interface",
+        "name": "Consumption of C Data Interface structures from untrusted producers",
+        "description": "The C Data Interface contains raw process address space pointers that cannot be validated for legitimacy; validation is structurally impossible. Users must never consume C Data Interface structures from untrusted producers. Implementors may assume trusted producers while still validating structural soundness (correct buffer counts, appropriate datatypes).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-trusted-c-data-producers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ipc-metadata-abuse",
+        "name": "Invalid IPC metadata (out-of-bounds offsets, invalid Flatbuffers pointers)",
+        "description": "The IPC serialization format carries the columnar-format risks plus metadata-specific vulnerabilities: buffer offsets and sizes may exceed stream boundaries, and Flatbuffers metadata may contain invalid pointers.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-validate-untrusted-data",
+          "control-validation-apis",
+          "control-robustness-testing"
+        ]
+      },
+      {
+        "bom-ref": "threat-decompression-bomb",
+        "name": "Decompression bomb denial of service via optional IPC compression",
+        "description": "Optional compression in the IPC format enables decompression bomb denial-of-service attacks.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-memory-allocation-controls",
+          "control-validate-untrusted-data"
+        ]
+      },
+      {
+        "bom-ref": "threat-extension-type-deserialization",
+        "name": "Malicious payloads reaching extension type deserialization hooks",
+        "description": "Extension types use deserialization hooks automatically invoked when reading external data; these hooks receive potentially malicious payloads and therefore require robust metadata formats. Unsafe formats like Python pickle or R serialize() must be avoided.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-robust-extension-metadata"
+        ]
+      },
+      {
+        "bom-ref": "threat-non-arrow-formats",
+        "name": "Security risks of non-Arrow formats",
+        "description": "Third-party formats like Apache Parquet present different security profiles requiring consultation of the respective project documentation; they are outside the scope of this document.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-validate-untrusted-data",
+      "name": "Explicitly validate Arrow data received from untrusted sources",
+      "description": "Applications should explicitly validate any Arrow data received in serialized form from untrusted sources, using the appropriate validation APIs when reading an untrusted IPC stream, since implementations assume inputs follow the specification for high-speed processing.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-validation-apis",
+      "name": "Provide dedicated validation APIs with well-defined errors",
+      "description": "Implementors should provide dedicated validation APIs returning well-defined errors rather than crashing on invalid input, and execute dedicated validation checks during IPC decoding with error reporting without crashes.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-zero-initialize-buffers",
+      "name": "Zero-initialize buffers before external transmission",
+      "description": "Zero-initialize all buffers before external transmission, even logically irrelevant slots. Skipping initialization as a performance optimization is acceptable only when uninitialized values are cleared before passing data to other systems.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-trusted-c-data-producers",
+      "name": "Only consume the C Data Interface from trusted producers",
+      "description": "Never consume C Data Interface structures from untrusted producers; implementors should assume trusted producers while validating structural soundness (correct buffer counts, appropriate datatypes).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-memory-allocation-controls",
+      "name": "Offer customizable memory allocation controls",
+      "description": "Implementors should offer customizable memory allocation controls during file and stream reading, limiting the effect of decompression bombs and oversized allocations.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-robust-extension-metadata",
+      "name": "Choose robust metadata serialization formats for extension types",
+      "description": "When designing an extension type, choose a metadata serialization format that is robust against potentially malicious data; avoid unsafe formats like Python pickle or R serialize().",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-robustness-testing",
+      "name": "Test against invalid data and fuzz continuously",
+      "description": "Exercise APIs against invalid data categories (malformed offsets, invalid UTF-8 in strings). The arrow-testing repository provides gold integration files validating IPC compliance and fuzz regression files from discovered vulnerabilities. Automated fuzzing combined with runtime instrumentation (Address Sanitizer) is recommended, testing both IPC decoding and validation routines.",
+      "category": "detective",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,503 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-hbase",
+      "name": "Apache HBase",
+      "description": "Distributed, scalable big-data store on top of HDFS. The security model's foundational assumption is that operators configure authentication (Kerberos/SASL) and authorization (ACLs, visibility labels) for production; HBase ships with security disabled by design for development and testing only, and no realistic production deployment runs HBase without security configured.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://hbase.apache.org/security-model/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hbase.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hbase"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://hbase.apache.org/security-model/"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-hbase",
+      "name": "HBase cluster deployment",
+      "description": "Trust boundaries described by the security model: a trusted network perimeter keeps services off the public internet; server-side processes (HMaster, RegionServers) and ZooKeeper/HDFS operate with cluster-internal mutual trust; HDFS is trusted storage; clients cross an authentication/authorization boundary when security is configured; optional REST/Thrift gateways and administrative web UIs inherit the same trust model.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-cluster-processes",
+          "type": "service",
+          "name": "HMaster and RegionServers",
+          "description": "Server-side processes that, together with their communication with ZooKeeper and HDFS, operate with mutual trust within a properly configured cluster; compromising any single process is equivalent to compromising the entire cluster.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-hdfs-storage",
+          "type": "data-store",
+          "name": "HDFS / compatible storage",
+          "description": "HDFS, compatible distributed filesystems, or S3-compatible cloud storage as the persistent layer. Access controls on the underlying storage must be correctly configured; an attacker with direct write access can corrupt data regardless of HBase-level controls.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-gateways",
+          "type": "gateway",
+          "name": "REST and Thrift gateways",
+          "description": "Optional services providing HTTP and Thrift protocol access. They do not authenticate in default configurations; production requires SPNEGO/Kerberos (REST) or SASL (Thrift) and/or network restrictions. The REST gateway's hbase.rest.readonly flag is administrator-controlled.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-web-uis",
+          "type": "endpoint",
+          "name": "Server web UIs",
+          "description": "Administrative monitoring interfaces designed for trusted network environments; version information, configuration properties, table metadata, and operational metrics shown there are not sensitive within this model. SPNEGO or LDAP authentication is optional, and privileged servlets can be restricted to designated administrators.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-coprocessors",
+          "type": "module",
+          "name": "Coprocessors",
+          "description": "Trusted server-side extensions that execute within HBase server processes with full server-level privileges; loading a coprocessor is functionally equivalent to granting complete server-level access. Loading is controlled by server-side configuration, table descriptors, and the CoprocessorWhitelistMasterObserver.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-clients",
+          "type": "actor",
+          "name": "HBase clients",
+          "description": "Network clients of the RPC interfaces and gateways. With security configured they are authenticated via Kerberos/SASL and authorized via ACLs; with security unconfigured, any network-accessible client can perform any operation (expected development/test behavior).",
+          "zone": "zone-trusted-network"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-public-internet",
+          "name": "Public internet",
+          "type": "trust",
+          "description": "Untrusted networks. HBase services should never be directly exposed here; doing so is operator misconfiguration."
+        },
+        {
+          "bom-ref": "zone-trusted-network",
+          "name": "Trusted network environment",
+          "type": "trust",
+          "description": "Private datacenter or configured cloud VPC inside the operator's firewalls, security groups, and network segmentation, where clients reside."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Cluster-internal trust domain",
+          "type": "trust",
+          "description": "HMaster, RegionServers, ZooKeeper, HDFS, gateways, and web UIs; mutual trust within a properly configured cluster, with Kerberos/SASL inter-process authentication ensuring only legitimate members participate."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-network-perimeter",
+          "name": "Network perimeter",
+          "type": "trust",
+          "zones": [
+            "zone-public-internet",
+            "zone-trusted-network"
+          ]
+        },
+        {
+          "bom-ref": "boundary-client",
+          "name": "Client boundary",
+          "type": "trust",
+          "zones": [
+            "zone-trusted-network",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Operators configure authentication and authorization for production; the shipped default (security disabled) exists for development and testing only."
+        },
+        {
+          "description": "HBase is deployed in a trusted network environment (private datacenter or configured cloud VPC) behind operator-implemented firewalls, security groups, and network segmentation."
+        },
+        {
+          "description": "Access controls on the underlying HDFS or S3-compatible storage are correctly configured; the storage layer is trusted."
+        },
+        {
+          "description": "Identity management is delegated to external systems (Kerberos, LDAP); username enumeration is an authentication-layer concern."
+        },
+        {
+          "description": "Transport encryption (TLS/SSL) for RPC, web UIs, and gateways is supported but optional and deployment-dependent; forgoing intra-cluster encryption in a physically secured datacenter can be reasonable, while cloud environments should implement it."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass",
+        "description": "Circumventing configured Kerberos/SASL authentication to gain access without valid credentials is a valid vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes"
+        ],
+        "mitigations": [
+          "control-kerberos-sasl-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authorization bypass or privilege escalation",
+        "description": "An authenticated user performing operations beyond their ACL permissions, including gaining administrative or superuser capabilities, is a valid vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes"
+        ],
+        "mitigations": [
+          "control-acls-visibility-labels"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthorized-data-modification",
+        "name": "Data corruption or loss by users without write access",
+        "description": "Unauthorized modification or deletion of data by users lacking write access, when ACLs are configured, is a valid vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes",
+          "asset-hdfs-storage"
+        ],
+        "mitigations": [
+          "control-acls-visibility-labels"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-user-data-access",
+        "name": "Cross-user data access in violation of ACLs or visibility labels",
+        "description": "An authenticated user accessing other users' data in violation of configured ACLs or visibility labels is a valid vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes"
+        ],
+        "mitigations": [
+          "control-acls-visibility-labels"
+        ]
+      },
+      {
+        "bom-ref": "threat-rce-non-admin",
+        "name": "Remote code execution by non-administrative users",
+        "description": "Achieving arbitrary code execution by an authenticated non-administrative user, when coprocessor loading is properly restricted, is a valid vulnerability. (Coprocessor loading by appropriately-permissioned administrators is a feature, not a vulnerability.)",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes",
+          "asset-coprocessors"
+        ],
+        "mitigations": [
+          "control-coprocessor-restriction"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-exposure-logs",
+        "name": "Credential exposure in logs",
+        "description": "Server logs containing authentication credentials, secrets, or sensitive material accessible to unauthorized users is a valid vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes"
+        ]
+      },
+      {
+        "bom-ref": "threat-unsecured-configuration",
+        "name": "Attacks requiring an unsecured (default) configuration",
+        "description": "Issues requiring unconfigured authentication/authorization as a prerequisite are invalid reports: the default configuration exists for development only, and reports describing expected behavior in intentionally unsecured configurations are rejected. This includes unauthenticated REST/Thrift gateway access when authentication has not been configured.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-cluster-processes",
+          "asset-gateways"
+        ],
+        "mitigations": [
+          "control-kerberos-sasl-authentication",
+          "control-gateway-authentication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-single-process-compromise",
+        "name": "Cluster compromise via any single server process",
+        "description": "All server-side processes and their communication with ZooKeeper and HDFS operate with mutual trust within a properly configured cluster; compromising any single process is equivalent to compromising the entire cluster. Similarly, issues requiring modification of hbase-site.xml or other server files constitute host-level access outside HBase's security boundaries.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-processes"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-direct-storage-access",
+        "name": "Data corruption via direct storage access",
+        "description": "An attacker with direct write access to the underlying storage (HDFS, S3-compatible) can corrupt data regardless of HBase-level controls; access controls on the storage layer are the operator's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-hdfs-storage"
+        ],
+        "mitigations": [
+          "control-storage-access-controls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-actions",
+        "name": "Authorized administrator actions",
+        "description": "Superusers and global administrators may perform any cluster operation by design, including coprocessor loading, schema modification, and data access; the ability to load coprocessors via table descriptors is a feature when schema modification is restricted by ACLs.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-coprocessors"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-webui-information-disclosure",
+        "name": "Administrative interface information disclosure",
+        "description": "Version information, configuration details, table metadata, or operational metrics visible in web UIs accessed from trusted networks are not sensitive within HBase's security model; version discovery and username enumeration (an external authentication-layer concern) are likewise out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-web-uis"
+        ],
+        "mitigations": [
+          "control-webui-authentication"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-public-internet-exposure",
+        "name": "Exposure of HBase services to untrusted networks",
+        "description": "Placing HBase services directly on the public internet without firewalls or VPNs represents operator misconfiguration, not an HBase vulnerability; the deployment assumes a trusted network environment.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-cluster-processes",
+          "asset-gateways",
+          "asset-web-uis"
+        ],
+        "mitigations": [
+          "control-network-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-network-perimeter",
+        "boundary": "boundary-network-perimeter",
+        "name": "Network perimeter trust boundary",
+        "description": "HBase assumes a trusted network environment; services are not directly exposed to the public internet, and operators implement firewalls, security groups, and network segmentation.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-public-internet-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-network-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-client",
+        "boundary": "boundary-client",
+        "name": "Client trust boundary",
+        "description": "With security configured, Kerberos/SASL verifies client identity before operations commence and ACLs control which authenticated users may perform which operations; unauthenticated clients are rejected. With security unconfigured, any network-accessible client can perform any operation (expected development/test behavior). Gateways inherit this model.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authorization-bypass",
+          "threat-cross-user-data-access",
+          "threat-rce-non-admin",
+          "threat-unsecured-configuration"
+        ],
+        "controlsAtBoundary": [
+          "control-kerberos-sasl-authentication",
+          "control-acls-visibility-labels",
+          "control-gateway-authentication",
+          "control-tls-transport"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-kerberos-sasl-authentication",
+      "name": "Configure Kerberos/SASL authentication",
+      "description": "Configure Kerberos authentication and SASL for production so client identity is verified before operations commence and only legitimate members participate in inter-process communication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client"
+      ]
+    },
+    {
+      "bom-ref": "control-acls-visibility-labels",
+      "name": "Configure ACLs and visibility labels",
+      "description": "Configure Access Control Lists and visibility labels so authenticated users can only perform authorized operations on authorized resources; the ACL Matrix documents the operations-to-permissions mapping.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client"
+      ]
+    },
+    {
+      "bom-ref": "control-gateway-authentication",
+      "name": "Authenticate or restrict the REST and Thrift gateways",
+      "description": "Configure SPNEGO/Kerberos for the REST gateway and SASL for the Thrift gateway, and/or restrict network access; the REST gateway's hbase.rest.readonly flag is an additional administrator-controlled restriction.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-gateways"
+      ]
+    },
+    {
+      "bom-ref": "control-coprocessor-restriction",
+      "name": "Restrict coprocessor loading",
+      "description": "Administrators control coprocessor loading through server-side configuration (hbase.coprocessor.region.classes, hbase.coprocessor.master.classes, hbase.coprocessor.regionserver.classes) and table descriptors; the CoprocessorWhitelistMasterObserver restricts which coprocessor JARs may load, and configured authorization limits who can modify table descriptors.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-coprocessors"
+      ]
+    },
+    {
+      "bom-ref": "control-webui-authentication",
+      "name": "Optionally authenticate web UIs and restrict privileged servlets",
+      "description": "Web UIs can optionally be protected with SPNEGO or LDAP authentication, and privileged servlets (logs, configuration, metrics, administrative endpoints) can be restricted to designated administrators.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-web-uis"
+      ]
+    },
+    {
+      "bom-ref": "control-network-isolation",
+      "name": "Keep services behind a trusted network perimeter",
+      "description": "Deploy in a private datacenter or configured cloud VPC; do not expose services directly to the public internet; implement appropriate firewalls, security groups, and network segmentation.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-network-perimeter"
+      ]
+    },
+    {
+      "bom-ref": "control-storage-access-controls",
+      "name": "Configure access controls on the underlying storage",
+      "description": "Correctly configure access controls on HDFS, compatible distributed filesystems, or S3-compatible cloud storage, since the persistent layer is trusted and direct write access defeats HBase-level controls.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-hdfs-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-transport",
+      "name": "Enable transport encryption where the deployment warrants it",
+      "description": "TLS/SSL for RPC, web UIs, and gateways is supported and documented but optional; cloud environments should implement it, while physically secured private datacenters may reasonably forgo intra-cluster encryption. This decision does not affect the production requirement for authentication and authorization.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client"
+      ]
+    }
+  ]
+}

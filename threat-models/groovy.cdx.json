@@ -1,0 +1,480 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-groovy",
+      "name": "Apache Groovy",
+      "description": "General-purpose programming and scripting language for the JVM, consumed as a library, runtime, and command-line toolchain (not a network service). Compiling and running the code it is given is the entire product: everything on the language's side of the trust boundary runs with the full authority of the host JVM, by design, and Groovy is not a sandbox. The decisive boundary is data vs code: untrusted input treated as data (JSON/XML/YAML/TOML/CSV parsers, SQL bind parameters) is in model; input the application chooses to compile, evaluate, or deserialize is out of model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/groovy/blob/master/THREAT_MODEL.md",
+          "comment": "Source threat model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://groovy-lang.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "groovy"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/groovy/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/groovy/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-groovy",
+      "name": "Groovy embedded in an application",
+      "description": "Groovy as embedded runtime, dynamic evaluation host, build/compile toolchain, and CLI tools. The decisive trust boundary is data vs code: data parsers are the highest-value review surface because they are meant to consume untrusted bytes; everything routed to evaluation APIs is trusted by definition.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-data-parsers",
+          "type": "component",
+          "name": "Data parsers (JsonSlurper, XmlSlurper/XmlParser, YAML/TOML/CSV slurpers)",
+          "description": "Parsers advertised to consume untrusted documents; they must not silently turn data into code, types, or information disclosure beyond the format, and must be robust against small crafted documents causing disproportionate blow-up.",
+          "zone": "zone-groovy-runtime"
+        },
+        {
+          "bom-ref": "asset-sql-api",
+          "type": "component",
+          "name": "groovy.sql.Sql",
+          "description": "SQL convenience API whose GString query forms convert placeholders into JDBC PreparedStatement bind parameters. Only the GString/bind forms parameterize; hand-concatenated strings, Sql.expand identifiers, and DataSet table/column names are not protected.",
+          "zone": "zone-groovy-runtime"
+        },
+        {
+          "bom-ref": "asset-evaluation-apis",
+          "type": "component",
+          "name": "Evaluation and compilation APIs (GroovyShell, Eval, GroovyClassLoader, GroovyScriptEngine, JSR-223, template engines)",
+          "description": "APIs that run Groovy decided at runtime. Anything they are given runs (and even compiles, via global AST transforms, @ASTTest, and static initializers) with full JVM authority; feeding them untrusted input is out of model.",
+          "zone": "zone-groovy-runtime"
+        },
+        {
+          "bom-ref": "asset-temp-artifacts",
+          "type": "data",
+          "name": "Temporary compilation artifacts",
+          "description": "Temp directories and files written by Groovy tooling (compiled stubs, generated Java source, joint-compilation staging); created owner-only via NIO Files.createTempDirectory (the fix class for CVE-2020-17521).",
+          "zone": "zone-shared-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-input",
+          "name": "Untrusted data suppliers",
+          "type": "trust",
+          "description": "End users of an embedding application who supply JSON/XML/YAML/TOML/CSV documents, SQL parameter values, and other strings routed to Groovy as data. They cannot change the application's classpath, configuration, or source."
+        },
+        {
+          "bom-ref": "zone-groovy-runtime",
+          "name": "Embedding application and Groovy runtime",
+          "type": "trust",
+          "description": "The host JVM, the embedding application's code, the classpath, AST transforms, extension modules, CompilerConfiguration, and groovy.* system properties; all developer/operator-controlled and trusted."
+        },
+        {
+          "bom-ref": "zone-shared-host",
+          "name": "Shared host filesystem",
+          "type": "trust",
+          "description": "Local users on a shared host who can read predictable or world-readable artifacts that Groovy tooling writes, subject to OS permissions."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-data-parsing",
+          "name": "Untrusted data into Groovy parsers and bind APIs",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-input",
+            "zone-groovy-runtime"
+          ]
+        },
+        {
+          "bom-ref": "boundary-local-filesystem",
+          "name": "Groovy tooling artifacts on a shared host",
+          "type": "trust",
+          "zones": [
+            "zone-groovy-runtime",
+            "zone-shared-host"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The JVM hosting Groovy is trusted and adequately patched; Groovy inherits the JDK's security posture (including removal of the SecurityManager) and the JVM's memory safety."
+        },
+        {
+          "description": "The Groovy artifacts being run are authentic: official releases are GPG-signed and checksummed, the build pins dependencies with Gradle dependency verification, and a CycloneDX SBOM is published per module."
+        },
+        {
+          "description": "The classpath, CompilerConfiguration, registered AST transforms, extension modules, and groovy.* system properties reflect the developer's/operator's intent, not an attacker's."
+        },
+        {
+          "description": "CLI tools are run by the local user with their own privileges on files they chose; the tools are not a privilege boundary between users on the host."
+        },
+        {
+          "description": "Where Groovy writes to the filesystem, the OS temp directory is not itself adversarial beyond what owner-only permissions defend against."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-parser-type-instantiation",
+        "name": "Document-controlled type instantiation by a data parser",
+        "description": "A violation of the data-only parsing property: an untrusted JSON/XML/YAML/TOML/CSV document causing instantiation of a class it names. Groovy's slurpers map documents to plain Map/List/String/Number/Boolean/null values with no polymorphic/default-typing mode; the YAML path uses Jackson's untyped binding, not SnakeYAML's Yaml.load(), so tag-driven type instantiation is not reachable. A default-configuration violation would be a genuine vulnerability (CWE-502, indicative severity Critical).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-parsers"
+        ],
+        "mitigations": [
+          "control-data-only-parsing"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XXE or entity expansion in default-configured XML parsing",
+        "description": "Default-configured XmlParser/XmlSlurper/XmlUtil parsing resolving an external entity or expanding a DTD bomb would violate the hardened-XML property (CWE-611 / CWE-776, indicative severity High). The condition is allowDocTypeDeclaration left at its default false; setting it true re-introduces XXE risk for untrusted XML.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-parsers"
+        ],
+        "mitigations": [
+          "control-hardened-xml-defaults"
+        ]
+      },
+      {
+        "bom-ref": "threat-sql-injection-gstring",
+        "name": "SQL injection through the GString bind form",
+        "description": "A GString placeholder in a groovy.sql.Sql GString query reaching the JDBC driver as literal SQL instead of a bind parameter would violate the parameterized-SQL property (CWE-89, indicative severity High). Hand-concatenated String queries are not covered and remain the application's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sql-api"
+        ],
+        "mitigations": [
+          "control-parameterized-sql"
+        ]
+      },
+      {
+        "bom-ref": "threat-temp-artifact-exposure",
+        "name": "World-readable temporary artifacts on a shared host",
+        "description": "A Groovy-created temp artifact being world-readable or writable would let a local user on a shared host read or act on it (the class of issue behind CVE-2020-17521; CWE-377 / CWE-378, indicative severity Medium, local).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-temp-artifacts"
+        ],
+        "mitigations": [
+          "control-owner-only-temp-artifacts"
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-resource-exhaustion",
+        "name": "Disproportionate resource exhaustion in Groovy's own data parsers",
+        "description": "A small crafted document driving a StackOverflowError, unbounded allocation, or non-linear blow-up in JsonSlurper, XmlSlurper/XmlParser, or the YAML/TOML/CSV slurpers is a robustness failure in code whose job is to be safe on untrusted input; such reports are treated as valid hardening (not out of model). All the parsers now bound nesting depth by default: XML via FEATURE_SECURE_PROCESSING and disabled DOCTYPE, the Jackson-backed slurpers via StreamReadConstraints, and JsonSlurper via an explicit depth cap from 6.0.0 (GROOVY-12064). Memory cost merely proportional to a large document's own size is the ordinary bound-your-input case instead.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-parsers"
+        ],
+        "mitigations": [
+          "control-json-nesting-cap",
+          "control-hardened-xml-defaults",
+          "control-bound-untrusted-input"
+        ]
+      },
+      {
+        "bom-ref": "threat-groovy-side-injection",
+        "name": "A Groovy component routing untrusted data into an evaluator unrequested",
+        "description": "The in-scope mirror of the templates-are-code rule: Groovy is at fault if a Groovy-shipped GDK method, builder, or parser took a value the developer passed purely as data and silently compiled or evaluated it as a GString/expression/script. That would be a genuine server-side template/expression injection in Groovy, as opposed to the developer choosing to call Eval/GroovyShell/a template engine on untrusted input, which is out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-parsers",
+          "asset-evaluation-apis"
+        ]
+      },
+      {
+        "bom-ref": "threat-executing-supplied-code",
+        "name": "Executing or compiling attacker-influenced source, scripts, or templates",
+        "description": "Anything relying on the application passing attacker-influenced text to Eval, GroovyShell.evaluate, GroovyClassLoader.parseClass, GroovyScriptEngine, JSR-223 eval, or a template engine is out of model: templates are code, and rendering an attacker-controlled template is RCE by construction. This covers compiling, parsing, or statically analyzing such text too, since compile-time metaprogramming executes during compilation. Groovlets/template servlets run operator-deployed code and are covered by the same rule.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-evaluation-apis"
+        ],
+        "mitigations": [
+          "control-no-untrusted-code",
+          "control-external-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-deserialization",
+        "name": "Deserializing untrusted bytes",
+        "description": "Java serialization of attacker-controlled bytes is unsafe by the JDK's own statements; gadget chains or resource exhaustion built from a crafted object graph require the application to call ObjectInputStream.readObject on untrusted bytes, which is already game over regardless of Groovy. Within that baseline, the capability-vs-data rule applies: a deserialization path granting a capability beyond reconstructing declared state (like the MethodClosure resolve path, gated after CVE-2015-3253 and CVE-2016-6814) is valid hardening; arbitrary-graph DoS without a named capability primitive stays out of model.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-serialization-capability-gating",
+          "control-no-untrusted-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-sandbox-absence",
+        "name": "Absence of a sandbox and SecureASTCustomizer bypasses",
+        "description": "Groovy provides no isolation of executed code from the JVM or host; reports amounting to \"Groovy code can touch the filesystem/network/processes\" are out of model, as are novel routes to code execution for an actor who can already run arbitrary JVM code (equivalent harm). SecureASTCustomizer is a best-effort grammar lockdown whose own javadoc disclaims completeness; demonstrating a bypass is expected, not a vulnerability. @ThreadInterrupt/@TimedInterrupt are cooperative, removable, and no defense against malicious scripts.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-evaluation-apis"
+        ],
+        "mitigations": [
+          "control-external-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-grape-malicious-artifact",
+        "name": "Malicious dependency resolution via @Grab/Grape",
+        "description": "Resolving and loading dependencies a script declares is the feature; pulling a malicious artifact because the script or its resolver configuration said to is developer/operator responsibility. Trusted-input surfaces generally (classpath, global AST transforms, extension modules, CompilerConfiguration, groovy.* properties, ~/.groovy) are out of model: an attacker who can alter them already has code execution.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-disable-grape"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-downstream-misuse",
+        "name": "Injection and resource exhaustion built by the embedding application",
+        "description": "Command injection (and option injection) from app-built command strings, SSRF from app-built URLs, path traversal from app-built paths, ReDoS from app-chosen patterns, hash-flooding DoS from untrusted map keys, and resource exhaustion from unbounded untrusted input are downstream responsibilities Groovy does not defend against on the application's behalf. This includes prompt injection aimed at AI agents via faithfully-reproduced tool/build/test output, a supply-chain and agent-toolchain concern, not a Groovy vulnerability.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-bound-untrusted-input",
+          "control-no-untrusted-code"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-data-parsing",
+        "boundary": "boundary-data-parsing",
+        "name": "Data-parsing trust boundary",
+        "description": "The highest-value review surface: untrusted actors may supply documents and bind values to code that is meant to consume untrusted bytes. Groovy must not silently turn this data into code, types, or information disclosure beyond the format, and its own parsers must be robust against small adversarial documents.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-parser-type-instantiation",
+          "threat-xxe",
+          "threat-sql-injection-gstring",
+          "threat-parser-resource-exhaustion",
+          "threat-groovy-side-injection"
+        ],
+        "controlsAtBoundary": [
+          "control-data-only-parsing",
+          "control-hardened-xml-defaults",
+          "control-parameterized-sql",
+          "control-json-nesting-cap",
+          "control-bound-untrusted-input"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-local-filesystem",
+        "boundary": "boundary-local-filesystem",
+        "name": "Shared-host filesystem trust boundary",
+        "description": "A local user on a shared host can read predictable or world-readable artifacts that Groovy tooling writes; Groovy defends this boundary with owner-only temp artifact permissions.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-temp-artifact-exposure"
+        ],
+        "controlsAtBoundary": [
+          "control-owner-only-temp-artifacts"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-parameterized-sql",
+      "name": "Parameterized SQL for the GString form (P1)",
+      "description": "groovy.sql.Sql converts ${...} placeholders in its GString query forms into JDBC PreparedStatement bind parameters rather than string concatenation, so the idiomatic sql.rows(\"select * from p where name = $name\") is parameterized.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-sql-api"
+      ]
+    },
+    {
+      "bom-ref": "control-hardened-xml-defaults",
+      "name": "Hardened XML parsing by default (P2)",
+      "description": "XmlParser, XmlSlurper, XmlUtil, and the factories created via groovy.xml.FactorySupport enable FEATURE_SECURE_PROCESSING, disable external entity resolution, and disallow DOCTYPE declarations by default, mitigating XXE and entity expansion (billion laughs). Keep allowDocTypeDeclaration = false for untrusted documents.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-data-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-data-only-parsing",
+      "name": "Data-only structured-data parsing (P3)",
+      "description": "The structured-data slurpers map untrusted documents to plain Map/List/String/Number/Boolean/null values; none has a polymorphic/default-typing mode that instantiates document-named classes, and the typed parseAs overloads bind only to a caller-supplied type with no Jackson default typing.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-data-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-owner-only-temp-artifacts",
+      "name": "Owner-only temporary artifacts (P4)",
+      "description": "Temp directories created by Groovy tooling (e.g. FileSystemCompiler joint-compilation staging) use NIO Files.createTempDirectory, yielding owner-only permissions; this is the fix class for CVE-2020-17521.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-temp-artifacts"
+      ]
+    },
+    {
+      "bom-ref": "control-json-nesting-cap",
+      "name": "JsonSlurper nesting-depth cap",
+      "description": "From 6.0.0, JsonSlurper's recursive-descent parsers enforce a Groovy-level nesting-depth cap (default 1000, configurable via setMaxNestingDepth or -Dgroovy.json.maxNestingDepth), throwing a JsonException rather than overflowing the stack (GROOVY-12064). On the 3.0.x/4.0.x/5.0.x branches, depth-bounding untrusted JSON remains a downstream responsibility.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-data-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-serialization-capability-gating",
+      "name": "Gating of serialization capability primitives",
+      "description": "Deserialization paths that grant a capability beyond reconstructing declared state are gated rather than removed: the MethodClosure RCE fixes (CVE-2015-3253, CVE-2016-6814) gated the resolve path behind MethodClosure.ALLOW_RESOLVE (default false, throwing on deserialize), closing the capability while keeping legitimate data serialization intact.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-no-untrusted-code",
+      "name": "Do not compile, evaluate, or deserialize untrusted input",
+      "description": "Treat scripts, templates, and serialized object graphs as code. Never build SQL, shell commands, or Process invocations from untrusted input (even the String[]/List argument form is exposed to option injection); validate and encode at your own output boundaries, including output consumed by AI agents.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-evaluation-apis"
+      ]
+    },
+    {
+      "bom-ref": "control-external-isolation",
+      "name": "Layer real isolation outside the language for partially-trusted scripts",
+      "description": "If partially-trusted scripts must run, use a separate process/JVM, an OS/container sandbox (seccomp, namespaces), least-privilege credentials, and network-egress controls. Treat SecureASTCustomizer as one hardening layer, never the boundary.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-evaluation-apis"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-grape",
+      "name": "Keep @Grab/Grape off when processing untrusted scripts",
+      "description": "Grape resolution is enabled in the runtime but off in AI/automation tooling via -Dgroovy.grape.enable=false; keep it off for untrusted scripts and keep the resolver configuration and classpath trusted.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-bound-untrusted-input",
+      "name": "Bound untrusted input before parsing",
+      "description": "Groovy imposes no universal limits on collection size, regex backtracking, hash-key cardinality, or numeric magnitude; bound document depth, size, and complexity before handing untrusted input to parsers or GDK operations, and use a streaming/Jackson-based parser for very large documents.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-data-parsing"
+      ]
+    },
+    {
+      "bom-ref": "control-coordinated-maintenance",
+      "name": "Coordinated security maintenance on supported branches (P5)",
+      "description": "Supported branches (3.0.x, 4.0.x, 5.0.x, and pre-release lines per SECURITY.md) receive security fixes and coordinated disclosure; users should stay on a supported version. Issues confined to @Incubating APIs or pre-release builds are fixed best-effort at reduced priority.",
+      "category": "corrective",
+      "status": "implemented"
+    }
+  ]
+}

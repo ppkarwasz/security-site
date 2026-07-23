@@ -1,0 +1,311 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-ignite",
+      "name": "Apache Ignite",
+      "description": "Distributed database and computing platform (Ignite 3). Security comprises two independent layers: an authentication layer validating client identity through configured providers, and a transport encryption layer protecting communication channels (node-to-node, client-to-node, and REST API) with SSL/TLS. The security model assumes network perimeter protection as a prerequisite.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://ignite.apache.org/docs/ignite3/3.1.0/understand/architecture/security#security-model",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ignite.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ignite"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://ignite.apache.org/docs/ignite3/3.1.0/understand/architecture/security#security-model"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ignite",
+      "name": "Ignite 3 cluster deployment",
+      "description": "Architecture described by the Ignite 3 security documentation: cluster nodes communicate over node-to-node channels inside a protected subnetwork; external clients connect over client-to-node channels and the REST API; an authentication manager coordinates sequential provider attempts, and three independent SSL configurations govern the distinct communication channels.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-cluster-node",
+          "type": "service",
+          "name": "Cluster node",
+          "description": "Server node of the Ignite 3 cluster. By having access to any cluster node it is possible to perform malicious actions on the cluster; all server node network ports must operate exclusively within protected subnetworks.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-authentication-manager",
+          "type": "component",
+          "name": "Authentication manager",
+          "description": "Coordinates sequential authentication provider attempts; the first successful validation grants access. Built-in basic username/password authentication is configured via cluster settings; custom providers (server-side Authenticator, configuration schema extension, client-side IgniteClientAuthenticator) enable external identity provider, LDAP, or custom credential store integration.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-rest-api",
+          "type": "api",
+          "name": "REST API",
+          "description": "REST endpoints with a separate, independent SSL configuration.",
+          "zone": "zone-cluster"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Protected cluster subnetwork",
+          "type": "trust",
+          "description": "Protected subnetwork (DMZ) in which all server node network ports must operate exclusively."
+        },
+        {
+          "bom-ref": "zone-clients",
+          "name": "External clients",
+          "type": "trust",
+          "description": "Clients connecting over client-to-node connections and the REST API, authenticated by the configured providers."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-node",
+          "name": "Client-to-node connections",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-rest-api",
+          "name": "REST API endpoints",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The security posture assumes network perimeter protection as a prerequisite: all server node network ports operate exclusively within protected subnetworks, and external exposure requires SSL certificate controls from trusted Certification Authorities."
+        },
+        {
+          "description": "The authentication and transport encryption layers function independently, but production environments should activate both."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-compromised-node",
+        "name": "Malicious actions from a compromised cluster node",
+        "description": "By having access to any cluster node it is possible to perform malicious actions on the cluster. There are no protective mechanisms against threats originating from compromised nodes; the model relies on keeping server node ports within protected subnetworks.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-node"
+        ],
+        "mitigations": [
+          "control-protected-subnetwork"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-credentials",
+        "name": "Credential interception with basic authentication over unencrypted transport",
+        "description": "Basic authentication transmits credentials unencrypted when SSL/TLS is not enabled; production deployments mandate encryption enablement.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-authentication-manager"
+        ],
+        "mitigations": [
+          "control-transport-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-access",
+        "name": "Access by clients without validated identity",
+        "description": "Client identity is validated by the configured authentication providers; the authentication manager attempts providers sequentially and the first successful validation grants access. Without authentication enabled, client access is not identity-checked.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-authentication-manager",
+          "asset-cluster-node"
+        ],
+        "mitigations": [
+          "control-authentication-providers",
+          "control-authentication-events"
+        ]
+      },
+      {
+        "bom-ref": "threat-channel-interception",
+        "name": "Interception or tampering of unencrypted communication channels",
+        "description": "Node-to-node cluster communication, client-to-node connections, and REST API endpoints are protected by SSL/TLS only when the corresponding SSL configuration is enabled; each of the three channels is governed by an independent configuration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-node",
+          "asset-rest-api"
+        ],
+        "mitigations": [
+          "control-transport-encryption",
+          "control-mutual-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-no-authorization",
+        "name": "Equivalent resource access for all authenticated users (no authorization)",
+        "description": "Apache Ignite 3 currently provides authentication only. Authorization features (role-based access control, permissions) are not yet implemented; all authenticated users possess equivalent cluster resource access.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-cluster-node"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-node",
+        "boundary": "boundary-client-node",
+        "name": "Client access boundary",
+        "description": "Clients connect using authenticator objects corresponding to configured providers; without SSL/TLS, basic authentication credentials cross this boundary in cleartext.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-unauthenticated-access",
+          "threat-plaintext-credentials",
+          "threat-channel-interception"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication-providers",
+          "control-transport-encryption"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-rest-api",
+        "boundary": "boundary-rest-api",
+        "name": "REST API boundary",
+        "description": "Separate SSL configuration secures REST endpoint access independently.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-channel-interception"
+        ],
+        "controlsAtBoundary": [
+          "control-transport-encryption"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-protected-subnetwork",
+      "name": "Operate server ports only within protected subnetworks",
+      "description": "All server node network ports must operate exclusively within protected subnetworks (DMZ); external exposure requires SSL certificate controls from trusted Certification Authorities.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-cluster-node"
+      ]
+    },
+    {
+      "bom-ref": "control-authentication-providers",
+      "name": "Enable authentication providers",
+      "description": "Configure the built-in basic username/password authentication via cluster settings, or a custom provider (server-side Authenticator, configuration schema extension, and client-side IgniteClientAuthenticator) to integrate an external identity provider, LDAP, or a custom credential store.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-node"
+      ]
+    },
+    {
+      "bom-ref": "control-transport-encryption",
+      "name": "Enable SSL/TLS on all communication channels",
+      "description": "Three independent SSL configurations govern node-to-node cluster communication, client-to-node connections, and REST API endpoints; configuration involves keystore/truststore paths, passwords, cipher specifications, and client authentication requirements (none/optional/required). Production deployments must enable encryption, since basic authentication otherwise transmits credentials unencrypted.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-node",
+        "boundary-rest-api",
+        "asset-cluster-node"
+      ]
+    },
+    {
+      "bom-ref": "control-mutual-tls",
+      "name": "Mutual TLS between cluster members",
+      "description": "Node-to-node SSL deployment with clientAuth=require establishes mutual TLS verification between cluster members.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-cluster-node"
+      ]
+    },
+    {
+      "bom-ref": "control-authentication-events",
+      "name": "Audit authentication events",
+      "description": "Authentication attempts generate auditable events: USER_AUTHENTICATION_SUCCESS and USER_AUTHENTICATION_FAILURE.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-authentication-manager"
+      ]
+    }
+  ]
+}

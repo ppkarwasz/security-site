@@ -1,0 +1,45 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-xmlgraphics",
+      "name": "Apache XML Graphics",
+      "description": "Umbrella project for the Apache Batik (SVG), Apache FOP (XSL-FO formatting), and Apache XML Graphics Commons sub-projects. The referenced security page collects the published vulnerabilities of all sub-projects (SSRF, XXE, and deserialization CVEs in Batik; XXE CVEs in FOP and XML Graphics Commons), explains how to report new security problems privately to the ASF Security Team rather than through the public bug tracker, and states that project vulnerabilities are labeled with CVE identifiers. It documents no threat model, scope, or architecture.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://xmlgraphics.apache.org/security.html",
+          "comment": "Source security page (published vulnerabilities and reporting instructions); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://xmlgraphics.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "xmlgraphics"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://xmlgraphics.apache.org/security.html"
+      },
+      {
+        "name": "asf:security-model-scope",
+        "value": "reporting-and-supported-versions-only"
+      }
+    ]
+  },
+  "threats": {}
+}

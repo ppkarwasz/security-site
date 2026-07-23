@@ -1,0 +1,577 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-jackrabbit",
+      "name": "Apache Jackrabbit",
+      "description": "The original/legacy JCR (JSR 170/283) content repository implementation, distinct from Apache Jackrabbit Oak, in active maintenance for bug and security fixes but not active feature development. Two deployment shapes: an in-process JCR library embedded by a host application, and a network-exposed service where jackrabbit-webdav plus jackrabbit-jcr-server front the repository with a WebDAV servlet (HTTP Basic/Digest authentication, HTTP parsing, and XML parsing of WebDAV bodies). Jackrabbit Oak and jackrabbit-filevault have separate threat models.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jackrabbit/blob/trunk/THREAT_MODEL.md",
+          "comment": "Source security model document (draft, under maintainer review); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://jackrabbit.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jackrabbit"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jackrabbit/blob/trunk/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jackrabbit/trunk/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-jackrabbit",
+      "name": "Jackrabbit deployment shapes",
+      "description": "The two deployment shapes described by the threat model: an embedded in-process JCR library where the host application holds the Repository handle and chooses the security configuration, and a network-exposed shape where HTTP/WebDAV clients authenticate at the servlet layer and WebDAV verbs are translated into JCR operations. Persistence managers write to a filesystem or JDBC database the operator configures and trusts.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-jackrabbit-core",
+          "type": "component",
+          "name": "jackrabbit-core repository",
+          "description": "The legacy repository implementation (JR2 persistence architecture) with the configured LoginModule (JAAS) and AccessManager; includes the SPI layer, JCR commons utilities, and Lucene-based search index.",
+          "zone": "zone-repository"
+        },
+        {
+          "bom-ref": "asset-webdav-stack",
+          "type": "endpoint",
+          "name": "jackrabbit-webdav / jackrabbit-jcr-server WebDAV stack",
+          "description": "WebDAV protocol handling, request routing and authentication glue, and XML parsing of PROPFIND/LOCK/REPORT request bodies; the highest-blast-radius input on the network surface (XXE-class concerns).",
+          "zone": "zone-repository"
+        },
+        {
+          "bom-ref": "asset-persistence-backend",
+          "type": "data-store",
+          "name": "Persistence manager and data store backends",
+          "description": "Filesystem or JDBC persistence managers, FileDataStore or the S3 data store extension (jackrabbit-aws-ext), and the Lucene search index under the repository home; all operator-configured trusted backends.",
+          "zone": "zone-backend"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-embedded-callers",
+          "name": "Host application and JCR sessions",
+          "type": "trust",
+          "description": "Trusted host application code holding the Repository handle, plus untrusted-but-authenticated JCR session principals identified via Repository.login against the configured LoginModule."
+        },
+        {
+          "bom-ref": "zone-network-clients",
+          "name": "HTTP/WebDAV clients",
+          "type": "trust",
+          "description": "Untrusted network clients reaching Jackrabbit through jackrabbit-webdav / jackrabbit-jcr-server, carrying HTTP Basic or Digest credentials."
+        },
+        {
+          "bom-ref": "zone-repository",
+          "name": "Jackrabbit repository",
+          "type": "trust",
+          "description": "jackrabbit-core and the WebDAV/JCR-server stack running in the servlet container or host JVM."
+        },
+        {
+          "bom-ref": "zone-backend",
+          "name": "Trusted backends",
+          "type": "trust",
+          "description": "Persistence managers (filesystem/JDBC), data stores, and the servlet container configuration owned by the trusted operator."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-jcr-api",
+          "name": "JCR API boundary (embedded mode)",
+          "type": "trust",
+          "zones": [
+            "zone-embedded-callers",
+            "zone-repository"
+          ]
+        },
+        {
+          "bom-ref": "boundary-webdav",
+          "name": "WebDAV/HTTP boundary (network mode)",
+          "type": "trust",
+          "zones": [
+            "zone-network-clients",
+            "zone-repository"
+          ]
+        },
+        {
+          "bom-ref": "boundary-persistence",
+          "name": "Persistence backend boundary",
+          "type": "trust",
+          "zones": [
+            "zone-repository",
+            "zone-backend"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-host-application",
+          "party": {
+            "roles": [
+              {
+                "name": "Host application (embedded mode)"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; holds the JCR Repository handle and chooses the security configuration."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-session-principal",
+          "party": {
+            "roles": [
+              {
+                "name": "JCR session principal"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted but authenticated; identified via Repository.login(Credentials) against the configured LoginModule and constrained by the AccessManager."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-webdav-client",
+          "party": {
+            "roles": [
+              {
+                "name": "WebDAV / HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted; reaches Jackrabbit through jackrabbit-webdav / jackrabbit-jcr-server with HTTP Basic or Digest credentials."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "WebDAV operator / servlet container"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; configures Tomcat/Jetty, TLS, the authentication realm, and chooses which JCR repository the servlet exposes."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Java 11+ at HEAD; JVM-conformant runtime; no SecurityManager required; a servlet container (Tomcat/Jetty) handles connection management, TLS, and HTTP Basic/Digest realms in network mode."
+        },
+        {
+          "description": "Persistence manager backends (filesystem, JDBC, FileDataStore, S3 via jackrabbit-aws-ext) are operator-configured and trusted; a hostile backend is not Jackrabbit's threat."
+        },
+        {
+          "description": "The default admin/admin user ships with jackrabbit-core; the operator's posture is to rotate or remove it before production."
+        },
+        {
+          "description": "The JCR TCK harness (jackrabbit-jcr-tests) and examples (jackrabbit-firsthops) are unsupported components; issues that exist only in jackrabbit-oak or jackrabbit-filevault belong to those projects' threat models."
+        },
+        {
+          "description": "Maintenance-mode posture: active for bug and security fixes, not feature development; Oak is the recommended codebase for new deployments."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-login-authentication-bypass",
+        "name": "JCR session authentication bypass",
+        "description": "A Repository.login call must not return a Session for credentials the configured JAAS LoginModule chain should have rejected (property P1).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core"
+        ],
+        "mitigations": [
+          "control-configure-login-access-manager"
+        ]
+      },
+      {
+        "bom-ref": "threat-access-manager-bypass",
+        "name": "Read or write authorization bypass through AccessManager",
+        "description": "For a non-admin principal session with the default AccessManager configured, Session.getNode(path) must not return an item the configured ACLs do not license (property P2), and a Session.save() must not commit a change the ACLs do not license (property P3).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core"
+        ],
+        "mitigations": [
+          "control-configure-login-access-manager"
+        ]
+      },
+      {
+        "bom-ref": "threat-webdav-auth-bypass",
+        "name": "WebDAV request without valid credentials reaching JCR operations",
+        "description": "With jackrabbit-jcr-server deployed and an HTTP Basic or Digest realm configured, a WebDAV request without valid credentials must not reach the JCR trust transitions (property P4). WebDAV has no built-in authentication; the servlet container provides it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webdav-stack"
+        ],
+        "mitigations": [
+          "control-servlet-auth-realm"
+        ]
+      },
+      {
+        "bom-ref": "threat-webdav-xxe",
+        "name": "XXE, entity expansion, or DTD fetch via WebDAV XML bodies",
+        "description": "jackrabbit-webdav parses XML bodies for PROPFIND, LOCK, and REPORT. A WebDAV body triggering XXE (file read, SSRF), Billion-Laughs entity expansion, or DTD-based remote fetch is security-critical when reachable from an unauthenticated or low-privilege HTTP peer (property P6). Whether the shipped DocumentBuilderFactory configuration is hardened or relies on JVM JAXP defaults is an open maintainer question; this is the single highest-confidence-required property for the network-exposed deployment.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webdav-stack"
+        ],
+        "mitigations": [
+          "control-harden-xml-parser"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-session-leakage",
+        "name": "Cross-session data leakage",
+        "description": "With the default jackrabbit-core MVCC layer and one Session per thread, cross-session data leakage, or a session reading data committed after its login without an intentional refresh, is a correctness issue that becomes security-critical if the leakage crosses an ACL boundary (property P7).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-stripping",
+        "name": "Cleartext on the wire after TLS is configured",
+        "description": "When the servlet container is configured for HTTPS, jackrabbit-webdav must not strip TLS; cleartext on the wire after TLS is configured is security-critical (property P5). TLS is always the servlet container's job in network mode.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webdav-stack"
+        ],
+        "mitigations": [
+          "control-tls-at-container"
+        ]
+      },
+      {
+        "bom-ref": "threat-default-admin-credentials",
+        "name": "Unrotated default admin/admin user",
+        "description": "SimpleCredentials(\"admin\",\"admin\") always works against the default configuration; the default admin user has full repository access and is documented as the first thing to change in production. Failing to rotate it is an operator responsibility (non-default-build), not a Jackrabbit vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core"
+        ],
+        "mitigations": [
+          "control-rotate-default-admin"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-http-basic",
+        "name": "HTTP Basic credentials over plaintext HTTP",
+        "description": "HTTP Basic credentials are base64 in cleartext when jackrabbit-jcr-server is exposed over HTTP without TLS; the operator must enable TLS at the servlet container. HTTP Basic without TLS is not secure authentication and Digest is not a TLS substitute (it protects the password in transit, not the content).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-webdav-stack"
+        ],
+        "mitigations": [
+          "control-tls-at-container"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-authenticated-dos",
+        "name": "Denial of service by authenticated callers",
+        "description": "Jackrabbit imposes no enforced cap on query complexity (Lucene-based full-text parsing is unbounded by default), tree depth, child count, transient state per session, or WebDAV body size beyond servlet container limits; PROPFIND with Depth: infinity against the root is a documented amplification vector for any WebDAV-fronted store. No DoS protection is provided by default; admission control belongs at the servlet container or reverse-proxy layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core",
+          "asset-webdav-stack"
+        ],
+        "mitigations": [
+          "control-container-admission-control"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-backend",
+        "name": "Hostile persistence-manager backend",
+        "description": "Persistence managers delegate to a filesystem or JDBC database; a hostile filesystem or hostile database is not Jackrabbit's threat. All backends (bundle PM, database PMs, FileDataStore, S3 via jackrabbit-aws-ext) are trusted; there is no data-at-rest encryption at the Jackrabbit layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-persistence-backend"
+        ],
+        "mitigations": [
+          "control-filesystem-permissions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-acl-self-escalation",
+        "name": "Privilege escalation by a holder of MODIFY_ACCESS_CONTROL",
+        "description": "An authenticated user with the MODIFY_ACCESS_CONTROL privilege rewriting ACLs to grant themselves more privileges is documented privilege behavior, by design. Similarly, WebDAV semantics the protocol requires (directory listing, PUT, MOVE, COPY within the ACL envelope) are the JCR authorization model's call, not WebDAV-layer bugs, and WebDAV LOCK is an advisory locking primitive, not access control.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jackrabbit-core"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-jcr-api",
+        "boundary": "boundary-jcr-api",
+        "name": "JCR API trust boundary",
+        "description": "Repository.login credentials are the untrusted input; authenticated session principals are constrained by the AccessManager on reads and on Session.save(). A finding is in-model when reachable from a session carrying less than admin authority.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-login-authentication-bypass",
+          "threat-access-manager-bypass",
+          "threat-cross-session-leakage",
+          "threat-default-admin-credentials",
+          "threat-acl-self-escalation"
+        ],
+        "controlsAtBoundary": [
+          "control-configure-login-access-manager",
+          "control-rotate-default-admin"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-webdav",
+        "boundary": "boundary-webdav",
+        "name": "WebDAV/HTTP trust boundary",
+        "description": "HTTP request bodies and headers are untrusted network input: XML bodies (PROPFIND, LOCK, REPORT), PUT bodies, MOVE/COPY Destination headers, If headers, and HTTP Basic/Digest credentials. XML-parse vulnerabilities are in-model here.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-webdav-auth-bypass",
+          "threat-webdav-xxe",
+          "threat-tls-stripping",
+          "threat-plaintext-http-basic",
+          "threat-authenticated-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-servlet-auth-realm",
+          "control-tls-at-container",
+          "control-harden-xml-parser",
+          "control-container-admission-control"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-persistence",
+        "boundary": "boundary-persistence",
+        "name": "Persistence backend trust boundary",
+        "description": "Database rows and filesystem bytes from the persistence manager backend are trusted; backend authentication and ACLs are backend-configured.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-hostile-backend"
+        ],
+        "controlsAtBoundary": [
+          "control-filesystem-permissions"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-configure-login-access-manager",
+      "name": "Configure a production LoginModule and AccessManager",
+      "description": "Configure the repository.xml Security element (LoginModule, AccessManager, WorkspaceAccessManager) to match the production trust posture; the shipped defaults are intended for demos, and misconfiguration voids the authentication and authorization properties.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-jcr-api"
+      ]
+    },
+    {
+      "bom-ref": "control-rotate-default-admin",
+      "name": "Rotate or remove the default admin/admin user",
+      "description": "Rotate or remove the default admin/admin user before exposing the repository to any non-trusted caller.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jackrabbit-core"
+      ]
+    },
+    {
+      "bom-ref": "control-servlet-auth-realm",
+      "name": "Configure an HTTP authentication realm at the servlet layer",
+      "description": "Do not expose the WebDAV port without an authentication realm; configure HTTP Basic or Digest at the servlet container (Digest preferred; Basic without TLS is a known misuse pattern).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-webdav"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-at-container",
+      "name": "Wrap the WebDAV stack with TLS",
+      "description": "Wrap jackrabbit-jcr-server / jackrabbit-webdav with TLS (servlet container HTTPS); HTTP Basic over plaintext is not an acceptable production posture.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-webdav"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-xml-parser",
+      "name": "Harden the XML parser configuration",
+      "description": "If jackrabbit-webdav is exposed, harden the XML parser configuration against XXE, DTDs, external entities, and entity expansion (billion-laughs): disable external entities, disallow or safely restrict DOCTYPEs, and cap entity expansion.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-webdav-stack"
+      ]
+    },
+    {
+      "bom-ref": "control-container-admission-control",
+      "name": "Apply admission control and rate limits at the container layer",
+      "description": "Apply admission control and rate limits at the servlet container or reverse-proxy layer (request body size caps, request timeouts); Jackrabbit does not provide them.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-webdav"
+      ]
+    },
+    {
+      "bom-ref": "control-filesystem-permissions",
+      "name": "Restrict OS filesystem permissions on repository storage",
+      "description": "Restrict OS filesystem permissions on repository.home, persistence-manager directories, data-store directories, the search index, and any keystores.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-persistence-backend"
+      ]
+    },
+    {
+      "bom-ref": "control-plan-migration-to-oak",
+      "name": "Plan migration to Jackrabbit Oak",
+      "description": "Plan migration to Oak if the deployment is greenfield or if bug fixes diverge; Oak is the active codebase, and this repository is in maintenance mode. Track CVE advisories on this repository via the security mailing list.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jackrabbit-core"
+      ]
+    }
+  ]
+}

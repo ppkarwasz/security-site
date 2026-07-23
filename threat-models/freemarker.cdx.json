@@ -1,0 +1,182 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-freemarker",
+      "name": "Apache FreeMarker",
+      "description": "Java template engine used as a dependency (freemarker.jar) in other Java projects and accessed through its public Java API. Depending projects configure it and process templates concurrently; the templates are provided by those projects, not by FreeMarker. The baseline security model treats templates as trusted server-side code, analogous to .java source files, authored by developers or administrators.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/freemarker/security/policy",
+          "comment": "Source security model document (Security Scan Guidance); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://freemarker.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "freemarker"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/freemarker/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/freemarker/2.3-gae/SECURITY.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-attacker-controlled-templates",
+        "name": "Attacks requiring attacker-controlled template content",
+        "description": "Templates are trusted code: FreeMarker templates are server-side code, analogous to .java source files, assumed to be authored by developers or administrators and not user-supplied input. Vulnerabilities that require an attacker to control template content are not in scope by default.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-eval-interpret-untrusted-input",
+        "name": "Untrusted input passed to ?eval or ?interpret",
+        "description": "The user is responsible for ensuring that the ?eval and ?interpret built-ins in templates are only called on trusted input. The user is also assumed to understand that the public API of Java objects passed to the template as part of the model is potentially callable from the template.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-xss-without-escaping",
+        "name": "XSS from unescaped dynamic values",
+        "description": "For historical reasons FreeMarker does not escape inserted dynamic values by default, and this default cannot be changed for backward compatibility. The user is responsible for avoiding XSS attacks by using the escaping features in their templates (auto-escaping, ?html, or escape tags).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-enable-autoescaping"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-escaping-evasion",
+        "name": "Unexpected evasion of enabled escaping features",
+        "description": "If proper escaping can be evaded unexpectedly when the escaping features (auto-escaping, ?html, escape tags) are used, that is a security vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-enable-autoescaping"
+        ]
+      },
+      {
+        "bom-ref": "threat-member-access-policy-bypass",
+        "name": "Bypass of a MemberAccessPolicy promise",
+        "description": "A bypass of what a MemberAccessPolicy promises is a regression in the constrained execution features and should usually be treated as a security vulnerability. These controls are a public contract with operators who rely on them for constrained deployments where a limited set of trusted (but non-developer) users may upload templates.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-constrained-execution"
+        ]
+      },
+      {
+        "bom-ref": "threat-new-builtin-instantiation",
+        "name": "Unintended class instantiation via ?new",
+        "description": "An unintended new path for the ?new built-in to instantiate arbitrary classes is a regression in the constrained execution features and should usually be treated as a security vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-constrained-execution"
+        ]
+      },
+      {
+        "bom-ref": "threat-template-root-escape",
+        "name": "Escaping the configured template root directory",
+        "description": "Causing a TemplateLoader to load a template from an unintended place, escaping the configured template root directory, is a regression in the constrained execution features and should usually be treated as a security vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-constrained-execution"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-constrained-execution",
+      "name": "Constrained execution features",
+      "description": "Explicit APIs to impose limitations for deployments where a limited set of trusted (but non-developer) users upload templates: MemberAccessPolicy, restrictions on the ?new built-in, and TemplateLoader confinement to the configured template root. These represent a public contract with operators; regressions should usually be treated as security vulnerabilities. See the FAQ entry on allowing users to upload templates for details.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-enable-autoescaping",
+      "name": "Enable output escaping",
+      "description": "Users are strongly encouraged to turn on auto-escaping, for example with <#ftl output_format=\"HTML\"> or by using the ftlh file extension; legacy templates were instead encouraged to use the ?html built-in or <#escape x as x?html>...</#escape> tags.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-eval-interpret",
+      "name": "Restrict ?eval and ?interpret to trusted input",
+      "description": "Ensure the ?eval and ?interpret built-ins are only called on trusted input.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-commons",
+      "name": "Apache Commons",
+      "description": "Collection of reusable Java components. The Apache Commons threat model page amends the Apache Commons security page and currently states that the threat model itself is 'Coming soon'. The page otherwise covers reporting: security questions and reports go through the Apache Commons security page, unlisted vulnerabilities or unexpected security-impacting behavior should be reported privately to the Apache Security Team, binary patches are never provided (source patches are applied using the component's building instructions), and build or mitigation help is available on the public user mailing list.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://commons.apache.org/threat_model.html",
+          "comment": "Source threat model page; this file is a structured translation of it. The page's threat model section is marked 'Coming soon'."
+        },
+        {
+          "type": "website",
+          "url": "https://commons.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "commons"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://commons.apache.org/threat_model.html"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://svn.apache.org/repos/asf/commons/cms-site/trunk/content/markdown/threat_model.md"
+      },
+      {
+        "name": "asf:security-model-scope",
+        "value": "reporting-and-supported-versions-only"
+      }
+    ]
+  },
+  "threats": {}
+}

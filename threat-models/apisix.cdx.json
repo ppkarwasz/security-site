@@ -1,0 +1,834 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-apisix",
+      "name": "Apache APISIX",
+      "description": "Dynamic, cloud-native API gateway built on OpenResty (nginx + LuaJIT). A deployment terminates HTTP/HTTPS/gRPC/TCP/UDP client traffic, applies route-matched plugin logic (auth, rate limiting, transformation, observability), and forwards to upstream services. Configuration is held in etcd (or YAML in standalone mode) and mutated through the Admin API; the apisix-ingress-controller translates Kubernetes Ingress / Gateway-API resources into Admin API calls. Scope of the model: apache/apisix and apache/apisix-ingress-controller (apache/apisix-dashboard is out of current scan scope per PMC decision 2026-05-26).",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/apisix/blob/master/docs/en/latest/security-threat-model.md",
+          "comment": "Source security model document (maintainer-stewarded, revised 2026-05-30); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://apisix.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "apisix"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/apisix/blob/master/docs/en/latest/security-threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/apisix/master/docs/en/latest/security-threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-apisix",
+      "name": "APISIX gateway deployment",
+      "description": "Architecture described by the APISIX threat model: untrusted external clients reach the data-plane worker on node_listen (default 9080); operators mutate configuration through the Admin API on admin_listen (default 9180, X-API-KEY auth, IP allowlist) or through Kubernetes CRDs via the ingress controller; workers read configuration from operator-secured etcd; traffic is forwarded to operator-chosen upstream services.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-data-plane",
+          "type": "gateway",
+          "name": "Data-plane worker",
+          "description": "OpenResty worker process terminating client HTTP/HTTPS/gRPC/TCP/UDP traffic on node_listen, running route-matched Lua plugins and the stream proxy, and forwarding to upstreams. Plugin code runs as Lua coroutines inside nginx workers with per-worker state.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-admin-api",
+          "type": "api",
+          "name": "Admin API",
+          "description": "Control-plane API on admin_listen (default 9180). Requires X-API-KEY matching admin_key; callers must be inside allow_admin (default 127.0.0.0/24). JSON bodies are validated against the resource's JSON Schema before being written to etcd.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-plugins",
+          "type": "module",
+          "name": "Apache-maintained plugins",
+          "description": "Plugins shipped under apisix/plugins/. All plugins are opt-in; none are active without explicit per-route configuration. A bug in any Apache-maintained plugin is CVE-equivalent regardless of how widely it tends to be enabled.",
+          "zone": "zone-gateway"
+        },
+        {
+          "bom-ref": "asset-etcd",
+          "type": "data-store",
+          "name": "etcd configuration store",
+          "description": "Holds routes, plugin configs, consumer credentials (per plugin under /apisix/consumers/<username>) and SSL certificate/key material. Operator-secured; etcd ships unauthenticated and plaintext by default. Optional field-level encryption of sensitive fields via apisix.data_encryption.",
+          "zone": "zone-etcd"
+        },
+        {
+          "bom-ref": "asset-ingress-controller",
+          "type": "service",
+          "name": "apisix-ingress-controller",
+          "description": "Reads Kubernetes CRDs (ApisixRoute, ApisixConsumer, ApisixPluginConfig) and translates them to Admin API calls signed with X-API-KEY configured via a Kubernetes Secret.",
+          "zone": "zone-operator"
+        },
+        {
+          "bom-ref": "asset-upstreams",
+          "type": "service",
+          "name": "Upstream services",
+          "description": "Operator-chosen backend services that APISIX routes traffic to over HTTP/HTTPS/gRPC. Bugs in the upstreams themselves are out of scope.",
+          "zone": "zone-upstream"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-external-clients",
+          "name": "External clients",
+          "type": "trust",
+          "description": "Untrusted remote network attackers and clients speaking HTTP/HTTPS/TCP/UDP/gRPC to the data-plane port; may send arbitrary, malformed, or oversized requests."
+        },
+        {
+          "bom-ref": "zone-gateway",
+          "name": "Gateway workers",
+          "type": "trust",
+          "description": "APISIX worker processes: data plane, Admin API handlers, plugin host, stream proxy, etcd watch handler."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operators and Kubernetes control plane",
+          "type": "trust",
+          "description": "Trusted operators calling the Admin API and the ingress controller acting on Kubernetes-RBAC-authorized CRDs. An operator with Admin API credentials has already won."
+        },
+        {
+          "bom-ref": "zone-etcd",
+          "name": "etcd",
+          "type": "trust",
+          "description": "Operator-secured configuration store. etcd content was already operator-authored or Admin-API-mediated; a finding that requires compromising etcd is not an APISIX finding."
+        },
+        {
+          "bom-ref": "zone-upstream",
+          "name": "Upstream services",
+          "type": "trust",
+          "description": "Operator-trusted backends behind APISIX."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-data-plane",
+          "name": "External client to data-plane worker",
+          "type": "trust",
+          "zones": [
+            "zone-external-clients",
+            "zone-gateway"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin-api",
+          "name": "Operator to Admin API",
+          "type": "trust",
+          "zones": [
+            "zone-operator",
+            "zone-gateway"
+          ]
+        },
+        {
+          "bom-ref": "boundary-etcd",
+          "name": "Worker to etcd",
+          "type": "trust",
+          "zones": [
+            "zone-gateway",
+            "zone-etcd"
+          ]
+        },
+        {
+          "bom-ref": "boundary-upstream",
+          "name": "Worker to upstream services",
+          "type": "trust",
+          "zones": [
+            "zone-gateway",
+            "zone-upstream"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-external-client",
+          "party": {
+            "roles": [
+              {
+                "name": "External client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted remote caller of the data-plane port; aims to bypass route auth, reach an upstream it should not, crash a worker, cause CPU/memory exhaustion, or read configured secret material."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated client"
+              }
+            ],
+            "persona": {
+              "description": "Client with valid credentials for one route or consumer, attempting horizontal privilege escalation to routes or consumers it should not access through auth-plugin bugs."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted caller of the Admin API (X-API-KEY) or author of Kubernetes CRDs. Also responsible for operator-supplied Lua code, which is trusted by design."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-k8s-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Unprivileged Kubernetes user"
+              }
+            ],
+            "persona": {
+              "description": "Holder of create rights on ApisixRoute in some namespace, attempting to influence traffic outside that namespace via the ingress controller. Cluster operators must gate CRD creation to the namespace owner or equivalent trust tier."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Linux is the only supported production deployment target; macOS is dev/test only. Reports against non-Linux deployments are closed as unsupported-platform."
+        },
+        {
+          "description": "Runtime is OpenResty (nginx + LuaJIT); plugin code runs as Lua coroutines inside multi-worker nginx with per-worker Lua state."
+        },
+        {
+          "description": "The Admin API port is restricted to the operator network; etcd is reachable from workers; workers have outbound access to upstreams and log sinks."
+        },
+        {
+          "description": "etcd is operator-secured (TLS, auth, network isolation); etcd-stored SSL keys are plaintext in etcd unless etcd encryption-at-rest or apisix.data_encryption is configured."
+        },
+        {
+          "description": "The host clock is NTP-synchronized; clock-drift behaviour of JWT replay windows and rate-limit window roll-over is out of model."
+        },
+        {
+          "description": "APISIX does not require root after startup, does not install global signal handlers beyond nginx's, does not fork persistent daemons beyond configured external-plugin runners, does not write outside logs/ and cache directories, and does not phone home."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-request-parsing-memory-unsafety",
+        "name": "Worker memory corruption or RCE from malformed client requests",
+        "description": "Malformed HTTP requests on node_listen must cause 400 rejection, not worker memory corruption or RCE. A worker segfault, out-of-bounds read, or RCE triggered by request bytes is security-critical. HTTP/1.1 and HTTP/2 wire-level parsing bugs are owned by upstream nginx (APISIX tracks and ships fixed versions); APISIX's own Lua-phase parsing (custom header/query/body handling, gRPC metadata) is APISIX-owned.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-api-auth-bypass",
+        "name": "Admin API authentication bypass",
+        "description": "Any Admin API call without a valid X-API-KEY matching admin_key must return 401 and not mutate state. An unauthenticated request that modifies a route or reads a consumer secret is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-api"
+        ],
+        "mitigations": [
+          "control-admin-key-auth",
+          "control-admin-ip-allowlist"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-allowlist-bypass",
+        "name": "Admin API IP allowlist bypass",
+        "description": "A request from outside deployment.admin.allow_admin must be rejected (403 or connection refused). The Admin API being reachable from a disallowed CIDR is security-critical if bypassed; operator misconfiguration if the allowlist was widened intentionally.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-api"
+        ],
+        "mitigations": [
+          "control-admin-ip-allowlist"
+        ]
+      },
+      {
+        "bom-ref": "threat-schema-validation-bypass",
+        "name": "Plugin config accepted despite failing its JSON Schema",
+        "description": "The Admin API rejects plugin configs that fail the plugin's published JSON Schema; only schema-conformant configs are written to etcd. A config that violates the schema being accepted and then crashing the worker at apply time is high severity (denial of service via crash), CVE if it escalates to RCE.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-api",
+          "asset-data-plane"
+        ],
+        "mitigations": [
+          "control-json-schema-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-downgrade",
+        "name": "TLS downgrade or certificate mis-selection under SNI",
+        "description": "APISIX terminates TLS using configured ciphersuites in line with ssl_protocols; TLS 1.0/1.1 are disabled by default. An SSL/TLS downgrade or certificate mis-selection under SNI is high severity. SNI is used for certificate selection but not treated as authenticated identity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ],
+        "mitigations": [
+          "control-tls-defaults"
+        ]
+      },
+      {
+        "bom-ref": "threat-plugin-chain-bypass",
+        "name": "Plugin chain misordering bypasses authentication plugins",
+        "description": "Each plugin runs in the configured phase order; a plugin cannot suppress later auth plugins from running unless documented to (serverless-pre-function is by design able to rewrite, short-circuit, or bypass later auth plugins; operators enabling it take on responsibility for the resulting trust model). A plugin misordering that causes an unauthenticated request to reach the upstream is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins",
+          "asset-data-plane"
+        ]
+      },
+      {
+        "bom-ref": "threat-rate-limit-bypass",
+        "name": "Bypass of configured rate-limit or circuit-breaker counters",
+        "description": "When limit-req / limit-count / limit-concurrency are configured, their counters are consulted on the request hot path and exceeding the limit yields 503/429 per config. A counter bypass that lets an attacker achieve more than N requests per window despite a configured limit is high severity (DoS) or critical depending on what the limit gated.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "mitigations": [
+          "control-configure-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "threat-ingress-controller-infidelity",
+        "name": "Ingress controller silently drops, injects, or renames CRD fields",
+        "description": "Every field accepted by an apisix.apache.org CRD spec maps to a defined Admin API target. Silent drop, injection, or renaming is an apisix-ingress-controller bug, not operator misconfiguration, and is security-critical if a drop voids an auth-plugin configuration. An e2e contract test enforcing this invariant is recommended.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ingress-controller"
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-timing-oracle",
+        "name": "Timing oracle on credential comparison",
+        "description": "APISIX's own credential comparisons (admin key, JWT secret, HMAC signature, and equivalent secrets stored by auth plugins) use constant-time comparison so that remote timing cannot be used to recover the secret. A measurable timing oracle on X-API-KEY, JWT verification, or HMAC verification is high severity (credential disclosure). TLS-layer side channels remain out of model and are delegated to OpenSSL / Go crypto/tls.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-api",
+          "asset-plugins"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-log-sink",
+        "name": "Worker hang, crash, or RCE caused by a log-sink endpoint",
+        "description": "A slow, failed, or actively malicious log-sink endpoint (Kafka, Datadog, Splunk, HTTP logger) must not impact APISIX availability: no worker hang, no RCE, no segfault triggered by sink-side bytes. Log sinks are operator-trusted infrastructure, but sink-failure resilience is a claimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ]
+      },
+      {
+        "bom-ref": "threat-data-encryption-ineffective",
+        "name": "Field-level encryption fails to protect sensitive fields in etcd",
+        "description": "When apisix.data_encryption is enabled (3.x; not enabled by default), sensitive fields in consumer and ssl resources are encrypted before being written to etcd. The protected field still being readable in plaintext in etcd with the knob enabled is high severity (credential disclosure if etcd is observed).",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-etcd"
+        ],
+        "mitigations": [
+          "control-field-level-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-misconfiguration",
+        "name": "Exploitation of documented-insecure defaults left unchanged",
+        "description": "Operator misconfiguration that voids a documented default-secure posture is out of model: exposing the Admin API on 0.0.0.0 with allow_admin widened from its 127.0.0.0/24 default, or running with the documented-as-known default Admin API key edd1c9f034335f136f87ad84b625c8f1 (conf/config.yaml explicitly warns to update it for production). Known misuse patterns also include a single shared admin key across multiple operators.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-admin-api"
+        ],
+        "mitigations": [
+          "control-rotate-admin-key",
+          "control-restrict-allow-admin",
+          "control-front-admin-api",
+          "control-decoupled-mode"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-etcd-compromise",
+        "name": "Attacks requiring etcd compromise",
+        "description": "APISIX assumes etcd is operator-secured (TLS, auth, network isolation). A finding that requires compromising etcd is not an APISIX finding. Known misuse patterns: running etcd unauthenticated and reachable from anything other than the worker host, and storing SSL private keys in etcd without encryption-at-rest, TLS, or apisix.data_encryption.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-etcd"
+        ],
+        "mitigations": [
+          "control-secure-etcd",
+          "control-field-level-encryption"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-operator-supplied-lua",
+        "name": "Operator-supplied Lua code executes in the worker",
+        "description": "Custom plugins via extra_lua_path, serverless-pre-function / serverless-post-function route-embedded code, the legacy route script field (planned for removal), and custom external plugin runners are loaded into the same worker process with full ngx.* access, by design. The PMC is responsible for the Apache-maintained plugins under apisix/plugins/; the operator is responsible for their own. Exception: exploitable example snippets in docs/ are PMC responsibility, triaged as VALID-HARDENING.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ],
+        "mitigations": [
+          "control-audit-custom-lua"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-no-plugin-sandbox",
+        "name": "No plugin sandboxing: a compromised in-tree plugin is RCE in the gateway",
+        "description": "Lua plugins run in the same worker process with full ngx.* access; external-plugin runners inherit the APISIX uid. Plugin sandboxing is a property APISIX explicitly does not provide.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins",
+          "asset-data-plane"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-lower-layer-resource-exhaustion",
+        "name": "Denial of service via resource exhaustion of layers below APISIX",
+        "description": "Exhaustion of kernel TCP backlog, file descriptor limits, or host RAM is out of model. APISIX provides rate-limiting and circuit-breaker plugins but does not enforce them by default; the Admin API is also not protected by the data-plane rate-limit plugins.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ],
+        "mitigations": [
+          "control-configure-rate-limiting",
+          "control-front-admin-api"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-k8s-cluster-security",
+        "name": "Kubernetes cluster security failures",
+        "description": "RBAC, namespace isolation, network policy, and admission controllers are out of scope. The ingress controller assumes the cluster operator has gated who can create ApisixRoute / ApisixConsumer / ApisixPluginConfig resources; creators of ApisixRoute must be the namespace owner or equivalent trust tier. The controller's own RBAC requirements are documented in apisix-ingress-controller/config/rbac/role.yaml.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-ingress-controller"
+        ],
+        "mitigations": [
+          "control-restrict-k8s-rbac"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-forwarded-header-trust",
+        "name": "Trusting X-Forwarded-For / X-Real-IP as authenticated identity",
+        "description": "Request headers, including X-Forwarded-*, are attacker-controllable and not to be trusted as authentication ground truth unless an ip-restriction / real-ip plugin (or equivalent upstream PROXY-protocol handling) is configured. Treating them as authenticated identity without that is a known misuse pattern.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-data-plane"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-misc",
+        "name": "Other explicitly out-of-scope items",
+        "description": "Also out of model: upstream service vulnerabilities; browser-host compromise (a browser extension stealing the admin key); side-channel attacks at the TLS layer (delegated to OpenSSL / Go crypto/tls); clock-drift edge cases; code in bin/, t/, example/, benchmark/, ci/, .github/ and test fixtures; adversaries with operator credentials, host compromise, physical or hypervisor access, or co-tenant capabilities; compromised log-sink endpoints as adversaries (sink resilience remains a claimed property); non-Linux deployments. Known non-findings include the X-API-KEY header auth scheme by design, no CSRF tokens on the header-authenticated Admin API (APISIX does not set permissive CORS by default), and version disclosure in default error pages.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-data-plane",
+        "boundary": "boundary-data-plane",
+        "name": "Data-plane trust boundary",
+        "description": "Bytes go from untrusted network input to a parsed Lua table passed to plugin code; OpenResty/nginx parsing is the foundational defence and plugins work with already-parsed inputs. Request line, headers, body, TCP/UDP payloads, and SNI are attacker-controllable.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-request-parsing-memory-unsafety",
+          "threat-tls-downgrade",
+          "threat-plugin-chain-bypass",
+          "threat-rate-limit-bypass",
+          "threat-credential-timing-oracle",
+          "threat-forwarded-header-trust"
+        ],
+        "controlsAtBoundary": [
+          "control-tls-defaults",
+          "control-configure-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin-api",
+        "boundary": "boundary-admin-api",
+        "name": "Admin API trust boundary",
+        "description": "Authenticated operator input becomes schema-validated config: the Admin API requires X-API-KEY, then validates the JSON body against the resource's JSON Schema before writing to etcd.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-admin-api-auth-bypass",
+          "threat-admin-allowlist-bypass",
+          "threat-schema-validation-bypass",
+          "threat-operator-misconfiguration"
+        ],
+        "controlsAtBoundary": [
+          "control-admin-key-auth",
+          "control-admin-ip-allowlist",
+          "control-json-schema-validation",
+          "control-rotate-admin-key",
+          "control-restrict-allow-admin",
+          "control-front-admin-api",
+          "control-admin-audit-logging"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-etcd",
+        "boundary": "boundary-etcd",
+        "name": "etcd trust boundary",
+        "description": "Workers subscribe to etcd watches and apply config changes; no trust transition in principle since etcd content was already operator-authored or Admin-API-mediated. etcd security itself is the operator's responsibility.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-etcd-compromise",
+          "threat-data-encryption-ineffective"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-etcd",
+          "control-field-level-encryption"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-upstream",
+        "boundary": "boundary-upstream",
+        "name": "Upstream trust boundary",
+        "description": "APISIX routes traffic to operator-chosen upstreams; bugs in those upstreams are out of scope. For the stream proxy, the upstream is responsible for protocol handling; APISIX forwards bytes.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-out-of-scope-misc"
+        ],
+        "controlsAtBoundary": []
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-admin-key-auth",
+      "name": "Admin API key authentication",
+      "description": "Every Admin API call must present a valid X-API-KEY matching deployment.admin.admin_key; calls without it return 401 and do not mutate state.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-ip-allowlist",
+      "name": "Admin API IP allowlist",
+      "description": "Requests from outside deployment.admin.allow_admin (default 127.0.0.0/24) are rejected at network level.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-json-schema-validation",
+      "name": "JSON-Schema validation of plugin configs",
+      "description": "After authentication, Admin API JSON bodies are validated against the resource's published JSON Schema before being persisted to etcd; the schema must reject unsafe shapes. The project also applies an Anti-ReDoS policy on input regexes.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-defaults",
+      "name": "TLS 1.2/1.3 defaults",
+      "description": "APISIX terminates TLS with TLS 1.0/1.1 disabled by default; re-enabling them is documented but not recommended. Enable mTLS for client-certificate auth where required.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-field-level-encryption",
+      "name": "Optional field-level encryption (apisix.data_encryption)",
+      "description": "When enabled (3.x; not enabled by default), sensitive fields in consumer and ssl resources are encrypted before being written to etcd.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-etcd"
+      ]
+    },
+    {
+      "bom-ref": "control-rotate-admin-key",
+      "name": "Change the Admin API key",
+      "description": "Change the Admin API key from the documented default and store it outside config.yaml (environment variable, Kubernetes Secret, external secret manager). Avoid a single shared admin key across multiple operators.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-allow-admin",
+      "name": "Restrict allow_admin",
+      "description": "Restrict deployment.admin.allow_admin to operator workstations or bastions; do not widen to 0.0.0.0/0.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-etcd",
+      "name": "Run etcd with TLS and authentication",
+      "description": "Required if etcd is on a network reachable by anything other than the APISIX worker (multi-host or cross-zone); optional for single-host loopback deployments. Configure deployment.etcd.tls.{cert,key,verify} accordingly.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-etcd"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-custom-lua",
+      "name": "Audit operator-supplied plugins before deploy",
+      "description": "Audit code loaded via extra_lua_path, serverless-pre/post-function, and external plugin runners before deployment; this code is in the trusted-by-design tier and executes in the worker with full ngx.* access.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-configure-rate-limiting",
+      "name": "Configure rate-limiting and circuit-breaker plugins",
+      "description": "Configure limit-req / limit-count / limit-concurrency and circuit-breaker plugins for any production-facing route; APISIX does not impose these by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-decoupled-mode",
+      "name": "Use decoupled control-plane / data-plane mode for internet-facing deployments",
+      "description": "Separate data_plane / control_plane roles (or standalone mode) remove the Admin API from the data-plane's blast radius; recommended for any internet-facing / public-edge deployment. Traditional mode remains appropriate for internal networks.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-k8s-rbac",
+      "name": "Restrict Kubernetes RBAC for APISIX CRDs",
+      "description": "Only trusted service accounts or users may create ApisixRoute / ApisixConsumer / ApisixPluginConfig CRDs; creators of ApisixRoute must be the namespace owner or equivalent trust tier.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ingress-controller"
+      ]
+    },
+    {
+      "bom-ref": "control-ntp-sync",
+      "name": "Synchronize the host clock (NTP)",
+      "description": "Clock-drift behaviour of JWT replay windows and rate-limit window roll-over is not an APISIX security violation; the operator must keep host time in sync.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-data-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-audit-logging",
+      "name": "Wire Admin API audit logging externally",
+      "description": "APISIX does not emit a structured audit log of Admin API mutations; combine access-log on the Admin API listener with kafka-logger / http-logger to a SIEM.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-front-admin-api",
+      "name": "Front the Admin API with firewall / WAF / fail2ban",
+      "description": "Data-plane rate-limit plugins do not protect the Admin API; the operator must add a rate-limit / brute-force defence layer in front of it.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-strip-server-banner",
+      "name": "Strip the Server banner if banner-grabbing is a concern",
+      "description": "Version disclosure via the default error page is a known non-finding, but operators can harden with the response-rewrite plugin or a custom error_page directive.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-data-plane"
+      ]
+    }
+  ]
+}

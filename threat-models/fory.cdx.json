@@ -1,0 +1,323 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-fory",
+      "name": "Apache Fory",
+      "description": "In-process serialization library. Applications link Fory into their own process, configure serializers and type policies, and call Fory APIs to serialize application-owned objects or deserialize encoded Fory data. Fory does not provide a standalone network service, daemon, authentication system, or transport protocol; it can generate service companions for application-provided gRPC runtimes, but the application and gRPC stack still own listeners, channels, credentials, authentication, authorization, deadlines, retries, and transport lifecycle.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/fory/blob/main/docs/security/threat-model.md",
+          "comment": "Source security model document; this file is a structured translation of it. Concrete untrusted deserialization classification rules live in the companion deserialization security model."
+        },
+        {
+          "type": "website",
+          "url": "https://fory.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "fory"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/fory/blob/main/docs/security/threat-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/fory/main/docs/security/threat-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-fory",
+      "name": "Fory embedded in an application process",
+      "description": "Fory's primary security boundary is encoded bytes or streams passed to deserialization APIs from untrusted or partially trusted sources. The embedding application owns where those bytes come from and which Fory configuration, registered types, schemas, and policies are used to read them.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-deserialization-api",
+          "type": "api",
+          "name": "Fory deserialization APIs",
+          "description": "Read APIs consuming encoded bytes or stream behavior; the surface where untrusted input enters Fory.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-type-policy",
+          "type": "component",
+          "name": "Type registration and policy checks",
+          "description": "Class, type, function, method, registration, and deserialization policies (class registration, TypeChecker or equivalent allow-list, schema checks) that restrict what may be materialized. Runtime serializer code generation and JIT compilation operate only on types and schemas after the active policy check has accepted the type surface; generated serializer code derives from checked type descriptors, not from attacker-controlled byte contents.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-senders",
+          "name": "Untrusted senders",
+          "type": "trust",
+          "description": "Untrusted or partially trusted sources of encoded bytes or stream behavior presented to Fory read APIs."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Embedding application process",
+          "type": "trust",
+          "description": "The application process linking Fory, owning its configuration, registered type set, policies, schemas, and classloader."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-deserialization",
+          "name": "Deserialization input boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-senders",
+            "zone-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The adversary is a sender that can craft encoded bytes or stream behavior presented to a Fory read API; it cannot change the embedding application's Fory configuration, registered type set, TypeChecker or equivalent allow-list policy, schema definitions, classloader, or other active policy objects unless the application itself exposes those controls."
+        },
+        {
+          "description": "The embedding application chooses whether a byte source is trusted enough for the configured deserialization mode; disabling registration or using dynamic deserialization on trusted data is a configuration choice."
+        },
+        {
+          "description": "Cross-language peers and schemas are part of the application's trust relationship."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-runtime-safety-violation",
+        "name": "Crafted input violates runtime safety",
+        "description": "Crafted encoded bytes or stream behavior causing crashes, panics, undefined behavior, or out-of-bounds memory access. Runtime safety is an explicit Fory security boundary; for untrusted data, crashing remains security-relevant.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deserialization-api"
+        ],
+        "mitigations": [
+          "control-policy-checks",
+          "control-resource-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-resource-exhaustion",
+        "name": "Crafted input exhausts or leaks resources",
+        "description": "Crafted input causing loss of resource ownership: memory, CPU progress, stream buffers, native allocations, callbacks, and retained read-side state. Leaking resources, retaining attacker-controlled state, or allocating disproportionately for untrusted data remains security-relevant.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deserialization-api"
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-policy-bypass",
+        "name": "Bypass of explicit Fory policy checks",
+        "description": "Crafted input materializing a class, type, function, or method that the active registration check, TypeChecker or equivalent allow-list, schema check, or deserialization policy should have restricted. Bypassing an explicit Fory policy on untrusted data is security-relevant.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-type-policy"
+        ],
+        "mitigations": [
+          "control-policy-checks",
+          "control-keep-registration"
+        ]
+      },
+      {
+        "bom-ref": "threat-cleanup-state-leak",
+        "name": "State from a failed operation leaks into later operations",
+        "description": "Violation of Fory's cleanup boundaries: state created during a failed root operation must not leak into later operations.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deserialization-api"
+        ]
+      },
+      {
+        "bom-ref": "threat-no-authenticity-integrity",
+        "name": "Tampering or disclosure of encoded data outside Fory",
+        "description": "Fory does not provide encoded-data authenticity, integrity, confidentiality, signing, MACs, or encryption, nor transport security or protection for bytes stored or moved outside Fory (including transport security for generated service companions). These are explicit non-goals; applications receiving Fory data from untrusted sources should authenticate or integrity-check the bytes before passing them to Fory when authenticity or tamper resistance matters.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-deserialization-api"
+        ],
+        "mitigations": [
+          "control-authenticate-bytes"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unsandboxed-application-logic",
+        "name": "Malicious behavior in application-owned logic",
+        "description": "Fory provides no sandbox for user-registered classes, functions, constructors, setters, finalizers, or other application-owned logic, and no application-level authorization or validation for the business meaning of a successfully deserialized value. These are explicit non-goals; the application must register only types and serializers that are safe for its trust boundary.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-type-policy"
+        ],
+        "mitigations": [
+          "control-register-safe-types"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-registration-disabled-untrusted",
+        "name": "Dynamic deserialization of untrusted data with registration disabled",
+        "description": "Disabling registration or using dynamic deserialization is a configuration choice intended for trusted data. When class registration is disabled, TypeChecker or an equivalent allow-list policy is the relevant gate; the application must keep class or type registration enabled for untrusted data unless another explicit Fory policy owns the accepted type surface.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-type-policy"
+        ],
+        "mitigations": [
+          "control-keep-registration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-deserialization",
+        "boundary": "boundary-deserialization",
+        "name": "Deserialization input trust boundary",
+        "description": "Encoded bytes or streams passed to deserialization APIs from untrusted or partially trusted sources; the primary Fory security boundary. Runtime safety, resource ownership, explicit policy checks, and cleanup boundaries are the properties defended at this boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-runtime-safety-violation",
+          "threat-resource-exhaustion",
+          "threat-policy-bypass",
+          "threat-cleanup-state-leak",
+          "threat-no-authenticity-integrity"
+        ],
+        "controlsAtBoundary": [
+          "control-policy-checks",
+          "control-keep-registration",
+          "control-resource-limits",
+          "control-authenticate-bytes"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-policy-checks",
+      "name": "Explicit type and policy checks",
+      "description": "Class, type, function, method, registration, and deserialization policies restrict what may be materialized. Runtime serializer code generation and JIT compilation are not paths for executing encoded input: they operate only on type surfaces already accepted by the active registration check, TypeChecker, schema check, or policy check.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-deserialization"
+      ]
+    },
+    {
+      "bom-ref": "control-keep-registration",
+      "name": "Keep type registration enabled for untrusted data",
+      "description": "Keep class or type registration enabled for untrusted data unless another explicit Fory policy (such as a TypeChecker allow-list) owns the accepted type surface.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-deserialization"
+      ]
+    },
+    {
+      "bom-ref": "control-register-safe-types",
+      "name": "Register only safe types and serializers",
+      "description": "Register only types and serializers that are safe for the application's trust boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-type-policy"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Configure depth and resource limits",
+      "description": "Configure depth and resource limits for the largest data shape the application intends to accept.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-deserialization"
+      ]
+    },
+    {
+      "bom-ref": "control-authenticate-bytes",
+      "name": "Authenticate or integrity-check untrusted bytes",
+      "description": "Applications that receive Fory data from untrusted sources should authenticate or integrity-check those bytes before passing them to Fory when authenticity or tamper resistance matters, and should treat cross-language peers and schemas as part of their trust relationship.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-deserialization"
+      ]
+    }
+  ]
+}

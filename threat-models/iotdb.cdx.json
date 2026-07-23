@@ -1,0 +1,521 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-iotdb",
+      "name": "Apache IoTDB",
+      "description": "Time-series database management system for IoT data (collection, storage, query, analysis). Runs as a server, standalone or as a distributed cluster of ConfigNodes (metadata/coordination) and DataNodes (storage/query), stores data in the TsFile columnar format, and is accessed over a Thrift-based RPC protocol via a SQL-like language and JDBC/session clients. IoTDB is operator-deployed infrastructure intended for a trusted network by default, with the application/ingestion tier in front of it; the authenticated client RPC surface is the main in-model boundary.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/iotdb/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://iotdb.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "iotdb"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/iotdb/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/iotdb/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-iotdb",
+      "name": "IoTDB deployment",
+      "description": "Deployment posture described by the IoTDB threat model: clients connect over the Thrift session protocol (JDBC, SQL) and are constrained by RBAC; optional REST and MQTT services are disabled by default; ConfigNode and DataNode peers communicate over an inter-node consensus channel assumed to run on a trusted network with no transport encryption; the operator and root superuser are trusted.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-server",
+          "type": "service",
+          "name": "IoTDB server (DataNode query/storage engine)",
+          "description": "Query engine, schema engine, storage layer, and the authentication/RBAC subsystem behind the client RPC surface; also loads and executes user-supplied extension code (UDFs, Triggers, Pipes, AINode models) in-process when the corresponding privileges are granted.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-client-rpc",
+          "type": "endpoint",
+          "name": "Client RPC surface (Thrift session, JDBC, SQL)",
+          "description": "The main in-model boundary; client Thrift SSL is available but disabled by default (enable_thrift_ssl=false).",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-rest-mqtt",
+          "type": "endpoint",
+          "name": "REST API and MQTT ingestion (optional)",
+          "description": "HTTP REST service and MQTT broker; both disabled by default (enable_rest_service=false, enable_mqtt_service=false) and in-model only when the operator has explicitly enabled them.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-data-directories",
+          "type": "data-store",
+          "name": "Data, WAL, and TsFile directories",
+          "description": "Local storage assumed private to the IoTDB process and not writable by untrusted local users. TsFile format internals are owned by the separate apache/tsfile project and modeled there.",
+          "zone": "zone-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Clients reaching the RPC port (or enabled REST/MQTT ports) from within the trusted-network deployment posture; untrusted beyond their granted RBAC privileges."
+        },
+        {
+          "bom-ref": "zone-server",
+          "name": "IoTDB server",
+          "type": "trust",
+          "description": "The server process (standalone node or cluster member)."
+        },
+        {
+          "bom-ref": "zone-peer-nodes",
+          "name": "Cluster peer nodes",
+          "type": "trust",
+          "description": "Other ConfigNodes/DataNodes in the same cluster; membership is assumed fully trusted, with no Byzantine fault tolerance claim."
+        },
+        {
+          "bom-ref": "zone-host",
+          "name": "Host and operator",
+          "type": "trust",
+          "description": "The host filesystem, config files, and the root superuser/operator, trusted for the instance."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-rpc",
+          "name": "Authenticated client RPC surface",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-inter-node",
+          "name": "Cluster inter-node channel",
+          "type": "trust",
+          "zones": [
+            "zone-server",
+            "zone-peer-nodes"
+          ]
+        },
+        {
+          "bom-ref": "boundary-host",
+          "name": "Host and configuration",
+          "type": "trust",
+          "zones": [
+            "zone-host",
+            "zone-server"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "IoTDB is operator-deployed infrastructure deployed inside a trusted network by default; direct public exposure, especially with default credentials, is not a supported production posture."
+        },
+        {
+          "description": "JVM runtime, Java 1.8+ (1.8-25 verified); Windows, macOS, or Linux; data/WAL/TsFile directories private to the IoTDB process; max open files raised to 65535."
+        },
+        {
+          "description": "Server-side time ordering does not assume monotonic or synchronized clocks across the cluster."
+        },
+        {
+          "description": "TsFile format internals are owned by the separate apache/tsfile project; client SDK repositories (iotdb-client-go/nodejs/csharp) and example/integration-test code are out of scope of this model."
+        },
+        {
+          "description": "Cluster membership is assumed fully trusted; IoTDB does not claim Byzantine fault tolerance and makes no safety/liveness guarantee against an authenticated-but-malicious peer node."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-rbac-bypass",
+        "name": "Authentication or RBAC privilege bypass",
+        "description": "A client must not read/write series data or schema, or perform global operations, beyond the privileges granted to its user/roles, and unauthenticated clients must not act. An unprivileged session reading/writing data or running admin operations is a security-critical auth bypass or privilege escalation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server",
+          "asset-client-rpc"
+        ],
+        "mitigations": [
+          "control-authentication-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-path-access",
+        "name": "Cross-path or cross-tenant data access",
+        "description": "A client with privilege on one path/database must not read or write series outside its granted paths; cross-path data access is security-critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-authentication-rbac"
+        ]
+      },
+      {
+        "bom-ref": "threat-preauth-malformed-input-dos",
+        "name": "Crash, OOM, or hang from malformed or pre-auth client input",
+        "description": "Malformed or pre-auth client input (Thrift/SQL/REST) should yield a clean error, not a crash, OOM, or hang of the server. Server crash, unbounded allocation, or deadlock from malformed or pre-auth client input is in-model, security-critical (remote DoS) if pre-auth, lower if it requires privilege. This is the in-model half of the resource/DoS line: super-linear amplification, a missing limit where a limit is expected, or a hang are also in-model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-client-rpc",
+          "asset-server"
+        ]
+      },
+      {
+        "bom-ref": "threat-extension-code-execution",
+        "name": "Server-side code execution via UDF/Trigger/Pipe/Model extensions",
+        "description": "UDFs, Triggers, Pipe processors, and AINode models execute user-supplied logic/JARs inside the server process. USE_UDF, USE_TRIGGER, USE_PIPE, and USE_MODEL are grantable system privileges (not strictly root/admin-only); principals granted these privileges are trusted for the corresponding server-side execution capability. RBAC is the authorization boundary, not a sandbox, so 'extension allows arbitrary code execution' is by design for a principal holding the relevant grant.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-restrict-extension-privileges"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-default-root-credentials",
+        "name": "Unchanged default root:root administrator credentials",
+        "description": "IoTDB ships a single fixed administrator root with password root, existing for initial setup and local getting-started use. It is a must-change before production use or exposure outside a trusted environment and not a supported production posture; a report that merely observes the default credential is a deployment misconfiguration, not a code bug.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-client-rpc"
+        ],
+        "mitigations": [
+          "control-change-default-password"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-client-traffic-interception",
+        "name": "Network interception of client traffic without TLS",
+        "description": "Client Thrift SSL is available but disabled by default (enable_thrift_ssl=false), so by default IoTDB does not defend against a network attacker reading or modifying client traffic; transport confidentiality/integrity is the operator's job unless TLS is enabled. The username/password login is not a defense against a network MITM without TLS.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-client-rpc"
+        ],
+        "mitigations": [
+          "control-enable-thrift-ssl"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-inter-node-interception",
+        "name": "Interception or modification of inter-node cluster traffic",
+        "description": "The ConfigNode-DataNode RPC and consensus channels are assumed to run on a trusted network and currently have no transport encryption; a finding that requires intercepting or modifying inter-node traffic is out of model under this posture, and operators are responsible for network segmentation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-network-segmentation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-byzantine-peer",
+        "name": "Authenticated-but-malicious cluster peer",
+        "description": "Cluster membership is assumed fully trusted. IoTDB does not claim Byzantine fault tolerance; there is no safety/liveness guarantee against an authenticated-but-malicious peer node, and a finding that requires a cluster member to behave arbitrarily is out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ordinary-resource-exhaustion",
+        "name": "Ordinary resource exhaustion from expensive queries or write load",
+        "description": "Ordinary expensive queries or write load that consume CPU/memory/disk are an operator capacity and resource-management concern, not an in-model security property, unless a specific bug applies (super-linear amplification, a missing limit where a limit is expected, or a hang), in which case it is in-model. SQL-injection-style abuse via clients that build IoTDB SQL from their own untrusted input is the embedding application's responsibility, as is credential-stuffing against the login surface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-host-or-admin-compromise",
+        "name": "Attackers who already control the host, process, or an admin session",
+        "description": "Attackers who already control the host or the IoTDB process, config files, or data directory have the operator's authority by definition and are out of scope, as are findings requiring an already-root/admin session ('admin can do destructive operation X' is out of model: the admin is trusted). There is no defense against a malicious operator or root.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-data-directories",
+          "asset-server"
+        ],
+        "mitigations": [
+          "control-filesystem-permissions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-rpc",
+        "boundary": "boundary-client-rpc",
+        "name": "Client RPC trust boundary",
+        "description": "Primary trust boundary: bytes arriving over the Thrift session protocol (and any enabled REST/MQTT endpoint) from a client are untrusted; a client is constrained to its RBAC-granted privileges. The query engine, schema engine, and storage layer sit behind this boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-rbac-bypass",
+          "threat-cross-path-access",
+          "threat-preauth-malformed-input-dos",
+          "threat-default-root-credentials",
+          "threat-client-traffic-interception",
+          "threat-ordinary-resource-exhaustion"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication-rbac",
+          "control-change-default-password",
+          "control-enable-thrift-ssl",
+          "control-trusted-network-deployment"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-inter-node",
+        "boundary": "boundary-inter-node",
+        "name": "Inter-node trust boundary",
+        "description": "Secondary boundary: the cluster/inter-node surface is assumed to run on a trusted network with no transport encryption today; cluster membership is fully trusted.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-inter-node-interception",
+          "threat-byzantine-peer"
+        ],
+        "controlsAtBoundary": [
+          "control-network-segmentation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-host",
+        "boundary": "boundary-host",
+        "name": "Host and operator trust boundary",
+        "description": "Config files, JVM flags, and the data directory are operator-trusted local inputs protected by filesystem permissions; the root superuser and whoever controls the deployment and host are trusted for the instance.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-host-or-admin-compromise"
+        ],
+        "controlsAtBoundary": [
+          "control-filesystem-permissions"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication-rbac",
+      "name": "Username/password authentication with RBAC privileges",
+      "description": "Clients authenticate with a username/password and are constrained by RBAC privileges (Users/Roles/Privileges); login plus privilege checks gate all series data, schema, and global operations.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-change-default-password",
+      "name": "Change the default root password before production",
+      "description": "Change the default root password before any production use or exposure outside a trusted environment; the root:root default exists only for initial setup and getting-started use.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-network-deployment",
+      "name": "Deploy inside a trusted network boundary",
+      "description": "Do not expose the client RPC port (or an enabled REST/MQTT port) directly to an untrusted/public network, especially with default credentials; that is not a supported posture. Enable TLS and authentication if wider exposure is unavoidable.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-thrift-ssl",
+      "name": "Enable client Thrift SSL where traffic crosses untrusted segments",
+      "description": "Enable client Thrift SSL (enable_thrift_ssl=true) where client traffic crosses an untrusted segment; it is off by default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-client-rpc"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-extension-privileges",
+      "name": "Restrict the extension system privileges",
+      "description": "Restrict who is granted USE_UDF, USE_TRIGGER, USE_PIPE, and USE_MODEL; holding one is equivalent to server-side code execution. RBAC is the boundary, not a sandbox, so do not grant these to semi-trusted clients.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-network-segmentation",
+      "name": "Segment the inter-node cluster network",
+      "description": "Run the inter-node cluster channel (ConfigNode-DataNode RPC and consensus) on a trusted, segmented network; these channels have no transport encryption today.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-inter-node"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Apply per-query and per-session resource limits",
+      "description": "Apply per-query / per-session resource limits appropriate to capacity; ordinary expensive-query or write-load DoS is an operator capacity concern.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-server"
+      ]
+    },
+    {
+      "bom-ref": "control-filesystem-permissions",
+      "name": "Restrict filesystem permissions on data and config directories",
+      "description": "Set filesystem permissions so only the IoTDB user can read the data, WAL, and config directories.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-data-directories"
+      ]
+    }
+  ]
+}

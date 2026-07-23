@@ -1,0 +1,673 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-cassandra",
+      "name": "Apache Cassandra",
+      "description": "Distributed NoSQL database system: client applications connect via the CQL binary protocol through official drivers to a peer-to-peer cluster of nodes, with gossip and replication channels between nodes, an on-disk storage layer (SSTables, commit logs, hints), a JMX interface, and internal system keyspaces. The threat model assumes a correctly configured, fully hardened deployment (authentication, CassandraAuthorizer, TLS on all channels, JMX localhost-bound with integrated auth); threats are evaluated against this hardened baseline, not out-of-the-box defaults, and vulnerability reports that do not adhere to these assumptions may not be accepted.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/cassandra/blob/trunk/doc/modules/cassandra/pages/reference/security-model.adoc",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://cassandra.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "cassandra"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/cassandra/blob/trunk/doc/modules/cassandra/pages/reference/security-model.adoc"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/cassandra/trunk/doc/modules/cassandra/pages/reference/security-model.adoc"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-cassandra",
+      "name": "Hardened Cassandra deployment",
+      "description": "Architecture assumed by the threat model: client applications and drivers speak CQL over required TLS to authenticated cluster nodes; nodes gossip and replicate over mutually TLS-authenticated inter-node channels; the storage layer and system keyspaces are trusted; JMX is bound to the local interface only with Cassandra integrated authentication. The root of trust converges to the infrastructure operator, the verified Cassandra distribution (release signatures against the PMC KEYS file), and the JVM.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-nodes",
+          "type": "service",
+          "name": "Cassandra nodes",
+          "description": "Individual database servers forming a peer-to-peer cluster, including the CQL native transport and the authentication and authorization subsystems (PasswordAuthenticator, MutualTlsWithPasswordFallbackAuthenticator, MutualTlsAuthenticator, CassandraAuthorizer).",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-drivers",
+          "type": "component",
+          "name": "Client drivers",
+          "description": "Official Apache Cassandra drivers (Java, Python, etc.) implementing the CQL binary protocol on behalf of client applications. Drivers assume they are connected to a properly configured, non-compromised server; once the TLS handshake succeeds they treat CQL protocol responses as well-formed and within protocol bounds and do not exhaustively validate every length field, type code, or value.",
+          "zone": "zone-clients"
+        },
+        {
+          "bom-ref": "asset-storage",
+          "type": "data-store",
+          "name": "Storage layer",
+          "description": "On-disk SSTables, commit logs, and hints, protected by OS-level permissions restricted to the Cassandra process user. Where the Apache Cassandra Sidecar (control plane) is deployed alongside a node, it shares filesystem access and is treated as a co-located trusted component subject to the same operator-level protections.",
+          "zone": "zone-node-host"
+        },
+        {
+          "bom-ref": "asset-system-keyspaces",
+          "type": "data-store",
+          "name": "System keyspaces",
+          "description": "Internal keyspaces (system_auth, system_schema, system) storing cluster metadata, authentication and authorization data. Trusted by Cassandra; deployers must ensure adequate system_auth replication (RF 3-5 per datacenter) and restrict direct manipulation via tools like sstableloader to trusted operators. system_schema and topology-bearing system tables are readable by every authenticated user by design.",
+          "zone": "zone-cluster"
+        },
+        {
+          "bom-ref": "asset-jmx",
+          "type": "interface",
+          "name": "JMX interface",
+          "description": "Java Management Extensions interface for monitoring and administration. Bound to the local interface only (LOCAL_JMX=yes), secured with Cassandra integrated authentication and authorization (CassandraLogin JAAS config plus AuthorizationProxy) and fine-grained MBean permissions; operations through it are trusted administrative actions.",
+          "zone": "zone-node-host"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Client applications and drivers",
+          "type": "trust",
+          "description": "Applications and drivers connecting via CQL; authenticated database users are not trusted beyond their explicitly granted permissions, and external end users' input must be validated by the application before reaching CQL."
+        },
+        {
+          "bom-ref": "zone-cluster",
+          "name": "Cassandra cluster",
+          "type": "trust",
+          "description": "The peer-to-peer cluster of nodes and its internal gossip and replication channels, protected by mutual TLS (internode_encryption: all)."
+        },
+        {
+          "bom-ref": "zone-node-host",
+          "name": "Node host (OS, storage, JMX)",
+          "type": "trust",
+          "description": "The operating system, data directories, configuration files, key material and localhost-bound JMX of each node; accessible only to trusted infrastructure operators."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-client-node",
+          "name": "Client-to-node (CQL over TLS)",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-cluster"
+          ]
+        },
+        {
+          "bom-ref": "boundary-inter-node",
+          "name": "Node-to-node (gossip and replication over mutual TLS)",
+          "type": "trust",
+          "zones": [
+            "zone-cluster",
+            "zone-node-host"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-infrastructure-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Infrastructure Operator / Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. OS-level access to nodes, configuration files (cassandra.yaml, cassandra-env.sh), data directories and JMX; can start/stop nodes. The organization restricts who holds this role guided by least privilege."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-dba-superuser",
+          "party": {
+            "roles": [
+              {
+                "name": "Database Administrator (Superuser)"
+              }
+            ],
+            "persona": {
+              "description": "Trusted within the CQL authorization model: can create/alter/drop roles, keyspaces and tables and grant/revoke permissions, but should not require OS-level access."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-app-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Application Developer"
+              }
+            ],
+            "persona": {
+              "description": "Trusted to use the CQL API correctly, construct safe queries, and manage credentials securely within applications."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-database-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Database User (non-superuser role)"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted beyond the permissions assigned to their role; the authorization subsystem (CassandraAuthorizer) enforces their access boundaries."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-unauthenticated-network",
+          "party": {
+            "roles": [
+              {
+                "name": "Unauthenticated Network Actor"
+              }
+            ],
+            "persona": {
+              "description": "Any party with network access to client or inter-node ports who has not authenticated. Under the assumed configuration their connection attempts are rejected; they remain a threat only if they can exploit vulnerabilities in the TLS handshake, authentication protocol, or network stack itself."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-external-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "External Client / End User"
+              }
+            ],
+            "persona": {
+              "description": "Interacts with Cassandra indirectly through applications; their input should never be trusted by the application layer and must be validated before being passed to CQL queries."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Cassandra has been configured correctly from a security point of view, with all security features enabled per the Security Configuration Baseline: real authenticator and CassandraAuthorizer (not AllowAll*), client-to-node TLS with optional: false, node-to-node mutual TLS with internode_encryption: all, JMX localhost-bound with integrated auth, system_auth at RF 3-5 per datacenter, audit logging with AUTH,DCL,DDL,ERROR,OTHER categories, and network firewalls/segmentation with non-essential ports closed."
+        },
+        {
+          "description": "The default cassandra superuser account is removed or disabled and replaced with a dedicated superuser: a strong password under password-based authentication, or a passwordless role bound to a specific administrative mTLS certificate identity under MutualTlsAuthenticator."
+        },
+        {
+          "description": "Cassandra is deployed on trusted infrastructure with OS-level hardening, secured network infrastructure, maintained physical security, and an up-to-date JVM; infrastructure operators are trusted and follow security best practices."
+        },
+        {
+          "description": "The distribution is obtained from official Apache channels and verified with release signatures against the Apache Cassandra PMC KEYS file; SSL/TLS key material is properly generated, stored, and rotated; credentials are strong, unique, and managed through a secure process."
+        },
+        {
+          "description": "Any pluggable implementation of a Cassandra interface or SPI (authenticators, authorizers, snitches, seed providers, partitioners, compressors, SSL context factories, audit loggers, triggers, UDFs, startup checks) and any JAR placed on the Cassandra classpath runs in-process with full JVM privileges, is sourced from a trusted vendor, and is treated as part of the trusted code base; the project does not control third-party implementations."
+        },
+        {
+          "description": "Trusted data sources that deployers must protect: configuration files, system keyspaces, the JMX interface, environment variables and JVM system properties, and SSL/TLS key material. Untrusted: CQL queries from client connections, data content written by clients, and inter-node messages from unauthorized sources."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-unauthorized-data-access",
+        "name": "Unauthorized data access (CWE-284)",
+        "description": "Attackers gain unauthorized access to stored data despite active authentication and authorization: compromised or weak credentials, overly permissive role grants, direct access to SSTable files bypassing CQL-level controls, vulnerabilities in the authentication/authorization subsystem, or compromised JMX credentials. Residual risks: credential theft or brute force against authenticated accounts, privilege creep through accumulated grants, and compromise of an infrastructure operator with OS-level access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes",
+          "asset-storage",
+          "asset-system-keyspaces"
+        ],
+        "mitigations": [
+          "control-authentication",
+          "control-authorization",
+          "control-filesystem-permissions",
+          "control-jmx-security",
+          "control-internode-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-data-in-transit",
+        "name": "Data in transit interception (CWE-319)",
+        "description": "Interception of data between clients and nodes or between nodes despite TLS on all channels: TLS implementation or cipher-negotiation vulnerabilities, compromised or weak certificates enabling man-in-the-middle, certificate validation flaws during SSL hot reloading, or attacks on the CA or key material. Residual risks: compromise of private keys or the CA, JVM TLS vulnerabilities (protocol downgrade), and the brief window during certificate rotation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes",
+          "asset-drivers"
+        ],
+        "mitigations": [
+          "control-client-encryption",
+          "control-internode-encryption",
+          "control-jmx-security",
+          "control-certificate-management"
+        ]
+      },
+      {
+        "bom-ref": "threat-data-tampering",
+        "name": "Data tampering and integrity (CWE-345)",
+        "description": "Unauthorized modification or corruption of data despite active access controls: authenticated users exploiting overly broad MODIFY permissions, direct SSTable manipulation by a compromised OS-level account, offline tools (sstableloader, sstablescrub) used by a compromised operator, or authorization subsystem bypass. Residual risks: a compromised infrastructure operator can bypass all CQL-level controls via direct file manipulation; application-level logic errors within granted permissions; application-level integrity (checksums, signatures) is a developer responsibility where guarantees beyond Cassandra's are required.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-storage",
+          "asset-system-keyspaces"
+        ],
+        "mitigations": [
+          "control-authorization",
+          "control-audit-logging",
+          "control-filesystem-permissions",
+          "control-internode-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-denial-of-service",
+        "name": "Denial of service (CWE-400)",
+        "description": "Disruption of availability despite authentication requirements: resource-exhaustive queries (full table scans, unbounded reads, excessive tombstone reads), excessive connections exhausting pools, compromised JMX credentials triggering disruptive operations (requires local access), TLS handshake abuse to exhaust CPU, or network-level flooding (an infrastructure-layer attack). Residual risks: authenticated users can still craft expensive queries within their permissions; TLS handshake cost amplification from unauthenticated actors; query best practices (prepared statements, no ALLOW FILTERING in production, appropriate page sizes, partition-aware queries) are a developer responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes"
+        ],
+        "mitigations": [
+          "control-authentication",
+          "control-rate-and-resource-limits",
+          "control-jmx-security",
+          "control-network-security",
+          "control-monitoring"
+        ]
+      },
+      {
+        "bom-ref": "threat-privilege-escalation",
+        "name": "Privilege escalation (CWE-269)",
+        "description": "Elevating privileges beyond the authorized level despite active RBAC and JMX authorization: privilege creep from accumulated grants, credential theft targeting superuser or DBA accounts, vulnerabilities in the authenticator or CassandraAuthorizer, inconsistencies between CQL and JMX authorization scopes, or role hierarchy (GRANT role TO role) yielding unintended transitive permissions. Residual risks: privilege creep without periodic audits (LIST ALL PERMISSIONS), superuser compromise granting full cluster control, and complex role hierarchies creating unintended paths.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes",
+          "asset-system-keyspaces"
+        ],
+        "mitigations": [
+          "control-dedicated-superuser",
+          "control-authorization",
+          "control-jmx-security",
+          "control-internode-encryption"
+        ]
+      },
+      {
+        "bom-ref": "threat-information-disclosure",
+        "name": "Information disclosure (CWE-200)",
+        "description": "Access to sensitive system information, metadata, or credentials despite active controls: overly broad permissions reading system_auth (role definitions, hashed credentials, grants), compromised JMX credentials exposing configuration and memory state (requires local access), log files containing sensitive information, CQL error messages revealing internal details, or timing/error-based leakage. Residual risks: schema, identifier names and cluster topology are readable by every authenticated user by design (deployers must not encode sensitive information into schema identifiers); users may infer data distribution through permitted queries; log hygiene is a developer responsibility; avoiding internal stack traces in CQL error responses is a framework responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-system-keyspaces",
+          "asset-jmx",
+          "asset-nodes"
+        ],
+        "mitigations": [
+          "control-system-table-permissions",
+          "control-jmx-security",
+          "control-log-management"
+        ]
+      },
+      {
+        "bom-ref": "threat-supply-chain",
+        "name": "Supply chain and dependency attacks (CWE-1357)",
+        "description": "Compromise through malicious or vulnerable dependencies or tampered distribution packages: compromised third-party libraries, packages from unofficial sources, dependencies with known CVEs, or compromised build/release infrastructure. Residual risks: zero-day vulnerabilities in dependencies and compromise of the Apache release infrastructure itself.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes"
+        ],
+        "mitigations": [
+          "control-verified-distribution",
+          "control-dependency-management",
+          "control-security-patching"
+        ]
+      },
+      {
+        "bom-ref": "threat-log-injection",
+        "name": "Log injection (CWE-117)",
+        "description": "Injection of malicious content into log files through crafted input, hiding malicious activity or corrupting log analysis; applies even with all security features enabled, since authenticated users can submit crafted data through legitimate CQL operations (query strings, data values with log control characters, manipulated role names, structured-format exploitation). Residual controls are shared: structured logging with proper escaping is a framework responsibility, injection-resilient log aggregation is a deployer responsibility, and awareness that client-supplied values appear in logs is a developer responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nodes"
+        ],
+        "mitigations": [
+          "control-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-cql-injection",
+        "name": "Improper neutralization of special elements in CQL (CWE-138)",
+        "description": "Exploitation of improperly constructed CQL queries: an application-layer threat that persists regardless of Cassandra's configuration, via string concatenation of untrusted input in client applications. Even if injection succeeds, operations are limited to the authenticated application role's permissions, and audited categories are captured in audit logs. Residual risks: within the role's permissions an attacker can read, modify, or delete accessible data; parameterized queries (prepared statements with bound parameters) and input validation at the application boundary are developer responsibilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-drivers",
+          "asset-nodes"
+        ],
+        "mitigations": [
+          "control-authorization",
+          "control-audit-logging",
+          "control-parameterized-queries"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-server-vs-driver",
+        "name": "Malicious or compromised server attacking a connected driver",
+        "description": "Scenarios that require a malicious or compromised Cassandra-compatible server returning crafted protocol responses to attack a connected driver are outside the trust boundary: an attacker controlling the server endpoint already has full access to every read and write through that connection, so a client-side crash, memory corruption, or resource exhaustion is strictly less severe than the server compromise itself. Bugs of this nature (insufficient bounds checking of server responses, malformed frame mishandling, crashes on out-of-spec replies) remain legitimate correctness and robustness issues for the normal bug tracker, not security vulnerabilities.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-drivers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope",
+        "name": "Explicitly out-of-scope threat classes",
+        "description": "Out of scope for this threat model: vulnerabilities in the underlying OS, JVM, or hardware; physical attacks on servers; social engineering targeting administrators; application-level vulnerabilities in client code; backup and disaster recovery security (covered separately); side-channel attacks (timing or resource-usage channels, with software hardening adopted where practical); log masking (developer responsibility via third-party frameworks); and network/infrastructure-layer denial of service such as volumetric DDoS. Reports assuming a trusted user as attacker, requiring OS-level or physical access, or requiring security features to be disabled or misconfigured are likewise out of scope.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-client-node",
+        "boundary": "boundary-client-node",
+        "name": "Client-to-node trust boundary",
+        "description": "All client connections require TLS and authentication; authenticated non-superuser roles are untrusted beyond their explicitly granted permissions, and CQL queries and client-written data content are untrusted input mediated by authentication and authorization.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unauthorized-data-access",
+          "threat-data-in-transit",
+          "threat-denial-of-service",
+          "threat-privilege-escalation",
+          "threat-information-disclosure",
+          "threat-log-injection",
+          "threat-cql-injection"
+        ],
+        "controlsAtBoundary": [
+          "control-authentication",
+          "control-authorization",
+          "control-client-encryption",
+          "control-rate-and-resource-limits"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-inter-node",
+        "boundary": "boundary-inter-node",
+        "name": "Inter-node trust boundary",
+        "description": "With internode_encryption: all and mutual TLS active, unauthorized nodes cannot join the cluster or inject traffic; the residual threat is exploitation of vulnerabilities in the TLS implementation or certificate validation logic.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-data-tampering",
+          "threat-data-in-transit"
+        ],
+        "controlsAtBoundary": [
+          "control-internode-encryption",
+          "control-certificate-management"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication",
+      "name": "Client authentication",
+      "description": "PasswordAuthenticator, MutualTlsWithPasswordFallbackAuthenticator, or MutualTlsAuthenticator active (not AllowAllAuthenticator); all client connections must authenticate via credentials or mutual TLS client certificates. The authentication barrier limits anonymous abuse and provides an audit trail.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-node"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization",
+      "name": "Role-based authorization (CassandraAuthorizer)",
+      "description": "CassandraAuthorizer enforces role-based access control with keyspace and table-level permissions via GRANT/REVOKE on an allowlist model (no access unless explicitly granted); MODIFY permissions scoped to roles that need write access; least-privilege grants scoped to specific keyspaces, tables, or MBeans.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes",
+        "asset-system-keyspaces"
+      ]
+    },
+    {
+      "bom-ref": "control-client-encryption",
+      "name": "Client-to-node TLS",
+      "description": "client_encryption_options configured with enabled: true and optional: false, requiring TLS for all client connections.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-client-node"
+      ]
+    },
+    {
+      "bom-ref": "control-internode-encryption",
+      "name": "Node-to-node mutual TLS",
+      "description": "server_encryption_options configured with internode_encryption: all and mutual TLS certificate validation, preventing unauthorized cluster participants from joining or injecting traffic (including crafted manipulation of system_auth via inter-node messages).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-inter-node"
+      ]
+    },
+    {
+      "bom-ref": "control-jmx-security",
+      "name": "JMX localhost binding with integrated auth",
+      "description": "JMX bound to the local interface only (LOCAL_JMX=yes), eliminating the remote JMX attack surface and in-transit interception without JMX SSL; Cassandra integrated auth (CassandraLogin JAAS config plus AuthorizationProxy) unifies CQL and JMX access control with fine-grained MBean permissions; monitoring roles granted only SELECT and DESCRIBE. If remote JMX is operationally required it must use SSL and integrated auth, but localhost-only binding is the recommended and assumed configuration.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-jmx"
+      ]
+    },
+    {
+      "bom-ref": "control-filesystem-permissions",
+      "name": "File system permissions",
+      "description": "OS-level access to data directories, commit logs, and saved caches restricted to the Cassandra process user; access to sstableloader and other offline tools restricted to trusted operators or the Sidecar control plane.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-logging",
+      "name": "Audit logging",
+      "description": "Audit logging enabled for the AUTH, DCL, DDL, ERROR, OTHER categories, balancing compliance and scalability; capturing every DML statement is generally not tenable at scale, with DML auditing opt-in for specific keyspaces or roles where regulatory requirements demand it.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-rate-and-resource-limits",
+      "name": "Rate limiting and resource limits",
+      "description": "Client connection limits and native transport request throttling configured; read/write request timeouts, query result size limits, and tombstone thresholds set in cassandra.yaml.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-network-security",
+      "name": "Network security",
+      "description": "Firewalls and network segmentation in place; all non-essential ports closed.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-monitoring",
+      "name": "Monitoring and alerting",
+      "description": "Unusual traffic patterns, query latency spikes, and resource exhaustion conditions are monitored.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-dedicated-superuser",
+      "name": "Default superuser disabled, role separation",
+      "description": "The default cassandra role removed or disabled (SUPERUSER = false, LOGIN = false) and replaced with a dedicated superuser (strong password, or a passwordless role bound to a specific administrative mTLS identity); administrative, operational (JMX), and application roles separated, with the role hierarchy used to manage permissions cleanly.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-system-table-permissions",
+      "name": "System table permissions",
+      "description": "Access to system_auth restricted (non-superusers need an explicit SELECT grant); DDL against local and replicated system keyspaces blocked by the authorization layer regardless of grants (only replication parameters of replicated system keyspaces may be altered by sufficiently privileged users). system_schema and topology tables remain intentionally readable by every authenticated user because drivers and tooling depend on them.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-system-keyspaces"
+      ]
+    },
+    {
+      "bom-ref": "control-log-management",
+      "name": "Log management",
+      "description": "Access to log files restricted at the OS level; production log levels configured to avoid logging sensitive data.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-certificate-management",
+      "name": "Certificate management and hot reloading",
+      "description": "CA-signed certificates with properly configured truststores for mutual authentication; SSL certificate hot reloading (polling every 10 minutes or via nodetool reloadssl) supports rotation without downtime; FIPS-compliant JVM settings where required.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-nodes"
+      ]
+    },
+    {
+      "bom-ref": "control-verified-distribution",
+      "name": "Verified distribution",
+      "description": "Cassandra obtained from official Apache distribution channels with release signatures verified against the Apache Cassandra PMC KEYS file; artifacts without valid signatures are not used.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-dependency-management",
+      "name": "Dependency quality and vulnerability monitoring",
+      "description": "The Apache Cassandra project checks the quality of its dependencies and monitors for known vulnerabilities (a framework responsibility).",
+      "category": "detective",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-security-patching",
+      "name": "Prompt security patching",
+      "description": "Security updates applied promptly; the Cassandra security mailing list monitored for vulnerability announcements; the underlying JVM kept up-to-date since Cassandra inherits its cryptographic and network security properties.",
+      "category": "corrective",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-parameterized-queries",
+      "name": "Parameterized queries and input validation",
+      "description": "Developer responsibility: always use prepared statements with bound parameters, never concatenate untrusted input into CQL query strings, and validate and sanitize all user input at the application boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-drivers"
+      ]
+    }
+  ]
+}

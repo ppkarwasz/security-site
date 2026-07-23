@@ -1,0 +1,126 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-answer",
+      "name": "Apache Answer",
+      "description": "Question-and-answer platform software. The security model page establishes what the project considers in scope and out of scope: the trust placed in admin users, the role of CAPTCHA as an anti-abuse measure, and the scope limitation to official plugins.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://answer.apache.org/community/security-model",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://answer.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "answer"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://answer.apache.org/community/security-model"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-admin-interface-abuse",
+        "name": "Abuse of admin interfaces by administrators",
+        "description": "Admin users have full system permissions, which includes access to potentially vulnerable operations. The model assumes administrators act in good faith and will not attack their own systems; security issues within admin interfaces are generally not considered vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unprivileged-privilege-escalation",
+        "name": "Unprivileged users exceeding their authorized capabilities",
+        "description": "Issues in admin interfaces are considered vulnerabilities when they allow unprivileged users to exceed their authorized capabilities, in contrast to issues only exercisable by trusted administrators.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-brute-force-with-captcha-disabled",
+        "name": "Automated attacks and brute-force password attacks when CAPTCHA is disabled",
+        "description": "CAPTCHA is an essential security measure to prevent automated attacks and abuse. Disabling CAPTCHA protection could enable attackers to conduct brute-force password attacks; Apache Answer explicitly disclaims responsibility for security problems arising from disabled CAPTCHA protection.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "mitigations": [
+          "control-keep-captcha-enabled"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-third-party-plugin-vulnerabilities",
+        "name": "Vulnerabilities in custom or third-party plugins",
+        "description": "Apache Answer only guarantees security for official plugins from the approved repository. Third-party plugins fall outside the security model's scope, and the project assumes no responsibility for vulnerabilities in custom or external plugins.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-use-official-plugins"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-keep-captcha-enabled",
+      "name": "Keep CAPTCHA protection enabled",
+      "description": "CAPTCHA serves as an essential security measure to prevent automated attacks and abuse, including brute-force password attacks. Operators should not disable it; the project disclaims responsibility for problems arising from disabled CAPTCHA.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-use-official-plugins",
+      "name": "Use only official plugins from the approved repository",
+      "description": "Security is only guaranteed for official plugins from the project's approved repository; custom or external plugins are outside the security model.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

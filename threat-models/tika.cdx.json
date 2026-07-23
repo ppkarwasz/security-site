@@ -1,0 +1,289 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-tika",
+      "name": "Apache Tika",
+      "description": "Content detection and extraction toolkit that parses documents through numerous third-party format libraries, deployable as an embedded library or as the tika-server and tika-grpc services. The security model covers two distinct risk categories: dangers inherent to parsing untrusted data, and risks from allowing clients to control a running server.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://tika.apache.org/security-model.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://tika.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "tika"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://tika.apache.org/security-model.html"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-tika",
+      "name": "Tika parsing and service deployment",
+      "description": "The two trust surfaces described by the Tika security model: untrusted files entering the parsing process, and network callers of the tika-server and tika-grpc services, which must only ever be trusted callers on a trusted, access-controlled network.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-parsers",
+          "type": "component",
+          "name": "Parser framework and third-party format libraries",
+          "description": "Tika's parsing pipeline, which relies on numerous third-party format libraries, any of which may contain undiscovered security flaws. Tika is a utility tool, not a security boundary; no amount of hardening can guarantee that a hostile file parses safely.",
+          "zone": "zone-tika-process"
+        },
+        {
+          "bom-ref": "asset-tika-server",
+          "type": "service",
+          "name": "tika-server",
+          "description": "HTTP service exposing parsing to network callers. High-risk features (pipes functionality, async machinery, acceptance of runtime parser configuration) are intentionally disabled by default.",
+          "zone": "zone-tika-process"
+        },
+        {
+          "bom-ref": "asset-tika-grpc",
+          "type": "service",
+          "name": "tika-grpc",
+          "description": "gRPC service warranting heightened caution due to its broader RPC exposure, including runtime server reconfiguration calls and pipe component credential retrieval.",
+          "zone": "zone-tika-process"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-documents",
+          "name": "Untrusted document sources",
+          "type": "trust",
+          "description": "Origin of files handed to Tika for detection and extraction; hostile files may crash the parsing process, hang it indefinitely, or potentially compromise the parser entirely."
+        },
+        {
+          "bom-ref": "zone-tika-process",
+          "name": "Tika process",
+          "type": "trust",
+          "description": "The JVM running the parser framework, tika-server, or tika-grpc; expected to be deployed with isolation, resource constraints, and minimal necessary privileges."
+        },
+        {
+          "bom-ref": "zone-callers",
+          "name": "Network callers",
+          "type": "trust",
+          "description": "Clients of tika-server and tika-grpc. Only trusted callers on a trusted, access-controlled network are supported; never untrusted users or the public internet."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-parsing",
+          "name": "Document parsing boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-documents",
+            "zone-tika-process"
+          ]
+        },
+        {
+          "bom-ref": "boundary-service",
+          "name": "Service access boundary",
+          "type": "trust",
+          "zones": [
+            "zone-callers",
+            "zone-tika-process"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Parsing is dangerous: bad things can happen when parsing untrusted data, and operators should assume hostile files may crash the process, hang it indefinitely, or compromise the parser entirely."
+        },
+        {
+          "description": "Tika is deployed with isolation mechanisms, resource constraints, and minimal necessary privileges aligned with the deployer's threat model."
+        },
+        {
+          "description": "tika-server and tika-grpc are exposed only to trusted callers on a trusted, access-controlled network; securing access is the users' responsibility, not the project's."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-hostile-file-exploitation",
+        "name": "Parser exploitation by a hostile file",
+        "description": "A crafted file exploits a flaw in Tika or one of its many third-party format libraries; identified vulnerability classes include XML external entity injection / server-side request forgery, command injection, and deserialization of untrusted objects, up to full compromise of the parsing process. No amount of hardening can guarantee that a hostile file parses safely.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-isolation"
+        ]
+      },
+      {
+        "bom-ref": "threat-parsing-dos",
+        "name": "Denial of service while parsing untrusted data",
+        "description": "A hostile file crashes the parsing process or causes an indefinite hang. The project declines to classify denial of service vulnerabilities as security issues, though it welcomes reports and code contributions addressing them.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "mitigations": [
+          "control-isolation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-detection-evasion",
+        "name": "Mime detection or content extraction evasion",
+        "description": "Mime detection and content extraction are inherently error-prone and must not be relied on without verification in high-risk contexts such as cross-domain filtering or search. Tika explicitly does not attempt to identify or neutralize files designed to exploit parser vulnerabilities or create parser differentials (polyglots, chimeras); files can be crafted to evade detection, obstruct analysis, or cause disruption in countless ways. Out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-caller-abuse",
+        "name": "Abuse of tika-server or tika-grpc by untrusted callers",
+        "description": "An attacker who gains access to a server with the high-risk features enabled (pipes functionality, async machinery, runtime parser configuration) can obtain file system read/write at the server process's privilege level, circumvent resource or timeout restrictions, or manipulate component loading and document parsing behavior; tika-grpc adds runtime server reconfiguration and pipe component credential retrieval. These services must never be exposed to untrusted users or the public internet; securing access is the users' responsibility, not the project's.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tika-server",
+          "asset-tika-grpc"
+        ],
+        "mitigations": [
+          "control-restrict-access",
+          "control-dangerous-features-off"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-parsing",
+        "boundary": "boundary-parsing",
+        "name": "Untrusted data parsing boundary",
+        "description": "Every file handed to Tika is untrusted; Tika is a utility tool, not a security boundary, and the third-party format libraries it relies on may contain undiscovered flaws.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-hostile-file-exploitation",
+          "threat-parsing-dos",
+          "threat-detection-evasion"
+        ],
+        "controlsAtBoundary": [
+          "control-isolation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-service",
+        "boundary": "boundary-service",
+        "name": "Service caller boundary",
+        "description": "tika-server and tika-grpc support only trusted callers on a trusted, access-controlled network; an untrusted caller reaching them is a deployment failure, mitigated in depth by keeping dangerous capabilities disabled.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-untrusted-caller-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-restrict-access",
+          "control-dangerous-features-off"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-isolation",
+      "name": "Deploy with isolation, resource constraints, and least privilege",
+      "description": "Run Tika with appropriate isolation mechanisms, resource constraints, and the minimal necessary privileges aligned with the deployer's threat model, assuming a hostile file may crash, hang, or compromise the parsing process.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-parsing"
+      ]
+    },
+    {
+      "bom-ref": "control-dangerous-features-off",
+      "name": "High-risk server features disabled by default",
+      "description": "Pipes functionality, async machinery, and acceptance of runtime parser configuration are intentionally disabled by default in tika-server. Disabling them is defense in depth, layered security rather than a substitute for access control.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-tika-server",
+        "asset-tika-grpc"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-access",
+      "name": "Restrict service access to trusted callers",
+      "description": "Expose tika-server and tika-grpc only to trusted callers on a trusted, access-controlled network, with endpoint isolation, two-way TLS, and least-privilege operation as standard protective measures. Securing access is the deploying organization's responsibility.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-service"
+      ]
+    }
+  ]
+}

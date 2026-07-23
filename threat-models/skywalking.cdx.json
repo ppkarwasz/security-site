@@ -1,0 +1,402 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:03Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-skywalking",
+      "name": "Apache SkyWalking",
+      "description": "Application performance monitoring (APM) platform: agents and client-side SDKs send telemetry (metrics, traces, logs, profiling data, HTTP captures) to the OAP server, which stores and analyzes it and serves a UI. The security model assumes the OAP server, UI, and agent deployments operate in a secure environment such as a data center, reachable only by the operation team on default deployment; all telemetry data are trusted and the OAP server does not validate any field of it.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://skywalking.apache.org/docs/main/next/en/security/readme/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://skywalking.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "skywalking"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://skywalking.apache.org/docs/main/next/en/security/readme/"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-skywalking",
+      "name": "SkyWalking deployment",
+      "description": "Deployment shape described by the security notice: OAP server, UI, and agents run inside a secure environment (data center) reachable by the operation team; client-side monitoring (iOS/iPadOS apps, browser web apps via client-js, WeChat/Alipay mini-programs) sends telemetry from the public internet to OAP endpoints; a separate admin API surface (HTTP port 17128 and admin-internal gRPC port 17129) is reserved for operators and OAP peer nodes.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-oap-server",
+          "type": "service",
+          "name": "OAP server",
+          "description": "Backend receiving telemetry over HTTP and gRPC (public agent/cluster gRPC port 11800 by default). It does not validate any field of telemetry data, to avoid extra load.",
+          "zone": "zone-datacenter"
+        },
+        {
+          "bom-ref": "asset-ui",
+          "type": "service",
+          "name": "SkyWalking UI",
+          "description": "Web UI displaying telemetry data; free-form telemetry strings reach the UI verbatim.",
+          "zone": "zone-datacenter"
+        },
+        {
+          "bom-ref": "asset-agents",
+          "type": "agent",
+          "name": "Language agents and instrumented applications",
+          "description": "Agents attached to instrumented applications; any free-form string the application attaches to telemetry (URIs, header values, exception messages) reaches OAP and the UI verbatim.",
+          "zone": "zone-datacenter"
+        },
+        {
+          "bom-ref": "asset-admin-api",
+          "type": "api",
+          "name": "Admin API (ports 17128 and 17129)",
+          "description": "The admin-server module hosts HTTP port 17128 (runtime rule hot-update API that compiles and loads MAL/LAL rules into the OAP JVM on the fly, and a DSL debug API capturing live rule executions including raw payloads) and gRPC port 17129 (admin-internal gRPC bus for peer-to-peer cluster RPCs between OAP nodes: runtime-rule Suspend/Resume/Forward and DSL debug install/collect/stop). Intentionally a separate transport from the public agent/cluster gRPC port 11800. Enabled by default so the bundled status and inspect feature modules are reachable out of the box; both ports open with no built-in authentication.",
+          "zone": "zone-datacenter"
+        },
+        {
+          "bom-ref": "asset-client-side-sources",
+          "type": "actor",
+          "name": "Client-side monitoring sources",
+          "description": "iOS/iPadOS apps (OpenTelemetry Swift SDK), browser web apps (client-js), and WeChat/Alipay mini-programs sending telemetry from the public internet to OAP endpoints including OTLP/HTTP (/v1/traces, /v1/logs, /v1/metrics), SkyWalking native (/v3/segments), and browser reporting endpoints. These endpoints accept data from any client without authentication by default.",
+          "zone": "zone-public-internet"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-datacenter",
+          "name": "Secure environment (data center)",
+          "type": "trust",
+          "description": "The OAP server, UI, and agent deployments are assumed to operate in a secure environment, such as only inside the data center, reachable by the operation team on default deployment."
+        },
+        {
+          "bom-ref": "zone-public-internet",
+          "name": "Public internet / out of trusted zone",
+          "type": "trust",
+          "description": "Untrusted clients: client-side monitoring sources and requests carrying traceable RPC headers (sw8, sw8-x, sw8-correlation) from outside the trusted zone."
+        },
+        {
+          "bom-ref": "zone-operators",
+          "name": "Operation team",
+          "type": "trust",
+          "description": "The only party that should be able to reach the admin HTTP endpoint (17128), via an operator-controlled gateway; port 17129 should be reachable only between OAP nodes."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-telemetry-ingress",
+          "name": "Telemetry ingress from outside the trusted zone",
+          "type": "trust",
+          "zones": [
+            "zone-public-internet",
+            "zone-datacenter"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin-plane",
+          "name": "Admin API access",
+          "type": "trust",
+          "zones": [
+            "zone-operators",
+            "zone-datacenter"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "The OAP server, UI, and agent deployments operate in a secure environment, such as only inside the data center, and are reachable by the operation team on default deployment."
+        },
+        {
+          "description": "All telemetry data are trusted: the OAP server does not validate any field of the telemetry data, to avoid extra load for the server. Every field of every telemetry category should be validated by the operator before it reaches OAP; none are inherently safer than the others."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-telemetry-string-injection",
+        "name": "XSS or RCE via attacker-controlled telemetry strings",
+        "description": "Untrusted strings enter the system through many telemetry fields: metric names, label keys and values; span operation names, span tags, span logs/events, endpoint and peer identifiers; log bodies and structured fields; profiling results (eBPF, async-profiler, JFR samples), captured stack frames, symbol names; and HTTP request/response bodies, headers, query strings, and body-capture dumps. A request URI, header value, exception message from poisoned input, or any other free-form string an instrumented application attaches reaches OAP and the UI verbatim. Without the recommended protections, an attacker could embed executable Javascript code in any of those fields, causing XSS or even remote code execution. By design the OAP server does not validate any telemetry field; validation is the operator's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oap-server",
+          "asset-ui"
+        ],
+        "mitigations": [
+          "control-validate-telemetry-fields",
+          "control-validation-layer",
+          "control-validate-sw8-headers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-api-code-execution",
+        "name": "Arbitrary code execution in the OAP JVM via the admin API ports",
+        "description": "The admin API surface is far more powerful than the telemetry receiver ports: a request can register new Javassist-compiled bytecode, mutate MeterSystem state, drop backend schema (BanyanDB measures), or inspect operationally-sensitive payloads (raw log bodies, parsed maps, metric source events). Rule content is arbitrary YAML that compiles into the OAP JVM; a malicious rule could exfiltrate data, spike resource use, or create metric-name collisions, and captured DSL-debug payloads include sensitive operational state. POST /runtime/rule/* and POST /dsl-debugging/* are to be treated as equivalent to shell access on the OAP host. Both ports open with no built-in authentication; without the mandated operator protections an attacker with network reach to port 17128 or 17129 can execute arbitrary code inside the OAP JVM.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin-api",
+          "asset-oap-server"
+        ],
+        "mitigations": [
+          "control-restrict-admin-ports",
+          "control-gateway-protect-admin",
+          "control-audit-admin-requests",
+          "control-disable-admin-server"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-telemetry-dos",
+        "name": "DoS/DDoS against exposed OAP and UI services",
+        "description": "For sensitive environments, the document advises limiting the telemetry report frequency in case of DoS/DDoS attacks against exposed OAP and UI services; rate limiting is an operator-side measure.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oap-server",
+          "asset-ui"
+        ],
+        "mitigations": [
+          "control-rate-limiting"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-client-side-endpoint-abuse",
+        "name": "Abuse of unauthenticated client-side telemetry endpoints",
+        "description": "Client-side monitoring sources (iOS/iPadOS apps, browser web apps, WeChat/Alipay mini-programs) send telemetry from the public internet to OAP endpoints (OTLP/HTTP /v1/traces, /v1/logs, /v1/metrics; SkyWalking native /v3/segments; browser reporting endpoints) that accept data from any client without authentication by default. The documented security policies, especially rate limiting, must be applied to prevent abuse from untrusted client-side sources.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oap-server",
+          "asset-client-side-sources"
+        ],
+        "mitigations": [
+          "control-rate-limiting",
+          "control-gateway-authentication",
+          "control-validation-layer"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-telemetry-ingress",
+        "boundary": "boundary-telemetry-ingress",
+        "name": "Telemetry ingress trust boundary",
+        "description": "Telemetry from client-side sources on the public internet, and traceable RPC headers (sw8, sw8-x, sw8-correlation) on requests from outside the trusted zone, cross into the data center. OAP itself performs no field validation, so the operator must authenticate, rate-limit, and validate at this boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-telemetry-string-injection",
+          "threat-telemetry-dos",
+          "threat-client-side-endpoint-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-tls-transport",
+          "control-gateway-authentication",
+          "control-validate-sw8-headers",
+          "control-validate-telemetry-fields",
+          "control-validation-layer",
+          "control-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin-plane",
+        "boundary": "boundary-admin-plane",
+        "name": "Admin API trust boundary",
+        "description": "Only the operator team should be able to reach the admin HTTP endpoint (17128), through an operator-controlled gateway with IP allow-list and authentication; the admin gRPC port (17129) must be reachable only between OAP nodes on a private peer-to-peer interface.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-admin-api-code-execution"
+        ],
+        "controlsAtBoundary": [
+          "control-restrict-admin-ports",
+          "control-gateway-protect-admin",
+          "control-audit-admin-requests",
+          "control-disable-admin-server"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-tls-transport",
+      "name": "Use HTTPS and gRPC+TLS",
+      "description": "HTTPS and gRPC+TLS should be used between agents and OAP servers, as well as the UI.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oap-server",
+        "asset-ui",
+        "asset-agents"
+      ]
+    },
+    {
+      "bom-ref": "control-gateway-authentication",
+      "name": "Authenticate OAP and UI through a gateway",
+      "description": "Set up TOKEN or username/password based authentication for the OAP server and UI through your gateway.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oap-server",
+        "asset-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-sw8-headers",
+      "name": "Validate traceable RPC headers from outside the trusted zone",
+      "description": "Validate all fields of the traceable RPC (including HTTP 1/2 and MQ) headers, named sw8, sw8-x, and sw8-correlation, when requests come from outside the trusted zone.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-telemetry-ingress"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-telemetry-fields",
+      "name": "Validate and reject malicious telemetry fields",
+      "description": "All fields of telemetry data should be validated and rejected when malicious, in both HTTP raw-text and encoded Protobuf transports. Every field of every telemetry category should be validated by the operator before it reaches OAP; none are inherently safer than the others.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-telemetry-ingress"
+      ]
+    },
+    {
+      "bom-ref": "control-validation-layer",
+      "name": "Build a validation layer between agents and OAP",
+      "description": "Build a validation layer between agents and OAP as a security enhancement. The recommended deployment shape is an operator-controlled gateway, sidecar, or service mesh that authenticates the source, enforces rate limits, and validates/sanitises every telemetry category before forwarding to OAP.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-telemetry-ingress"
+      ]
+    },
+    {
+      "bom-ref": "control-rate-limiting",
+      "name": "Limit telemetry report frequency",
+      "description": "For sensitive environments, consider limiting the telemetry report frequency in case of DoS/DDoS against exposed OAP and UI services; apply rate limiting especially to the unauthenticated client-side telemetry endpoints.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oap-server",
+        "asset-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-admin-ports",
+      "name": "Never expose the admin ports beyond their intended networks",
+      "description": "Never expose port 17128 (HTTP) to the public internet: bind it to a private network interface or localhost and reach it through an operator-controlled gateway. Never expose port 17129 (admin gRPC) to operators or the agent network: bind gRPCHost to a private peer-to-peer interface reachable only between OAP nodes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-gateway-protect-admin",
+      "name": "Gateway-protect port 17128 with IP allow-list and authentication",
+      "description": "Only the operator team should be able to reach the admin HTTP endpoint; protect it behind a gateway enforcing an IP allow-list plus authentication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-admin-requests",
+      "name": "Audit every admin API request",
+      "description": "Audit every request to the admin API. Rule content is arbitrary YAML that compiles into the OAP JVM, and captured DSL-debug payloads include sensitive operational state; treat POST /runtime/rule/* and POST /dsl-debugging/* as equivalent to shell access on the OAP host.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-admin-server",
+      "name": "Disable the admin-server when not needed",
+      "description": "The admin-server is enabled by default so the bundled status and inspect feature modules are reachable out of the box. Set SW_ADMIN_SERVER= (empty) to keep the host closed if no admin-side API is needed.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-admin-api"
+      ]
+    }
+  ]
+}

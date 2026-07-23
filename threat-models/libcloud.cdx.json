@@ -1,0 +1,114 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-libcloud",
+      "name": "Apache Libcloud",
+      "description": "Python library providing a unified API for interacting with many cloud service providers (compute, storage, DNS, load balancers) through per-provider drivers.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://libcloud.apache.org/security.html",
+          "comment": "Source security page; this file is a structured translation of it. The page is a vulnerability-reporting policy plus a list of three historical security advisories; it does not describe a general threat model."
+        },
+        {
+          "type": "website",
+          "url": "https://libcloud.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "libcloud"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://libcloud.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-cve-2013-6480-scrub-data",
+        "name": "CVE-2013-6480: data recoverable from destroyed DigitalOcean nodes",
+        "description": "DigitalOcean changed its default API behaviour from scrub to non-scrub when destroying a VM, and Libcloud 0.12.3 to 0.13.3 did not explicitly send the scrub_data query parameter when destroying a node, so nodes destroyed using Libcloud were vulnerable to later customers stealing data contained on them. Severity low; only users of the DigitalOcean driver were affected. Fixed in 0.13.3.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-releases"
+        ]
+      },
+      {
+        "bom-ref": "threat-cve-2012-3446-hostname-regex",
+        "name": "CVE-2012-3446: SSL MITM via invalid hostname-verification regular expression",
+        "description": "When establishing a TLS connection, Libcloud 0.4.2 to 0.11.1 used an invalid regular expression for hostname verification: a subset instead of the full target server hostname was accepted as a match, so a certificate for aexample.com was considered valid for example.com, enabling man-in-the-middle attacks. Severity medium. Discovered by researchers from the University of Texas at Austin. Fixed in 0.11.1.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-releases"
+        ]
+      },
+      {
+        "bom-ref": "threat-cve-2010-4340-no-cert-validation",
+        "name": "CVE-2010-4340: SSL MITM due to missing certificate validation",
+        "description": "The Python SSL library did not validate host SSL certificates, so all Libcloud versions prior to 0.4.2 were vulnerable to man-in-the-middle attacks. Severity medium. Fixed in 0.4.2; users must also set libcloud.security.VERIFY_SSL_CERT to True.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-upgrade-fixed-releases",
+          "control-verify-ssl-cert"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-upgrade-fixed-releases",
+      "name": "Upgrade to releases with the published fixes",
+      "description": "Each published advisory was fixed in a specific release: CVE-2013-6480 in 0.13.3 (DigitalOcean driver users strongly encouraged to upgrade), CVE-2012-3446 in 0.11.1, and CVE-2010-4340 in 0.4.2; users should upgrade to those versions or higher.",
+      "category": "corrective",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-verify-ssl-cert",
+      "name": "Enable SSL certificate verification",
+      "description": "After upgrading to 0.4.2 or later, set the libcloud.security.VERIFY_SSL_CERT variable to True so target server certificates are validated.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

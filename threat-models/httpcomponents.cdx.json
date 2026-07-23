@@ -1,0 +1,155 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-httpcomponents",
+      "name": "Apache HttpComponents",
+      "description": "Low-level HTTP toolkit libraries (HttpClient, HttpCore). The security model states that the libraries are low-level tools that expect inputs to be either inherently trustworthy or validated and sanitized by the consuming application; it is unsafe to provide possibly malicious input to the libraries unless otherwise specified.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://hc.apache.org/security.html",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hc.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "httpcomponents"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://hc.apache.org/security.html"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-malicious-input",
+        "name": "Malicious input passed to the libraries by the consuming application",
+        "description": "The libraries are low-level tools designed to accept inputs that are inherently trustworthy or have been validated and sanitized by the consuming application. It is unsafe to provide possibly malicious input to HttpComponents libraries unless otherwise specified; doing so is the application's responsibility, not a library vulnerability.",
+        "origin": "adversarial",
+        "mitigations": [
+          "control-sanitize-input"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-denial-of-service",
+        "name": "Denial-of-service attacks beyond HTTP-specification countermeasures",
+        "description": "The libraries attempt to withstand common denial-of-service attacks but cannot be expected to provide extra measures beyond those required by the HTTP specification. Deployment in a potentially hostile environment without a DoS firewall or filter is the deployer's exposure.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-dos-firewall"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-application-added-headers",
+        "name": "Unsafe data placed in HTTP headers by the application",
+        "description": "When an application adds HTTP headers, it is responsible for the data it puts in those headers; only the headers that HttpComponents itself adds and removes are the libraries' responsibility. Rather than managing security-sensitive headers by hand, applications should use the CredentialsProvider class (see the ClientAuthentication example).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-credentials-provider"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jdk-equivalent-behavior",
+        "name": "Intended API behavior reported as a vulnerability",
+        "description": "Calls to the HttpComponents API are subject to the same caveat as the JDK: those calls will usually do what the caller asks. Behaviors that are legitimate in JDK contexts should not be reported as HttpComponents vulnerabilities.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-newer-spec-noncompliance",
+        "name": "Non-conformance with newer HTTP specification revisions",
+        "description": "The libraries are committed to the security requirements of the HTTP specifications and explicitly referenced RFC documents, but they cannot be expected to comply with requirements of newer revisions of the HTTP specification or new RFC documents until they have been revised and updated for conformance.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-rfc-compliance",
+      "name": "Compliance with HTTP specification security requirements",
+      "description": "The libraries are expected to meet the security requirements outlined in the HTTP specifications and explicitly referenced RFC documents that they have been revised for.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-sanitize-input",
+      "name": "Validate and sanitize input before passing it to the libraries",
+      "description": "The consuming application must ensure that inputs handed to the libraries are inherently trustworthy or have been validated and sanitized; possibly malicious input must not be given to the libraries unless otherwise specified.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-dos-firewall",
+      "name": "Deploy behind a DoS firewall or filter in hostile environments",
+      "description": "It is strongly recommended to use the libraries in combination with a DoS firewall or filter if they are to be deployed in a potentially hostile environment.",
+      "category": "compensating",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-credentials-provider",
+      "name": "Use CredentialsProvider instead of manual security headers",
+      "description": "Rather than managing security-related HTTP headers by hand, applications should use the CredentialsProvider class; the ClientAuthentication example in the project repository shows the intended usage.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

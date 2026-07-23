@@ -1,0 +1,932 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:03Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-grails-spring-security",
+      "name": "Apache Grails Spring Security",
+      "description": "Family of eight Grails plugins (plus a compatibility shim) wiring Spring Security 7.x into a Grails 8.x application: authentication (form, basic, digest, X.509, remember-me, LDAP, CAS, OAuth2, JWT/REST), authorization (@Secured / Requestmap / static rules, Spring Security ACL), session management, channel security, IP restrictions, and a UI plugin shipping CRUD controllers for users, roles, requestmaps, ACL entries, registration, and password reset. The unit of trust is a Grails application that has installed one or more of the plugins; they are not a standalone network service. Model binding: the 8.0.x branch.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/grails-spring-security/blob/8.0.x/THREAT_MODEL.md",
+          "comment": "Source threat model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://grails.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "grails"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/grails-spring-security/blob/8.0.x/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/grails-spring-security/8.0.x/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-grails-spring-security",
+      "name": "Grails application with the Spring Security plugins",
+      "description": "Trust boundaries modeled by the document: the HTTP request boundary (unauthenticated end user into the Spring Security filter chain), the authenticated request boundary (low-privilege session into authorization decisions), the external identity provider boundary (LDAP / CAS / OAuth2 responses into a local Authentication), and the token store boundary (Redis / Memcached / GORM database for REST/JWT session lookup). Request parameters, headers, cookies, bodies, and bearer tokens are attacker-controlled until a verified Authentication is in the context.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-filter-chain",
+          "type": "component",
+          "name": "Spring Security filter chain",
+          "description": "The plugin-registered springSecurityFilterChain: channel processing, security context persistence, logout, IP address filter, authentication processing, remember-me, anonymous, exception translation, and the FilterSecurityInterceptor authorization gate driven by @Secured / Requestmap / staticRules and the AuthenticatedVetoableDecisionManager voters.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-user-store",
+          "type": "data-store",
+          "name": "GORM user store and authorization tables",
+          "description": "GormUserDetailsService, GormPersistentTokenRepository, and the Requestmap / Role / RoleHierarchyEntry / AclSid / AclClass / AclObjectIdentity / AclEntry / PersistentLogin tables. Table contents are trusted developer/operator input; a permitAll Requestmap row voids the entire authorization policy, and AclClass.className is loaded via Class.forName.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-rest-jwt",
+          "type": "component",
+          "name": "REST / JWT authentication stack",
+          "description": "RestAuthenticationFilter (JSON credential intake at /api/login), token generators (signed JWT, encrypted JWT, SecureRandom opaque), JwtService, RestTokenValidationFilter, and the token storage backends (stateless JWT, GORM, Redis, Memcached, Grails Cache).",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-ui-controllers",
+          "type": "endpoint",
+          "name": "UI plugin controllers",
+          "description": "The only plugin family that registers live HTTP endpoints: User, Role, Requestmap, Register, AclEntry, SecurityInfo, PersistentLogin, and related CRUD controllers. They ship with zero @Secured annotations and no default Requestmap rows: every endpoint is unprotected by default and reachability is unconditional unless the operator configures protection.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-idp-connectors",
+          "type": "component",
+          "name": "LDAP / CAS / OAuth2 connectors",
+          "description": "Plugins forwarding credentials to and consuming responses from operator-selected identity providers. The LDAP default is plaintext ldap://localhost:389; the CAS default key is published in the source tree; the OAuth2 state parameter is generated from java.util.Random and PKCE is not implemented.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-http-clients",
+          "name": "HTTP clients",
+          "type": "trust",
+          "description": "Unauthenticated end users (untrusted, source of all attacker-controllable input on the auth-ingress side) and authenticated low-privilege users (partially trusted, attempting horizontal/vertical escalation)."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Grails application with plugins",
+          "type": "trust",
+          "description": "The deployed application, its configuration (application.yml/application.groovy, part of the TCB), classpath, and DB; controlled by the trusted developer/operator."
+        },
+        {
+          "bom-ref": "zone-identity-providers",
+          "name": "External identity providers",
+          "type": "trust",
+          "description": "Operator-selected LDAP, CAS, and OAuth2 servers, trusted-by-association: compromise of any of these is equivalent to authentication bypass within the application."
+        },
+        {
+          "bom-ref": "zone-token-stores",
+          "name": "Token storage backends",
+          "type": "trust",
+          "description": "Redis / Memcached / GORM database used for REST/JWT session lookup; assumed network-isolated with no untrusted client able to write directly."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-request",
+          "name": "HTTP request boundary",
+          "type": "trust",
+          "zones": [
+            "zone-http-clients",
+            "zone-application"
+          ]
+        },
+        {
+          "bom-ref": "boundary-idp",
+          "name": "External identity provider boundary",
+          "type": "trust",
+          "zones": [
+            "zone-application",
+            "zone-identity-providers"
+          ]
+        },
+        {
+          "bom-ref": "boundary-token-store",
+          "name": "Token store boundary",
+          "type": "trust",
+          "zones": [
+            "zone-application",
+            "zone-token-stores"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-unauthenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Unauthenticated HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. Crafts arbitrary requests, headers, cookies, form/JSON bodies, and bearer tokens; may submit credentials repeatedly (no built-in rate limiting), replay OAuth2 state/code parameters, and post to any UI controller lacking authorization."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-low-privilege-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated low-privilege HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "Partially trusted; holds a valid Authentication with limited authorities and attempts vertical escalation, e.g. mass-assignment of ROLE_ADMIN on /user/update, creating roles via /role/save, wiping the policy via /requestmap/save with permitAll, or granting ACL ADMINISTRATION via /aclEntry/save."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-developer-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer / operator"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Writes controllers, services, and templates; configures application.yml / application.groovy / Requestmap rows; chooses which plugins to install. Configuration values (password.algorithm, jwtSecret, rememberMe.key, cas.key, OAuth2 apiSecret) and TLS posture bound the trustworthiness of everything the plugins enforce."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-plugin-author",
+          "party": {
+            "roles": [
+              {
+                "name": "Third-party plugin / profile author"
+              }
+            ],
+            "persona": {
+              "description": "Trusted-by-association: code from an installed Grails plugin runs with full application privileges; the framework does not isolate plugin code."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-identity-provider",
+          "party": {
+            "roles": [
+              {
+                "name": "External identity provider"
+              }
+            ],
+            "persona": {
+              "description": "Trusted-by-association LDAP/CAS/OAuth2 server. As in-scope adversary C, a compromised provider can return crafted authentication responses, act as an LDAP referral target when referral=follow, or issue unintended OAuth2 tokens/claims; it has no MITM position on the TLS channel and no access to the application host."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Runtime: JDK 21+, Groovy 4.0.x, Spring Boot 4 / Spring Framework 7 / Spring Security 7, Jakarta EE 10 servlet API, thread-per-request servlet stack (WebFlux is not targeted)."
+        },
+        {
+          "description": "The application is deployed by a trusted operator; TLS is provided by the embedded container or a fronting reverse proxy; credentials to external IdPs transit over TLS."
+        },
+        {
+          "description": "Redis/Memcached token stores are network-isolated; the classpath contains only chosen artifacts; application.yml/application.groovy come from operator-trusted storage (closures defined there are arbitrary code execution by design)."
+        },
+        {
+          "description": "Out of scope: the application's own controllers and business logic, transport security, external IdP implementations, Spring Security itself (except the vendored compat shim, which is in model), third-party libraries, build-time supply chain, and side channels."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authorization bypass at the request boundary",
+        "description": "A secured URL handler executing for a caller missing the required authority, or an uncovered URL reachable despite rejectIfNoRule: true, violates the pessimistic-coverage and FilterSecurityInterceptor properties (P3/P4, CWE-862/CWE-285); an ACL GRANT for a principal without a matching ACE violates P5. All are security-critical, CVE-eligible violations. Note the false friends: @Secured is inert if a user-defined SecurityFilterChain shadows the interceptor, AffirmativeBased is first-grant-wins, and AntPathRequestMatcher does not normalize ../ or URL-encoded segments (container responsibility).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain"
+        ],
+        "mitigations": [
+          "control-pessimistic-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass",
+        "description": "Violations of the claimed authentication properties are security-critical: a locked/expired/disabled account authenticating (P7), LDAP bind accepting credentials the server rejected (P8), a forged CAS service ticket establishing a session (P9), an unsigned or invalidly-signed JWT being accepted (P10), an expired JWT continuing to authenticate (P11), or session fixation where the authenticated user retains the pre-login session ID (P2).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain",
+          "asset-rest-jwt",
+          "asset-idp-connectors"
+        ],
+        "mitigations": [
+          "control-authentication-gating",
+          "control-jwt-verification",
+          "control-session-fixation-prevention"
+        ]
+      },
+      {
+        "bom-ref": "threat-ui-endpoints-unprotected",
+        "name": "Unprotected UI plugin endpoints enabling privilege escalation",
+        "description": "Every HTTP endpoint shipped by the UI plugin is unprotected by default (zero @Secured annotations across all 13 controllers, no default Requestmap rows): installing the UI plugin without configuring rules is functionally equivalent to publishing an admin console. Escalation paths: mass-assignment of ROLE_* checkbox parameters on /user/save|update, /requestmap/save with url=/** configAttribute=permitAll wiping the policy, /role/save then /user/update, /aclEntry/save granting ADMINISTRATION, SecurityInfoController dumping the live security configuration, and PersistentLoginController exposing live remember-me tokens. A report that the controllers lack @Secured is by design; a report that they are reachable despite operator-configured protection is in-model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-controllers",
+          "asset-user-store"
+        ],
+        "mitigations": [
+          "control-protect-ui-endpoints",
+          "control-bindable-constraints"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plain-jwt-acceptance",
+        "name": "PlainJWT (alg=none) acceptance under an all-null signing configuration",
+        "description": "JwtService.parse() accepts PlainJWT tokens when useSignedJwt: false AND useEncryptedJwt: false AND jwtSecret is null AND no key provider is configured; no startup check rejects the combination, and the application boots into a state where forged tokens get HTTP 200. Reaching it requires the operator to explicitly set useSignedJwt: false (the default is true), so it is dispositioned as a non-default-build misconfiguration; a follow-up (F1) will reject the combination at startup.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-jwt"
+        ],
+        "mitigations": [
+          "control-strong-secrets",
+          "control-jwt-startup-rejection"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jwt-algorithm-confusion",
+        "name": "No JWT algorithm allow-list during validation",
+        "description": "JwtService.parse() dispatches on the parsed JWT's Java type, not the alg header; MACVerifier accepts HS256/HS384/HS512 for any signed JWT and the configured rest.token.storage.jwt.algorithm is consumed only at generation time, never during parsing. Confirmed as a hardening target (follow-up F7: compare the header algorithm against the configured value and throw on mismatch). Additionally, claims beyond exp (iss, aud, nbf, iat, kid) are not validated by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-jwt"
+        ],
+        "mitigations": [
+          "control-jwt-algorithm-pinning"
+        ]
+      },
+      {
+        "bom-ref": "threat-oauth2-weak-state-no-pkce",
+        "name": "OAuth2 state-CSRF and authorization-code interception",
+        "description": "The OAuth2 state parameter is generated as providerID + \"-secret-\" + new Random().nextInt(999_999), roughly 20 bits from a non-cryptographic LCG, making state-CSRF against the callback feasible; PKCE (ServiceBuilder.withPkce) is never invoked, so authorization-code interception is not mitigated at the plugin level. Both are disclaimed properties confirmed as hardening targets (follow-ups F4/F5). The callback query parameter used as post-login redirect target must be allow-list validated by the application.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-idp-connectors"
+        ],
+        "mitigations": [
+          "control-secure-oauth2-state-pkce"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-refresh-token-replay",
+        "name": "Refresh-token replay without rotation or expiry",
+        "description": "RestOauthController.accessToken reuses the supplied refresh token verbatim; none of the four storage backends invalidate a presented refresh token on use, and refreshExpiration defaults to null (no expiry), so a leaked refresh token is valid forever and reusable without detection. Disclaimed by design; operators wanting RFC 6749 section 10.4 rotation must implement it at the application layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-jwt"
+        ],
+        "mitigations": [
+          "control-strong-secrets"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jwt-logout-cosmetic",
+        "name": "No server-side revocation of stateless JWTs",
+        "description": "JwtTokenStorageService.removeToken() throws unconditionally and the logout endpoint returns HTTP 404 for JWT-backend deployments: JWT logout is cosmetic, and the exp claim is the only revocation mechanism. Disclaimed by design for the stateless backend; a delete failure on a configured stateful backend would be a valid finding.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-jwt"
+        ],
+        "mitigations": [
+          "control-stateful-token-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-credential-stuffing",
+        "name": "Credential stuffing and brute force against authentication endpoints",
+        "description": "No built-in rate limiting, CAPTCHA, lockout-after-N-failures, or distributed-attack detection exists on /login, /register, /register/forgotPassword, or /api/login; anti-automation is disclaimed and left to the proxy or application layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain"
+        ],
+        "mitigations": [
+          "control-rate-limiting"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-registration-reset-weaknesses",
+        "name": "Registration and password-reset flow weaknesses",
+        "description": "Disclaimed by design: reset tokens and registration codes have no expiry check (valid until consumed or manually deleted); /register/forgotPassword returns a distinguishable response for unknown usernames (account enumeration, unaffected by hideUserNotFoundExceptions); the registration and reset forms do not use the useToken CSRF mechanism; and reset links are built from request.serverName, so an attacker-controlled Host header via a proxy can capture resets unless grails.serverURL is set.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-controllers"
+        ],
+        "mitigations": [
+          "control-harden-registration-flows"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ui-plaintext-passwords",
+        "name": "UI plugin storing passwords without encoding under the default configuration",
+        "description": "security.ui.encodePassword defaults to false: the UI service stores submitted passwords without encoding when creating/updating users unless the application's generated PasswordEncoderListener hashes them (the default exists to avoid double-hashing in s2-quickstart applications). Operators using older templates must set encodePassword: true explicitly; a startup WARN is a tracked follow-up (F3).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-controllers",
+          "asset-user-store"
+        ],
+        "mitigations": [
+          "control-encode-ui-passwords"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-cas-slo-session-fixation",
+        "name": "CAS single sign-out disabling session-fixation prevention",
+        "description": "cas.useSingleSignout: true (the CAS plugin default) forces useSessionFixationPrevention = false globally, because the service ticket is mapped to the session ID which changes; operators who enable SLO and rely on fixation prevention have neither. A documented, intentional trade-off in the bean wiring (by design).",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-idp-connectors",
+          "asset-filter-chain"
+        ],
+        "mitigations": [
+          "control-session-cookie-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-proxy-unawareness",
+        "name": "Reverse-proxy blindness of IP restrictions and channel redirects",
+        "description": "IpAddressFilter enforces CIDR matching against request.remoteAddr only and never consults X-Forwarded-For, so behind a reverse proxy IP restrictions are bypassed by every request unless the proxy preserves the source IP at the TCP layer. Channel security's decision can be made proxy-aware via useHeaderCheckChannelSecurity (X-Forwarded-Proto), but PortResolverImpl never consults X-Forwarded-Port, so redirect URLs carry the backend host and port. Both are confirmed by-design asymmetries.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain"
+        ],
+        "mitigations": [
+          "control-proxy-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-compromised-idp",
+        "name": "Crafted responses from a compromised identity provider",
+        "description": "In-scope adversary C: a compromised LDAP, CAS, or OAuth2 server can return crafted authentication responses, serve as an LDAP referral target when referral: 'follow' is set (JNDI follows referrals to arbitrary servers), or issue unintended tokens and claims. Trust collapses to the provider's TLS certificate: the default LDAP URL is plaintext ldap://, CAS offers no certificate pinning beyond the JVM trust store, and oauth2.registration.roleNames grants its roles to every social-login user regardless of provider claims.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-idp-connectors"
+        ],
+        "mitigations": [
+          "control-tls-to-idp",
+          "control-production-config-hygiene"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-store-deserialization",
+        "name": "Java deserialization from reachable token-storage backends",
+        "description": "RedisTokenStorageService.deserialize and the Memcached CustomSerializingTranscoder read ObjectInputStream data from the configured backend, and serialized UserDetails transit the cache protocols in cleartext. Discharged by the environment assumption that the store is operator-controlled and network-isolated; if the backend is reachable by an untrusted client this becomes a deserialization-RCE sink (escalating to valid if the operator's network is not isolated).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-rest-jwt"
+        ],
+        "mitigations": [
+          "control-isolate-token-stores"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-operator-secrets",
+        "name": "Weak or defaulted operator secrets and discouraged configurations",
+        "description": "Authentication and authorization are only as trustworthy as the operator's password.algorithm, jwtSecret, rememberMe.key, cas.key, and OAuth2 apiSecret values and the TLS posture to the IdPs; reports requiring hostile control of any of those are out of model (trusted input). Concrete hazards: password.algorithm=noop stores cleartext; a null/short rememberMe.key makes MD5-HMAC cookie forgery practical; the published default cas.key 'grails-spring-security-cas' enables cross-deployment forgery; leftover spring.security.user.name creates a {noop} credential in production; oauth2 debug:true logs raw token traffic; useRequestParamsCredentials exposes credentials in URLs; DefaultRSAKeyProvider generates ephemeral per-JVM keys.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain",
+          "asset-rest-jwt",
+          "asset-idp-connectors"
+        ],
+        "mitigations": [
+          "control-strong-secrets",
+          "control-production-config-hygiene"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ajax-search-injection",
+        "name": "Unvalidated paramName in UI ajaxSearch reaching an HQL ORDER BY",
+        "description": "AbstractS2UiDomainController.ajaxSearch takes params.paramName directly from the request and uses it as a GORM criterion property name, a projection property, and a sort value concatenated into a raw HQL order by string (wrapped in double quotes but not otherwise sanitized); a crafted paramName may probe non-search fields or disclose schema through errors. Confirmed as a hardening target (follow-up F10: allow-list keyed off classMappings and a closed-set check on params.order).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ui-controllers"
+        ],
+        "mitigations": [
+          "control-ajax-search-allowlist"
+        ]
+      },
+      {
+        "bom-ref": "threat-runas-unsigned",
+        "name": "Unsigned RUN_AS token substitution in the compatibility shim",
+        "description": "When useRunAs is enabled, the compat shim's RunAsManagerImpl builds the elevated token without signing it and RunAsImplAuthenticationProvider.authenticate() is a pass-through: the key field is declared but never read, making the shim more permissive than upstream Spring Security 5.x (which checks keyHash equality). A RUN_AS_* attribute injected into the metadata source elevates privilege for the call's duration. Known non-finding given the opt-in default (useRunAs: false) and operator-controlled config attributes; porting the upstream guard is tracked as follow-up F8.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-filter-chain"
+        ],
+        "mitigations": [
+          "control-runas-key-check"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-request",
+        "boundary": "boundary-http-request",
+        "name": "HTTP request trust boundary",
+        "description": "Data crossing from an end user into the Spring Security filter chain. Request parameters, headers, cookies, bodies, and bearer tokens are attacker-controlled until a verified Authentication is in the context; the trust transition occurs at authenticationProcessingFilter (form login) or RestAuthenticationFilter (REST), with token validation as the matching transition on subsequent requests.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-authorization-bypass",
+          "threat-ui-endpoints-unprotected",
+          "threat-plain-jwt-acceptance",
+          "threat-jwt-algorithm-confusion",
+          "threat-credential-stuffing",
+          "threat-registration-reset-weaknesses",
+          "threat-ajax-search-injection",
+          "threat-proxy-unawareness"
+        ],
+        "controlsAtBoundary": [
+          "control-pessimistic-authorization",
+          "control-authentication-gating",
+          "control-jwt-verification",
+          "control-session-fixation-prevention",
+          "control-protect-ui-endpoints",
+          "control-rate-limiting"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-idp",
+        "boundary": "boundary-idp",
+        "name": "External identity provider trust boundary",
+        "description": "Data crossing from an LDAP / CAS / OAuth2 server response into a local Authentication object. The providers are trusted-by-association: responses are trusted if TLS holds, and compromise of a provider is equivalent to authentication bypass.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-compromised-idp",
+          "threat-oauth2-weak-state-no-pkce",
+          "threat-cas-slo-session-fixation"
+        ],
+        "controlsAtBoundary": [
+          "control-tls-to-idp",
+          "control-secure-oauth2-state-pkce"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-token-store",
+        "boundary": "boundary-token-store",
+        "name": "Token store trust boundary",
+        "description": "Data crossing into and out of Redis, Memcached, or the GORM database for REST/JWT session lookup; the backends are assumed operator-controlled and network-isolated, with serialized principals deserialized on every lookup.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-token-store-deserialization",
+          "threat-refresh-token-replay",
+          "threat-jwt-logout-cosmetic"
+        ],
+        "controlsAtBoundary": [
+          "control-isolate-token-stores",
+          "control-stateful-token-storage"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-authentication-gating",
+      "name": "Password hashing, account-status gating, and enumeration suppression",
+      "description": "Passwords are stored as bcrypt hashes by default via DelegatingPasswordEncoder (P1), password comparison delegates to constant-time PasswordEncoder.matches() for the modern encoders (P14), the four account-status accessors gate authentication (P7), LDAP bind forwards credentials for server-side verification (P8), CAS tickets are validated against the CAS server over HTTPS (P9), and hideUserNotFoundExceptions: true suppresses enumeration via exception type by default (P15).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-filter-chain",
+        "asset-user-store"
+      ]
+    },
+    {
+      "bom-ref": "control-session-fixation-prevention",
+      "name": "Session fixation prevention by default",
+      "description": "A new HTTP session is created on successful authentication with previous attributes migrated (useSessionFixationPrevention: true by default, P2); setting it false, or enabling CAS single sign-out, removes the protection.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-filter-chain"
+      ]
+    },
+    {
+      "bom-ref": "control-pessimistic-authorization",
+      "name": "Pessimistic URL coverage and request-boundary authorization",
+      "description": "URLs without an explicit Requestmap / @Secured / staticRules rule are denied by default (rejectIfNoRule: true, P3), and FilterSecurityInterceptor enforces the rules at the HTTP request boundary before the controller action runs (P4); the ACL plugin evaluates object-level permissions for hasPermission expressions (P5). Persistent remember-me detects token theft via series-ID matching (P6).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-filter-chain"
+      ]
+    },
+    {
+      "bom-ref": "control-jwt-verification",
+      "name": "JWT signature and expiry verification",
+      "description": "The JWT signature is verified before claims are trusted (HMAC for signed JWT, RSA decryption for encrypted JWT, P10) and the exp claim is checked against current time (P11); the property is defeated only when both jwtSecret and keyProvider are null with both signing modes explicitly disabled.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-ui-endpoints",
+      "name": "Add explicit protection for every UI plugin endpoint",
+      "description": "Add Requestmap or @Secured protection for /user/**, /role/**, /requestmap/**, /registrationCode/**, /persistentLogin/**, /aclClass/**, /aclEntry/**, /aclObjectIdentity/**, /aclSid/**, and /securityInfo/**; the UI plugin ships none. SecurityInfoController is the first endpoint to lock down. Also lock down DB write access to the Requestmap/Role/ACL/PersistentLogin tables.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ui-controllers",
+        "asset-user-store"
+      ]
+    },
+    {
+      "bom-ref": "control-bindable-constraints",
+      "name": "Declare bindable: false on privileged domain fields",
+      "description": "Declare bindable: false (or explicit include/exclude) on every privileged field of User/Person and related classes (accountLocked, accountExpired, enabled, passwordExpired, roles, role associations); the UI plugin's save/update flows pass the raw params map to property binding and ship no bindable constraints of their own.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-user-store"
+      ]
+    },
+    {
+      "bom-ref": "control-encode-ui-passwords",
+      "name": "Set security.ui.encodePassword: true for production",
+      "description": "The default false relies on an application-side PasswordEncoderListener to hash passwords; deployments without such a listener must set encodePassword: true or the UI stores submitted passwords without encoding. A startup WARN when neither is present is tracked as follow-up F3.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ui-controllers"
+      ]
+    },
+    {
+      "bom-ref": "control-strong-secrets",
+      "name": "Strong algorithms, keys, and token lifetimes",
+      "description": "Keep password.algorithm at bcrypt/pbkdf2/scrypt/argon2 (never noop or message-digest) with logrounds >= 12 for hardening above the supported default of 10; set rememberMe.key to at least 32 random bytes; regenerate cas.key per deployment; set rest.token.storage.jwt.secret to at least 256 random bits or configure a non-default RSA key provider (never both null); and set refreshExpiration to a finite value, since it is the only built-in mitigation for refresh-token replay.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-filter-chain",
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-to-idp",
+      "name": "TLS to all identity providers",
+      "description": "Use ldaps:// (the plugin does not wire StartTLS; the default ldap://localhost:389 is plaintext), keep cas.serverUrlPrefix on HTTPS with a trust store accepting the CAS certificate, keep ldap.context.referral unset (never 'follow'), and ensure OAuth2 provider endpoints are reached over TLS.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-idp"
+      ]
+    },
+    {
+      "bom-ref": "control-proxy-configuration",
+      "name": "Configure the reverse proxy for channel and IP awareness",
+      "description": "Behind a TLS-terminating proxy set secureChannel.useHeaderCheckChannelSecurity: true with the proxy sending X-Forwarded-Proto (redirects still carry the backend port unless the proxy rewrites Location); for ipRestrictions, preserve the source IP at the TCP layer since X-Forwarded-For is not honored; set grails.serverURL or strip/validate Host headers for reset-link generation.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-filter-chain"
+      ]
+    },
+    {
+      "bom-ref": "control-rate-limiting",
+      "name": "Add rate limiting and CAPTCHA at the application or proxy layer",
+      "description": "Add a CAPTCHA or rate limiter on /login, /api/login, /register, and /register/forgotPassword; the plugins provide neither throttling nor anti-bot protection.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-request"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-registration-flows",
+      "name": "Harden registration and password-reset flows",
+      "description": "Keep requireEmailValidation and requireForgotPassEmailValidation true, keep defaultRoleNames (and oauth2.registration.roleNames) free of privileged roles, treat RegistrationCode tokens as sensitive (rotate/delete after use, add a manual expiry mechanism, do not log), and hash stored security-question answers with the configured PasswordEncoder.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ui-controllers"
+      ]
+    },
+    {
+      "bom-ref": "control-stateful-token-storage",
+      "name": "Use a stateful token backend when revocation is needed",
+      "description": "GORM, Redis, Memcached, and Grails Cache token storage implement real removeToken deletion; stateless JWT deployments have no server-side revocation, so keep JWT expiration short or choose a stateful backend.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-isolate-token-stores",
+      "name": "Isolate Redis/Memcached token stores",
+      "description": "Place token-storage backends on an isolated network and enable AUTH; the transcoders deserialize Java-serialized payloads without sanitization, so backend reachability equals a deserialization sink.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-token-store"
+      ]
+    },
+    {
+      "bom-ref": "control-production-config-hygiene",
+      "name": "Production configuration hygiene",
+      "description": "Keep oauth2.{provider}.debug false; never leave spring.security.user.* properties in production config (the bridge creates a {noop} credential); keep rest.login.useRequestParamsCredentials false; leave excludeSpringSecurityAutoConfiguration true (false is a documented footgun); never source application.groovy or grails.config.locations from attacker-writable storage; validate oauth2.frontendCallbackUrl against an allow-list.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-idp-connectors",
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-jwt-startup-rejection",
+      "name": "Reject the all-null JWT signing configuration at startup",
+      "description": "Follow-up F1: refuse to boot when useSignedJwt = false AND useEncryptedJwt = false AND jwtSecret is null AND no key provider bean is wired, mirroring the existing checkJwtSecret pattern.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-jwt-algorithm-pinning",
+      "name": "Pin the JWT validation algorithm",
+      "description": "Follow-up F7: after parsing, compare the JWT header algorithm against the configured rest.token.storage.jwt.algorithm (and the matching encrypted-algorithm pair) and throw on mismatch before the type-dispatch branches.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-rest-jwt"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-oauth2-state-pkce",
+      "name": "SecureRandom OAuth2 state and PKCE",
+      "description": "Follow-ups F4/F5: replace the java.util.Random state generation with SecureRandom-backed randomness (or a UUID), and invoke ServiceBuilder.withPkce() with PKCE default-on for public clients.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-idp-connectors"
+      ]
+    },
+    {
+      "bom-ref": "control-ajax-search-allowlist",
+      "name": "Allow-list validation in ajaxSearch",
+      "description": "Follow-up F10: validate params.paramName against the classMappings keys, constrain params.order to the closed set asc/desc, and escape the property name used in the HQL ORDER BY construction.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-ui-controllers"
+      ]
+    },
+    {
+      "bom-ref": "control-runas-key-check",
+      "name": "Port the upstream RUN_AS key-hash check into the compat shim",
+      "description": "Follow-up F8 (low priority): port the Spring Security 5.x keyHash equality check into RunAsImplAuthenticationProvider so the shim is no more permissive than the class it replaces.",
+      "category": "preventive",
+      "status": "planned",
+      "appliesTo": [
+        "asset-filter-chain"
+      ]
+    }
+  ]
+}

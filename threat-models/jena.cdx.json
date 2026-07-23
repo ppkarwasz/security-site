@@ -1,0 +1,562 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:17Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-jena",
+      "name": "Apache Jena",
+      "description": "Java framework for Semantic Web and linked-data applications using RDF and SPARQL: an in-process API to RDF data in memory or in the TDB native store, the ARQ SPARQL query/update engine, RIOT parsers/serialisers for RDF syntaxes, and Fuseki, a standalone HTTP server exposing SPARQL Query, SPARQL Update, and the Graph Store Protocol over the network.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jena/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The source is v1, reviewed by the Jena PMC (Rob Vesse and Andy Seaborne) on apache/jena#3966."
+        },
+        {
+          "type": "website",
+          "url": "https://jena.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jena"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jena/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jena/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-jena",
+      "name": "Jena and Fuseki deployment",
+      "description": "Two deployment shapes: Fuseki as a long-running HTTP server answering SPARQL Query/Update and the Graph Store Protocol from (by default) anonymous clients, with a localhost-only admin surface; and the Jena Java API embedded in-process in a trusted application. ARQ can make outbound requests via SERVICE federation and JSON-LD remote context resolution.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-fuseki",
+          "type": "service",
+          "name": "Fuseki HTTP server",
+          "description": "jena-fuseki2: SPARQL query, SPARQL Update, Graph Store Protocol endpoints, and the admin surface under /$/*; authentication via Apache Shiro (shiro.ini). The primary network trust surface.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-arq",
+          "type": "component",
+          "name": "ARQ SPARQL engine",
+          "description": "Query/update evaluation, SERVICE federation (outbound HTTP), and opt-in custom/JavaScript functions.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-riot",
+          "type": "component",
+          "name": "RIOT parsers",
+          "description": "Parsers/serialisers for RDF/XML, Turtle, JSON-LD, N-Triples, and other syntaxes; parse untrusted RDF supplied on Update bodies, GSP PUT/POST, and content negotiation.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-tdb",
+          "type": "data-store",
+          "name": "TDB1/TDB2 store and jena-text index",
+          "description": "Native stores on the local filesystem, private to the owning Fuseki/JVM process; the Lucene-based text index is reachable from SPARQL via text:query and is an in-model query surface.",
+          "zone": "zone-server"
+        },
+        {
+          "bom-ref": "asset-admin",
+          "type": "endpoint",
+          "name": "Fuseki admin surface (/$/*)",
+          "description": "Dataset management and backups; localhost-only by default.",
+          "zone": "zone-server"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "SPARQL clients",
+          "type": "trust",
+          "description": "HTTP clients of Fuseki; SPARQL query is public (anonymous) by default, Update and admin require authorisation."
+        },
+        {
+          "bom-ref": "zone-server",
+          "name": "Fuseki server process",
+          "type": "trust",
+          "description": "Fuseki, ARQ, RIOT, TDB, and the text index inside the operator's JVM process."
+        },
+        {
+          "bom-ref": "zone-external",
+          "name": "External network and filesystem targets",
+          "type": "trust",
+          "description": "Hosts reachable by outbound SERVICE federation requests and JSON-LD remote @context fetches, and file:/http: URIs on datasets configured for arbitrary-URI access."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-sparql-endpoint",
+          "name": "Fuseki SPARQL endpoint",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-server"
+          ]
+        },
+        {
+          "bom-ref": "boundary-outbound",
+          "name": "Server-initiated outbound requests",
+          "type": "trust",
+          "zones": [
+            "zone-server",
+            "zone-external"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-anonymous-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous SPARQL client"
+              }
+            ],
+            "persona": {
+              "description": "Issues SPARQL queries over HTTP; SPARQL query endpoints are public by default while administrative functions are limited to localhost. The primary adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated user or admin"
+              }
+            ],
+            "persona": {
+              "description": "Gated by Apache Shiro (shiro.ini); bounded by Shiro and dataset ACLs, with the goal of exceeding them as an adversary."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / deployer"
+              }
+            ],
+            "persona": {
+              "description": "Configures Shiro, datasets, TDB location, which endpoints are read-only vs updatable, SERVICE availability, and JS functions. Trusted; out of the adversary model."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-embedding-app",
+          "party": {
+            "roles": [
+              {
+                "name": "Embedding application"
+              }
+            ],
+            "persona": {
+              "description": "Uses the Jena Java API in-process; trusted caller responsible for its own untrusted inputs, including SPARQL injection from string concatenation."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "TLS is the deployer's responsibility (reverse proxy); Fuseki's bundled example setup (admin/pw, plaintext) is explicitly not for production."
+        },
+        {
+          "description": "The TDB store directory is operator-trusted and private to the owning Fuseki/JVM process; code prevents multiple processes accessing a single store location."
+        },
+        {
+          "description": "Fuseki started without a config file is read-only unless --update is passed; with a config file, only the operations the config declares are available."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-service-ssrf",
+        "name": "SSRF via SERVICE federation from an anonymous query",
+        "description": "SERVICE federation is enabled by default and there is currently no allow-list capability, so an anonymous query against a default configuration can make Fuseki issue outbound requests to attacker-chosen targets. The PMC concedes SSRF via SERVICE is a valid attack vector (not merely operator-disclaimed); operators must disable SERVICE or add egress controls on untrusted endpoints.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-arq"
+        ],
+        "mitigations": [
+          "control-disable-service"
+        ]
+      },
+      {
+        "bom-ref": "threat-jsonld-remote-context",
+        "name": "Remote read/SSRF via JSON-LD @context resolution",
+        "description": "JSON-LD @context resolution fetches remote files by default (http/https or local file), a behaviour of the JSON-LD dependency; the W3C JSON-LD WG is working on documenting and mitigating it. Safer than XXE but a genuine remote-read/SSRF surface on any endpoint that parses untrusted JSON-LD.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-riot"
+        ],
+        "mitigations": [
+          "control-restrict-jsonld-context"
+        ]
+      },
+      {
+        "bom-ref": "threat-rdf-parser-attacks",
+        "name": "XXE or parser DoS from untrusted RDF documents",
+        "description": "Any endpoint that parses caller-supplied RDF (Update bodies, GSP PUT/POST, content negotiation) runs RIOT on untrusted bytes. RDF/XML external-entity processing is off by default and the recently rewritten parsers are believed safe against untrusted RDF; a parsed RDF document that triggers XXE, SSRF, or unbounded recursion/allocation would violate the claimed property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-riot"
+        ],
+        "mitigations": [
+          "control-xxe-off-default"
+        ]
+      },
+      {
+        "bom-ref": "threat-scope-escape",
+        "name": "SPARQL operation escapes the dataset's authorised scope",
+        "description": "An anonymous or low-privilege query reads graphs, writes data, reaches the filesystem, or makes Fuseki act as a proxy beyond what the dataset configuration permits: unauthorised write via an exposed Update endpoint, cross-graph read, or a bypass of a configured Shiro restriction. With TDB2, FROM/FROM NAMED only resolve graphs within the dataset (URIs are graph names, not fetched); arbitrary-URI file/remote read requires an explicitly configured dataset.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fuseki",
+          "asset-arq",
+          "asset-tdb"
+        ],
+        "mitigations": [
+          "control-shiro-acls",
+          "control-readonly-default"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-surface-access",
+        "name": "Admin surface reachable from the network",
+        "description": "Fuseki's /$/* admin functions are localhost-only by default; an admin function reachable anonymously over the network in the default configuration would be a CVE-class violation. Exposing the admin surface to the network without configuring authentication is an operator misconfiguration.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-localhost-admin",
+          "control-shiro-acls"
+        ]
+      },
+      {
+        "bom-ref": "threat-expensive-query-dos",
+        "name": "Resource exhaustion by expensive SPARQL queries",
+        "description": "A tiny query can compute a massive cross-product; super-linear cost is inherent to spec-compliant SPARQL, not a Jena bug, and Jena is no different from any other engine here. Resource use is operator-tuned via query timeouts (server or per-dataset) and reverse-proxy request-size limits. Known non-finding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-arq",
+          "asset-fuseki"
+        ],
+        "mitigations": [
+          "control-query-timeouts"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-js-custom-functions",
+        "name": "Code execution via ARQ JavaScript or custom Java functions",
+        "description": "ARQ JavaScript functions are opt-in, require explicit operator configuration of both Fuseki and the JVM, and are controlled by an explicit allow-list (eval() and similar are blacklisted regardless). Custom Java functions require the operator to add trusted code to the class path. Reachable code execution through these is by-design-operator-enabled, not a Jena vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-arq"
+        ],
+        "mitigations": [
+          "control-js-function-allowlist"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-sparql-injection",
+        "name": "SPARQL injection in an embedding application",
+        "description": "An application that concatenates untrusted input into a SPARQL query string owns that injection bug, analogous to SQL injection in a JDBC caller; parameterised queries (QueryBuilder / parameterised QueryExecution) are the recommended pattern. Out of model for Jena.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-arq"
+        ],
+        "mitigations": [
+          "control-parameterised-queries"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-example-setup-production",
+        "name": "Example admin credentials or plaintext setup in production",
+        "description": "The bundled example user setup (admin/pw, plaintext passwords, no TLS) is documented as not recommended for production; deploying it to production is a non-default-build operator choice, not a Jena vulnerability.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fuseki"
+        ],
+        "mitigations": [
+          "control-tls-reverse-proxy"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-tdb-resource-growth",
+        "name": "TDB memory growth and on-disk size expansion",
+        "description": "Unbounded memory growth under continuous read/write load is a known Fuseki/TDB1 issue (the WAL guarantees no data loss on crash/restart), and a TDB2 database being far larger on disk than its input is expected behaviour (sparse files plus MVCC trees orphaning old blocks; the compaction operation reclaims space). Recurring mailing-list topics, not vulnerabilities.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-tdb"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-sparql-endpoint",
+        "boundary": "boundary-sparql-endpoint",
+        "name": "Fuseki SPARQL endpoint boundary",
+        "description": "Queries arrive over HTTP from (by default) anonymous clients. The boundary question is what an anonymous or low-privilege SPARQL query can reach: read data it should not, write without authorisation, make Fuseki issue outbound requests, read local files, execute code if functions are enabled, or exhaust resources.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-scope-escape",
+          "threat-admin-surface-access",
+          "threat-rdf-parser-attacks",
+          "threat-expensive-query-dos",
+          "threat-js-custom-functions"
+        ],
+        "controlsAtBoundary": [
+          "control-shiro-acls",
+          "control-readonly-default",
+          "control-localhost-admin",
+          "control-query-timeouts",
+          "control-xxe-off-default"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-outbound",
+        "boundary": "boundary-outbound",
+        "name": "Server-initiated outbound request boundary",
+        "description": "ARQ SERVICE federation and JSON-LD remote @context resolution make the server open outbound connections to targets that can be influenced by query or document authors; the SSRF surface.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-service-ssrf",
+          "threat-jsonld-remote-context"
+        ],
+        "controlsAtBoundary": [
+          "control-disable-service",
+          "control-restrict-jsonld-context"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-shiro-acls",
+      "name": "Configure Shiro authentication and ACLs",
+      "description": "Put Fuseki behind Apache Shiro ([urls] ACLs in shiro.ini) and TLS before exposing sensitive data; restricting query access requires Shiro ACLs, and Update/GSP write endpoints must be Shiro-gated. Changing shiro.ini requires a restart.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-sparql-endpoint"
+      ]
+    },
+    {
+      "bom-ref": "control-localhost-admin",
+      "name": "Admin surface localhost-bound by default",
+      "description": "Fuseki's /$/* admin functions are not reachable from the network unless the operator exposes them; keep them localhost-only or on an operator network.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-admin"
+      ]
+    },
+    {
+      "bom-ref": "control-readonly-default",
+      "name": "Datasets read-only unless write is intended",
+      "description": "Fuseki started without a config file is read-only unless --update is passed; with a config file, only declared operations are available. Make datasets read-only unless write is intended and gate SPARQL Update / GSP behind authentication.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-fuseki"
+      ]
+    },
+    {
+      "bom-ref": "control-disable-service",
+      "name": "Disable or restrict SERVICE federation on untrusted endpoints",
+      "description": "SERVICE is enabled by default and disableable in configuration; there is no allow-list capability currently (a noted hardening gap; the Service Enhancer module may help). Disable SERVICE or add egress controls on endpoints reachable by untrusted clients.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-arq",
+        "boundary-outbound"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-jsonld-context",
+      "name": "Restrict JSON-LD remote context fetching on untrusted-input endpoints",
+      "description": "JSON-LD remote @context fetch is on by default; restrict it on endpoints that parse untrusted input.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-riot",
+        "boundary-outbound"
+      ]
+    },
+    {
+      "bom-ref": "control-xxe-off-default",
+      "name": "RDF/XML external-entity processing off by default",
+      "description": "External-entity processing in RIOT's RDF/XML parsing is off by default; the parsers were recently rewritten and are believed safe against untrusted RDF.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-riot"
+      ]
+    },
+    {
+      "bom-ref": "control-js-function-allowlist",
+      "name": "Opt-in JS functions with explicit allow-list",
+      "description": "ARQ JavaScript functions require explicit operator configuration of both Fuseki and the JVM, with an explicit allow-list of permitted functions; eval() and similar are blacklisted regardless of the allow-list. Do not enable JS or custom functions on untrusted endpoints.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-arq"
+      ]
+    },
+    {
+      "bom-ref": "control-query-timeouts",
+      "name": "Set query timeouts and request-size limits",
+      "description": "Configure query timeouts at the server or per-dataset level and reverse-proxy request-size limits appropriate to capacity; this is the operator's resource/DoS lever.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fuseki"
+      ]
+    },
+    {
+      "bom-ref": "control-parameterised-queries",
+      "name": "Use parameterised queries in embedding applications",
+      "description": "Never string-concatenate untrusted input into SPARQL; use QueryBuilder or parameterised QueryExecution in applications embedding the Jena Java API.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-arq"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-reverse-proxy",
+      "name": "TLS via reverse proxy and no example credentials in production",
+      "description": "Serve Fuseki behind a TLS-terminating reverse proxy and never ship the example admin/pw plaintext setup to production.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fuseki"
+      ]
+    }
+  ]
+}

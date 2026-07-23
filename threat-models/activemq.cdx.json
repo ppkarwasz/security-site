@@ -1,0 +1,567 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:33:27Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-activemq",
+      "name": "Apache ActiveMQ",
+      "description": "Long-running message broker daemon and Java client library. The broker accepts connections from message producers and consumers over OpenWire, AMQP, MQTT, STOMP, and WebSocket, routes and stores messages on queues and topics, enforces optional authentication and authorization, and provides persistence (KahaDB or JDBC), JMX management, a Jetty web console, and network-of-brokers clustering.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/activemq/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://activemq.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "activemq"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/activemq/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/activemq/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-activemq",
+      "name": "ActiveMQ broker deployment",
+      "description": "Architectural substrate described by the ActiveMQ threat model: untrusted network clients connect to broker transport connectors; a separate management plane (web console, Jolokia, JMX) is intended for operators; the broker owns trusted persistent storage; network-of-brokers links connect to peer brokers in other administrative domains.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-broker",
+          "type": "broker",
+          "name": "ActiveMQ broker daemon",
+          "description": "Standalone, clustered, or embedded broker process exposing transport connectors (OpenWire on tcp://0.0.0.0:61616 by default; AMQP, STOMP, MQTT, and WebSocket when enabled).",
+          "zone": "zone-broker"
+        },
+        {
+          "bom-ref": "asset-management-plane",
+          "type": "endpoint",
+          "name": "Management plane (web console, Jolokia, JMX)",
+          "description": "Jetty web console on port 8161, Jolokia, and the JMX MBean server. Listens on localhost only by default and requires authentication and authorization. Intended for operators, not clients; not scoped by JMS authorization entries.",
+          "zone": "zone-management"
+        },
+        {
+          "bom-ref": "asset-persistence-store",
+          "type": "data-store",
+          "name": "Persistence store (KahaDB or JDBC)",
+          "description": "Trusted storage. The broker assumes it is the only writer and that the store has not been tampered with out of band.",
+          "zone": "zone-storage"
+        },
+        {
+          "bom-ref": "asset-client-library",
+          "type": "component",
+          "name": "ActiveMQ Java client library",
+          "description": "Client library (ActiveMQConnectionFactory, OpenWire marshaller) linked into producers and consumers; parses broker-to-client traffic.",
+          "zone": "zone-untrusted-clients"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-clients",
+          "name": "Network clients",
+          "type": "trust",
+          "description": "Any party opening TCP, WebSocket, or HTTP connections to enabled transport connectors; anonymous until authenticated."
+        },
+        {
+          "bom-ref": "zone-broker",
+          "name": "Broker core",
+          "type": "trust",
+          "description": "The broker daemon and its in-process state."
+        },
+        {
+          "bom-ref": "zone-management",
+          "name": "Management plane",
+          "type": "trust",
+          "description": "Operator-only web console, Jolokia, and JMX surfaces."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Trusted storage",
+          "type": "trust",
+          "description": "KahaDB directory, JDBC database, keystores, JAAS property files, and activemq.xml, writable only by the broker OS user and trusted operators."
+        },
+        {
+          "bom-ref": "zone-peer-broker",
+          "name": "Peer brokers",
+          "type": "trust",
+          "description": "Network-of-brokers link participants in other administrative domains."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-transport-connector",
+          "name": "Transport connector",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-clients",
+            "zone-broker"
+          ]
+        },
+        {
+          "bom-ref": "boundary-management-plane",
+          "name": "Management plane access",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-clients",
+            "zone-management"
+          ]
+        },
+        {
+          "bom-ref": "boundary-persistence",
+          "name": "Broker to persistence store",
+          "type": "trust",
+          "zones": [
+            "zone-broker",
+            "zone-storage"
+          ]
+        },
+        {
+          "bom-ref": "boundary-broker-link",
+          "name": "Network-of-brokers link",
+          "type": "trust",
+          "zones": [
+            "zone-broker",
+            "zone-peer-broker"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Conformant JVM of the version the release line targets, conformant TLS provider, and standard JDK Java serialization semantics."
+        },
+        {
+          "description": "Correct system clock and properly configured trust store for message expiry, TLS certificate validation, and JAAS credential checks."
+        },
+        {
+          "description": "KahaDB directory, JAAS property files, keystores, and activemq.xml are on storage writable only by the broker OS user and trusted operators."
+        },
+        {
+          "description": "The operator places the broker behind appropriate network controls; shipped defaults are for developer testing, not production."
+        },
+        {
+          "description": "From ActiveMQ 5.12 onward, JAAS property files are re-read only when reload=true is set; otherwise credentials are read once at startup."
+        },
+        {
+          "description": "Non-localhost network access to RMI/JMX must be secured as an environmental precondition; ActiveMQ cannot itself apply IP filtering or rate limiting to RMI/JMX operations."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-openwire-marshalling-rce",
+        "name": "Remote code execution via OpenWire protocol unmarshalling",
+        "description": "A crafted OpenWire command coerces the marshaller into reflectively constructing attacker-named classes from protocol fields, leading to arbitrary class instantiation or command execution on the broker. CVE-2023-46604 is the canonical instance of this class.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-patch-supported-lines",
+          "control-enable-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-objectmessage-deserialization-rce",
+        "name": "Remote code execution via JMS ObjectMessage deserialization",
+        "description": "A serialized Java object graph in an ObjectMessage body instantiates a gadget class during unmarshalling on the broker or client. The SERIALIZABLE_PACKAGES allow-list (introduced after CVE-2015-5254) blocks classes outside the configured packages; a class outside the allow-list that is nonetheless deserialized is an allow-list bypass and in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker",
+          "asset-client-library"
+        ],
+        "mitigations": [
+          "control-serializable-packages-allowlist"
+        ]
+      },
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Authentication bypass on a configured broker",
+        "description": "An unauthenticated connection performs authenticated-only operations despite a configured JAAS or SimpleAuthenticationPlugin login (or TLS client certificate requirement).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-enable-authentication"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Destination authorization bypass",
+        "description": "An authenticated principal consumes from, produces to, or creates a destination outside the read/write/admin scope granted by its group's authorizationEntry set (including wildcard and advisory-topic rules).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-enable-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-traffic-interception",
+        "name": "Interception or modification of plaintext connector traffic",
+        "description": "A network attacker on the path of a plaintext connector (the default OpenWire tcp:// connector, or plain AMQP/STOMP/MQTT/WS) observes or modifies credentials and message bodies. Confidentiality and integrity require the operator to choose an SSL/TLS connector variant; a failure of a TLS-configured connector to encrypt or to reject an invalid certificate is in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker",
+          "asset-client-library"
+        ],
+        "mitigations": [
+          "control-tls-connectors"
+        ]
+      },
+      {
+        "bom-ref": "threat-management-plane-access",
+        "name": "Unauthorized access to the management plane",
+        "description": "A party without operator credentials reads or mutates broker state through the web console, Jolokia, or JMX on a surface configured to require authentication. Reaching the management plane is operator-equivalent access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-management-plane"
+        ],
+        "mitigations": [
+          "control-lockdown-management-plane"
+        ]
+      },
+      {
+        "bom-ref": "threat-configured-resource-bound-breach",
+        "name": "Denial of service breaching a configured resource bound",
+        "description": "A single client drives the broker past an operator-configured ceiling (maxUncommittedCount, maxDestinations, wireFormat.maxFrameSize, maxInflatedDataSize, maximumConnections, maximumProducersAllowedPerConnection, maximumConsumersAllowedPerConnection, memory/store limits, producer flow control), for example an accepted oversized frame or a payload inflated past its cap. Out-of-memory conditions caused by bounds the operator never set are out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-set-resource-bounds"
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-peer-broker",
+        "name": "Malicious or compromised peer broker on a network-of-brokers link",
+        "description": "A network-of-brokers peer holds a legitimate identity but behaves arbitrarily (Byzantine). Peer connections are authenticated and authorized, and messages cannot be forwarded unless the peer is authorized for the destinations; beyond that, a compromised or malicious peer is the operator's trust decision.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-authenticate-broker-links"
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-tampering",
+        "name": "Tampering with the persistence store or credential files",
+        "description": "Modification of KahaDB files, the JDBC store, keystores, JAAS property files, or activemq.xml by a local attacker with filesystem access. The store is trusted storage with the broker as exclusive writer, so this adversary is out of scope; protection is the operator's responsibility through OS permissions.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-persistence-store"
+        ],
+        "mitigations": [
+          "control-protect-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthenticated-deployment",
+        "name": "Attacks on a broker deployed without authentication or authorization",
+        "description": "Exploits that are only possible because authentication and authorization remain disabled (the shipped developer-convenience default) are configuration gaps, not broker vulnerabilities. The same applies to the sample admin/admin web-console credential, which users are expected to reset.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "mitigations": [
+          "control-enable-authentication",
+          "control-enable-authorization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-blobmessage-ssrf",
+        "name": "Server-side request forgery via BlobMessage URIs",
+        "description": "URIs referenced by a BlobMessage are fetched by the consuming client; validating them is the client's responsibility and the broker does not vouch for them. Out of scope for the broker.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-client-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-misuse-selectors-as-acl",
+        "name": "Misuse of JMS selectors, ClientId, or the deserialization allow-list as security controls",
+        "description": "JMS message selectors filter messages within destinations the principal is already authorized for and do not restrict destination access; ClientId is a JMS identifier, not an authentication token; the SERIALIZABLE_PACKAGES allow-list is a package-level gate, not a gadget-chain guarantee. Findings that treat these as violated security controls are non-issues by design.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-broker"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-transport-connector",
+        "boundary": "boundary-transport-connector",
+        "name": "Transport connector trust boundary",
+        "description": "Primary trust boundary: the moment bytes from a network client are unmarshalled into broker-internal protocol commands and message objects. Everything a client sends (protocol frames, headers, destination names, selectors, message bodies) is untrusted until an authentication plugin has established a principal.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-openwire-marshalling-rce",
+          "threat-objectmessage-deserialization-rce",
+          "threat-authentication-bypass",
+          "threat-authorization-bypass",
+          "threat-plaintext-traffic-interception",
+          "threat-configured-resource-bound-breach"
+        ],
+        "controlsAtBoundary": [
+          "control-enable-authentication",
+          "control-enable-authorization",
+          "control-tls-connectors",
+          "control-set-resource-bounds"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-management-plane",
+        "boundary": "boundary-management-plane",
+        "name": "Management plane trust boundary",
+        "description": "The web console, Jolokia, and JMX are intended for operators, not clients; reaching them is a distinct boundary from accessing a transport connector.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-management-plane-access"
+        ],
+        "controlsAtBoundary": [
+          "control-lockdown-management-plane"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-persistence",
+        "boundary": "boundary-persistence",
+        "name": "Persistence store trust boundary",
+        "description": "KahaDB files and the JDBC database are trusted storage: the broker assumes it is the only writer and that the store has not been tampered with out of band.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-storage-tampering"
+        ],
+        "controlsAtBoundary": [
+          "control-protect-storage"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-broker-link",
+        "boundary": "boundary-broker-link",
+        "name": "Network-of-brokers trust boundary",
+        "description": "A network-of-brokers link crosses into another administrative domain's broker; the peer is authenticated but modelled as adversarial.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-peer-broker"
+        ],
+        "controlsAtBoundary": [
+          "control-authenticate-broker-links"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-enable-authentication",
+      "name": "Enable client authentication",
+      "description": "Configure JAAS or SimpleAuthenticationPlugin (or TLS client certificates) before exposing any connector beyond localhost; the broker then rejects connections that do not present valid credentials. anonymousAccessAllowed is an explicit operator opt-in.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-transport-connector"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-authorization",
+      "name": "Enable destination authorization",
+      "description": "Configure the authorization plugin with authorizationEntry rules scoped to least privilege, including correct ActiveMQ.Advisory.> grants, so a principal may only read/write/admin permitted destinations.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-transport-connector"
+      ]
+    },
+    {
+      "bom-ref": "control-serializable-packages-allowlist",
+      "name": "Keep the deserialization allow-list narrow",
+      "description": "Keep SERIALIZABLE_PACKAGES as narrow as possible; never SERIALIZABLE_PACKAGES=* in production and never client setTrustAllPackages(true) outside testing. Only allow-list packages trusted to be gadget-free.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-broker",
+        "asset-client-library"
+      ]
+    },
+    {
+      "bom-ref": "control-set-resource-bounds",
+      "name": "Set resource bounds",
+      "description": "Set maxUncommittedCount, maxDestinations, wireFormat.maxFrameSize, maxInflatedDataSize, maximumConnections, maximumProducersAllowedPerConnection, maximumConsumersAllowedPerConnection, memory/store usage limits, and producer flow control. Unset bounds are the operator's denial-of-service exposure, not a broker bug.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-connectors",
+      "name": "Use TLS connectors",
+      "description": "Use ssl:// or nio+ssl:// for any connector carrying credentials or sensitive payloads, with correct keystore and truststore configuration, for client-broker and broker-broker traffic.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-transport-connector",
+        "boundary-broker-link"
+      ]
+    },
+    {
+      "bom-ref": "control-lockdown-management-plane",
+      "name": "Lock down the management plane",
+      "description": "Change the sample admin/admin web-console credentials, keep console authentication enabled, do not expose Jolokia or JMX to untrusted networks, and prefer binding the console to a management interface. Jetty and Jolokia listen on localhost only by default and require authentication and authorization.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-management-plane"
+      ]
+    },
+    {
+      "bom-ref": "control-authenticate-broker-links",
+      "name": "Authenticate and scope network-of-brokers links",
+      "description": "Authenticate and authorize peer connections, with two-way TLS as the recommended method, and scope forwarded destinations; treat the peer broker as adversarial.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-broker-link"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-storage",
+      "name": "Protect storage and credential files",
+      "description": "Restrict OS permissions on the KahaDB directory, keystores, JAAS property files, and activemq.xml; the broker assumes exclusive, trusted storage. Set reload=true if live credential revocation is needed.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-persistence-store"
+      ]
+    },
+    {
+      "bom-ref": "control-patch-supported-lines",
+      "name": "Run a supported line and patch promptly",
+      "description": "Run a security-supported release line (6.2.x or 5.19.x) and apply updates promptly, especially for the OpenWire marshaller (CVE-2023-46604 class) and the client library.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-broker",
+        "asset-client-library"
+      ]
+    }
+  ]
+}

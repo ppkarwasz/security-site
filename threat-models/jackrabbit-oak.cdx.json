@@ -1,0 +1,804 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-jackrabbit-oak",
+      "name": "Apache Jackrabbit Oak",
+      "description": "Actively-developed scalable hierarchical content repository implementing JCR 2.0 (JSR 283), intended to be embedded by a host application (CMS, DAM, integration framework) and exposing a JCR Repository and an Oak ContentRepository API. Security is structured around a pluggable SecurityProvider binding authentication, authorization (possibly composite), user, principal, and privilege configurations. Oak is usually embedded but also ships first-party HTTP entry points (oak-http and the oak-run server mode on :8080) whose request handling is in-model. Storage backends (MongoDB, RDB, S3, Azure) and external identity providers are trusted, but the TarMK segment store (oak-segment-tar) is Oak's own code and its format parsing is in-model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/jackrabbit-oak/blob/trunk/THREAT_MODEL.md",
+          "comment": "Source security model document (draft, revised after first maintainer-review round); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://jackrabbit.apache.org/oak/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "jackrabbit"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/jackrabbit-oak/blob/trunk/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/jackrabbit-oak/trunk/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-oak",
+      "name": "Oak embedded and HTTP deployment",
+      "description": "Architecture described by the Oak threat model: a trusted host application obtains the Repository handle and configures the SecurityProvider; end-user JCR sessions cross the Session/ContentSession API surface (including all session-derived interfaces, XML import, and SQL2/XPath query parsing); optional oak-http and oak-run server listeners expose inbound HTTP; external NodeStore/BlobStore backends and identity providers are trusted, while the TarMK segment store is Oak's own in-model code.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-oak-repository",
+          "type": "component",
+          "name": "Oak repository core and security stack",
+          "description": "oak-api, oak-core, oak-jcr, and the SecurityProvider stack: LoginContext chain, PermissionProvider (default plus optional CUG and principal-based composition), PermissionValidator commit hook, SecureNodeBuilder wrapping, TokenLoginModule, and PasswordUtil (PBKDF2).",
+          "zone": "zone-oak"
+        },
+        {
+          "bom-ref": "asset-permission-store",
+          "type": "data-store",
+          "name": "Hidden permission store",
+          "description": "Hidden internal store under /jcr:system/rep:permissionStore, not addressable through the public Oak/JCR API; a dedicated FailingValidator prevents modifications and read access is restricted to system principals only.",
+          "zone": "zone-oak"
+        },
+        {
+          "bom-ref": "asset-http-listeners",
+          "type": "endpoint",
+          "name": "oak-http and oak-run server HTTP listeners",
+          "description": "First-party HTTP binding of the repository (oak-http) and the oak-run server mode listening on :8080; request parsing, authentication wiring, path handling, and response content are in-model, not host-only.",
+          "zone": "zone-oak"
+        },
+        {
+          "bom-ref": "asset-segment-store",
+          "type": "data-store",
+          "name": "TarMK segment store (oak-segment-tar)",
+          "description": "Oak's own proprietary store: the on-disk tar format parser, segment graph, and recovery paths are Oak code, so a malformed-segment or tar-parsing bug is an Oak finding, not a trusted-backend issue.",
+          "zone": "zone-oak"
+        },
+        {
+          "bom-ref": "asset-external-backends",
+          "type": "service",
+          "name": "External NodeStore/BlobStore backends and identity providers",
+          "description": "MongoDB, RDB, S3, Azure, FileBlobStore, LDAP/SAML/OAuth identity providers, and Elasticsearch; assumed honest, with their own authentication and ACLs; TLS to them is the operator's and driver's responsibility.",
+          "zone": "zone-backends"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-host",
+          "name": "Host application",
+          "type": "trust",
+          "description": "Trusted host code holding the Repository/ContentRepository handle; may bypass authorization entirely via loginAdministrative / loginService."
+        },
+        {
+          "bom-ref": "zone-sessions",
+          "name": "End-user JCR sessions",
+          "type": "trust",
+          "description": "Untrusted-but-authenticated principals identified through Repository.login(Credentials) and subjected to the configured PermissionProvider chain."
+        },
+        {
+          "bom-ref": "zone-http-clients",
+          "name": "HTTP clients",
+          "type": "trust",
+          "description": "Untrusted network peers reaching the optional oak-http / oak-run server listeners."
+        },
+        {
+          "bom-ref": "zone-oak",
+          "name": "Oak repository",
+          "type": "trust",
+          "description": "Oak code in the host JVM, including the TarMK segment store and HTTP listeners."
+        },
+        {
+          "bom-ref": "zone-backends",
+          "name": "Trusted external backends",
+          "type": "trust",
+          "description": "External NodeStore, BlobStore, identity provider, and search backends; trusted control plane."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-session-api",
+          "name": "JCR Session / ContentSession API surface",
+          "type": "trust",
+          "zones": [
+            "zone-sessions",
+            "zone-oak"
+          ]
+        },
+        {
+          "bom-ref": "boundary-host-api",
+          "name": "Host administrative entry points",
+          "type": "trust",
+          "zones": [
+            "zone-host",
+            "zone-oak"
+          ]
+        },
+        {
+          "bom-ref": "boundary-http",
+          "name": "Inbound HTTP (oak-http, oak-run server)",
+          "type": "trust",
+          "zones": [
+            "zone-http-clients",
+            "zone-oak"
+          ]
+        },
+        {
+          "bom-ref": "boundary-backends",
+          "name": "Oak to external backends",
+          "type": "trust",
+          "zones": [
+            "zone-oak",
+            "zone-backends"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-host-application",
+          "party": {
+            "roles": [
+              {
+                "name": "Host application"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; holds the Repository handle, chooses the SecurityProvider and LoginContextProvider, configures NodeStore and BlobStore, and may bypass authorization by obtaining a system-level session via loginAdministrative / loginService."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-session-principal",
+          "party": {
+            "roles": [
+              {
+                "name": "JCR session principal (end user)"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted but authenticated; identifies through Repository.login(Credentials) and is subjected to the configured PermissionProvider chain on every read/write."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-system-principal",
+          "party": {
+            "roles": [
+              {
+                "name": "System / admin principal"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; SystemPrincipal, AdminPrincipal, and principals matching configured administrative names automatically receive full repository access and bypass permission evaluation entirely."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-external-idp",
+          "party": {
+            "roles": [
+              {
+                "name": "External identity provider"
+              }
+            ],
+            "persona": {
+              "description": "Trusted control plane; the ExternalLoginModule mechanism implicitly trusts that the configured IDP (LDAP, SAML, OAuth) accurately authenticates identities."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-pre-authenticated-caller",
+          "party": {
+            "roles": [
+              {
+                "name": "Pre-authenticated caller"
+              }
+            ],
+            "persona": {
+              "description": "Operator-asserted trust: when PreAuthenticatedLogin is in use, Oak performs no credential verification at all and delegates all authentication responsibility to the caller."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Java 17 at HEAD (authoritative source oak-parent/pom.xml); conformant JVM; the SecurityManager is not required and Oak is not designed to defend against in-JVM attackers."
+        },
+        {
+          "description": "Repository is thread-safe in the JCR sense; Session is per-thread; MVCC isolates concurrent sessions, each seeing a consistent revision captured at login until refresh."
+        },
+        {
+          "description": "The embedded oak-core/oak-jcr path opens no listening sockets, installs no process-wide signal handlers, and spawns no child processes; the optional oak-http and oak-run server components do open listeners and are separate in-model network surface."
+        },
+        {
+          "description": "Outbound connections (Mongo/RDB, S3/Azure, LDAP, Elasticsearch) go to operator-configured trusted endpoints; filesystem permissions on repository.home, tar segments, and blob directories are the operator's responsibility."
+        },
+        {
+          "description": "Unsupported components (oak-it, oak-bench-*, oak-jcr-tests, oak-exercise, oak-examples including oak-examples/standalone, archived oak-mk-* modules) and build/release hygiene are out of model; jackrabbit-core and jackrabbit-filevault have their own threat models, with shared Jackrabbit commons bundles cross-referenced between them."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authentication-bypass",
+        "name": "Session issued for credentials the LoginContext chain should reject",
+        "description": "With a SecurityProvider configured and a JAAS chain including at least one authenticating LoginModule, a Repository.login call must not return a Session for a Credentials object the configured chain should have rejected (property P1).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-security-provider"
+        ]
+      },
+      {
+        "bom-ref": "threat-read-authorization-bypass",
+        "name": "Read authorization bypass through PermissionProvider",
+        "description": "For a non-admin, non-system principal session, Session.getNode/getProperty must not return or surface an item the configured ACLs do not license, and a query result must not include a node path the caller has no read permission for (property P2). The JCR-API to Oak-API security-entity mapping (AccessControlManager, Privilege, Principal, Authorizable translation) is security-load-bearing and in-model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-permission-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "threat-write-authorization-bypass",
+        "name": "Write authorization bypass through the PermissionValidator commit hook",
+        "description": "For a non-admin, non-system principal session with the default PermissionValidator wired into the commit-hook chain, a Session.save() must not commit an ADD_NODE, MODIFY_PROPERTY, REMOVE_NODE, or access-control-modifying change the configured ACLs do not license (property P3).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-permission-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "threat-permission-store-exposure",
+        "name": "Hidden permission store addressable or mutable through public APIs",
+        "description": "A path under /jcr:system/rep:permissionStore must not be readable, writable, or enumerable through Session, QueryManager, or Workspace APIs (property P4), and a Session.save() must not mutate a node under it (property P5); hidden items are excluded from the access grant even for system principals on the Oak API.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-permission-store"
+        ],
+        "mitigations": [
+          "control-failing-validator"
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-password-storage",
+        "name": "Weak or plaintext password storage under the default configuration",
+        "description": "With the default UserConfiguration, a password stored in plaintext, with a weak hash, or without a salt violates property P7; PasswordUtil uses PBKDF2 by default. The stance on pre-PBKDF2 hashes on legacy users is an open maintainer question; operators are expected to force a rehash.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-pbkdf2-password-hashing",
+          "control-force-password-rehash"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-forgery",
+        "name": "Token validates that was never issued or was revoked",
+        "description": "With TokenConfiguration enabled (the default), a token that validates despite never having been issued, or a revoked token that continues to validate after TokenProvider.removeToken, violates property P8. A TokenCredentials token is a bearer credential: possession is sufficient until expiry or revocation, with no audience or device binding.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-token-ttl"
+        ]
+      },
+      {
+        "bom-ref": "threat-cross-session-permission-cache",
+        "name": "Permission decisions shared across sessions",
+        "description": "Each JCR Session receives its own PermissionProvider instance tied to the current repository revision, so evaluated permissions and caches are not shared between different sessions even for the same subject; a permission decision on Session A influencing a decision on Session B violates property P9.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-permission-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "threat-xml-query-parsing",
+        "name": "XXE, entity expansion, or query-parser escape from caller-supplied XML and query text",
+        "description": "Session.importXML / Workspace.importXML parse attacker-influenced XML and QueryManager.createQuery processes free-form SQL2/XPath text, reachable from a non-admin session (property P12). An XXE injection that reads local files or performs SSRF, a billion-laughs entity expansion, or a query-parser flaw escaping the intended parse/plan is in-model; XXE/SSRF/file-read is security-critical, DoS-class parser flaws are hardening. Whether the default importer disables external entities is an open maintainer question.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthorized-path-leak",
+        "name": "Concrete unauthorized path leaked in errors or responses",
+        "description": "Leaking the mere existence of an unauthorized path (timing difference, not-found vs forbidden distinction, result count) is an accepted, disclaimed side channel; but leaking the unauthorized path itself, its actual name or location, in an error message, exception, log line surfaced to the caller, or HTTP response is not acceptable and is a valid finding. This applies equally to the oak-http / oak-run server response surface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository",
+          "asset-http-listeners"
+        ]
+      },
+      {
+        "bom-ref": "threat-tarmk-malformed-segment",
+        "name": "Malformed TarMK segment mis-parsed by oak-segment-tar",
+        "description": "TarMK is Oak's own proprietary store: the on-disk tar format parser, segment graph, and recovery paths are Oak code, so a malformed-segment or tar-parsing flaw reachable when Oak opens a segment store is an Oak finding, not a trusted-backend carve-out. (One maintainer asked to treat TarMK as Oak's responsibility; another was uncertain; the item is kept in scope pending PMC reconciliation.)",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-segment-store"
+        ],
+        "mitigations": [
+          "control-filesystem-permissions"
+        ]
+      },
+      {
+        "bom-ref": "threat-http-listener-flaws",
+        "name": "Request-parsing, authentication-wiring, or path-handling flaws in oak-http / oak-run server",
+        "description": "Oak ships network-facing surface of its own: oak-http exposes the repository over HTTP and oak-run has a server mode listening on :8080. A bug in request parsing, the authentication the HTTP layer wires up (or fails to), path or credential handling, or response content is in-model, not automatically host-only; only the operator deploying a listener with no fronting authentication is an operator-posture question.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-listeners"
+        ],
+        "mitigations": [
+          "control-front-http-listeners"
+        ]
+      },
+      {
+        "bom-ref": "threat-host-admin-exposure",
+        "name": "Host exposure of loginAdministrative, loginService, or PreAuthenticatedLogin",
+        "description": "loginAdministrative and loginService are trusted host-only entry points that perform no credential check and bypass all authorization; PreAuthenticatedLogin explicitly delegates all authentication responsibility to the caller. A host that exposes these to network peers, user-supplied input, or co-installed code has produced a bug at the host layer, not the Oak layer; the same applies to a co-installed OSGi bundle obtaining a Repository reference (the host container is the security boundary).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-guard-admin-entry-points"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-system-principal-bypass",
+        "name": "Permission bypass by system and administrative principals",
+        "description": "SystemPrincipal, AdminPrincipal, and principals matching configured administrative names automatically receive full repository access and bypass permission evaluation entirely; there is no second gate. This is documented design, so audit the administrative-principal name list rather than reporting the bypass.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-audit-admin-principals"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-backend",
+        "name": "Malicious external NodeStore, BlobStore, or identity provider",
+        "description": "Oak trusts whatever the external Mongo, RDB, S3, Azure, LDAP, SAML, and Elasticsearch backends return; a backend returning forged bytes, an LDAP server asserting spoofed group membership, or an S3 bucket allowing unauthorized reads are not Oak vulnerabilities. The ExternalLoginModule implicitly trusts that the configured IDP accurately authenticates identities and does not validate IDP signatures. This carve-out does not cover TarMK, which is Oak's own code.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-external-backends"
+        ],
+        "mitigations": [
+          "control-tls-to-backends"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-authenticated-dos",
+        "name": "Denial of service by authenticated callers",
+        "description": "Oak provides no enforced cap on query complexity, tree depth, child count, transient state per session, or commit size; a user with sufficient privileges can submit a query or save that burns the host's CPU and memory budget, and pathological hierarchies degrade gracefully without a hard cap. Admission control is the host's job.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-host-admission-control"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-default-admin-user",
+        "name": "Unrotated default admin user",
+        "description": "The admin user exists by default with full repository access; the operator is expected to rotate or remove the credentials before production. The model treats failing to do so as an operator misconfiguration (subject to a pending maintainer ruling).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "mitigations": [
+          "control-rotate-default-admin"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-documented-limitations",
+        "name": "Documented design limitations: existence side channels, CUG writes, move cascades, MAC escalation",
+        "description": "Disclaimed by the model: side channels revealing only the existence of an unauthorized path (query timing, error distinction, result counts); oak-authorization-cug not gating writes (CUG solely evaluates and enforces read access to regular nodes and properties); the move-cascade limitation (moving an ancestor of an already-moved node only detects the second move and enforces regular permission checks on the child); and a user with jcr:modifyAccessControl on a subtree rewriting ACLs to grant themselves more, which is the JCR access-control mutator privilege doing what it says. Data-at-rest encryption is delegated to the backend, and constant-time secret comparison beyond PasswordUtil/TokenLoginModule/JCA helpers is not claimed.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-oak-repository"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-session-api",
+        "boundary": "boundary-session-api",
+        "name": "Session API trust boundary",
+        "description": "Oak's trust boundary is the JCR Session / Oak ContentSession API surface including all immediately derived interfaces (Workspace and its import/copy/move methods, QueryManager, ObservationManager, AccessControlManager, UserManager/PrincipalManager, VersionManager/LockManager), drawn deliberately wide: session-derived APIs, the parsers they reach (XML import, SQL2/XPath), and the JCR-API to Oak-API security-entity mapping are all in-model entry points.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-authentication-bypass",
+          "threat-read-authorization-bypass",
+          "threat-write-authorization-bypass",
+          "threat-permission-store-exposure",
+          "threat-token-forgery",
+          "threat-cross-session-permission-cache",
+          "threat-xml-query-parsing",
+          "threat-unauthorized-path-leak",
+          "threat-authenticated-dos",
+          "threat-default-admin-user"
+        ],
+        "controlsAtBoundary": [
+          "control-security-provider",
+          "control-permission-evaluation",
+          "control-failing-validator",
+          "control-token-ttl",
+          "control-host-admission-control"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-host-api",
+        "boundary": "boundary-host-api",
+        "name": "Host administrative boundary",
+        "description": "loginAdministrative / loginService and PreAuthenticatedLogin are host-only, bypass authorization, and carry no credential verification; the host is trusted by definition.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-host-admin-exposure",
+          "threat-system-principal-bypass"
+        ],
+        "controlsAtBoundary": [
+          "control-guard-admin-entry-points",
+          "control-audit-admin-principals"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-http",
+        "boundary": "boundary-http",
+        "name": "Inbound HTTP boundary",
+        "description": "The oak-http and oak-run server listeners are Oak's own network-facing code; inbound request parsing, authentication wiring, path handling, and response content are in-model.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-http-listener-flaws",
+          "threat-unauthorized-path-leak"
+        ],
+        "controlsAtBoundary": [
+          "control-front-http-listeners"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-backends",
+        "boundary": "boundary-backends",
+        "name": "External backend boundary",
+        "description": "External NodeStore/BlobStore backends, identity providers, and search backends are trusted control plane; the backend byte stream is not attacker-controllable in the model. TarMK segment files are excluded from this trusted set.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-hostile-backend"
+        ],
+        "controlsAtBoundary": [
+          "control-tls-to-backends"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-security-provider",
+      "name": "Configure the SecurityProvider and JAAS login chain",
+      "description": "Configure a SecurityProvider (default SecurityProviderImpl) with a LoginContextProvider whose JAAS chain includes at least one authenticating LoginModule (default LoginModuleImpl plus optional TokenLoginModule and ExternalLoginModule); without one, all sessions succeed without authentication and all reads/writes succeed without authorization. Custom SecurityProvider or LoginModule replacements are only recommended for experts who understand the associated security risk.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-session-api"
+      ]
+    },
+    {
+      "bom-ref": "control-permission-evaluation",
+      "name": "PermissionProvider evaluation and PermissionValidator commit hook",
+      "description": "Every read/write by a non-admin session goes through the configured PermissionProvider chain (default plus optional CUG and principal-based configurations composed via CompositeAuthorizationConfiguration, where the strictest result applies); writes are validated by the PermissionValidator commit hook with SecureNodeBuilder wrapping applied to non-admin sessions; each session receives its own provider instance so caches are not shared. CUG only enforces read restriction and must be paired with the default authorization for writes.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-session-api"
+      ]
+    },
+    {
+      "bom-ref": "control-failing-validator",
+      "name": "FailingValidator on the hidden permission store",
+      "description": "A dedicated FailingValidator prevents modifications of the permission store, read access is restricted to system principals only, and hidden items are not exposed on the Oak API.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-permission-store"
+      ]
+    },
+    {
+      "bom-ref": "control-pbkdf2-password-hashing",
+      "name": "PBKDF2 password hashing",
+      "description": "PasswordUtil supports Password-Based Key Derivation Function 2 (PBKDF2) as the current default hash scheme for stored Oak users.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-oak-repository"
+      ]
+    },
+    {
+      "bom-ref": "control-force-password-rehash",
+      "name": "Force password rehash on legacy accounts",
+      "description": "Force a password rehash on legacy accounts so the PasswordUtil PBKDF2 path is applied to users whose stored hash predates it.",
+      "category": "corrective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oak-repository"
+      ]
+    },
+    {
+      "bom-ref": "control-token-ttl",
+      "name": "Configure TokenConfiguration TTL",
+      "description": "Configure the token TTL to match the data lifetime you are willing to expose to a stolen token; a misconfigured TTL extends a stolen bearer token's usefulness.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oak-repository"
+      ]
+    },
+    {
+      "bom-ref": "control-guard-admin-entry-points",
+      "name": "Treat loginAdministrative, loginService, and PreAuthenticatedLogin as host-only",
+      "description": "Never expose loginAdministrative or loginService to network peers, user-supplied input, or co-installed code that might invoke them indirectly; if PreAuthenticatedLogin is in the chain, the host is fully responsible for ensuring the pre-auth signal comes from a trusted upstream verifier.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-host-api"
+      ]
+    },
+    {
+      "bom-ref": "control-rotate-default-admin",
+      "name": "Rotate or remove the default admin user",
+      "description": "Rotate or remove the default admin user before production.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-oak-repository"
+      ]
+    },
+    {
+      "bom-ref": "control-audit-admin-principals",
+      "name": "Audit the administrative-principal name list",
+      "description": "Any principal added to the configured admin-name list bypasses authorization globally; audit this list per release, and audit which principals hold MODIFY_ACCESS_CONTROL on which subtrees, since a holder can grant themselves any privilege under that subtree.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-host-api"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-to-backends",
+      "name": "Use TLS to all external backends",
+      "description": "Use TLS to the NodeStore (Mongo, RDB), BlobStore (S3, Azure), external IDP (LDAP, SAML), and search backend (Elasticsearch); Oak does not enforce transport encryption on these channels, the underlying driver or library does. Validate the IDP itself (LDAP TLS, certificate pinning, SAML signature verification, OAuth client secret hygiene) since Oak honours whatever the IDP returns.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-backends"
+      ]
+    },
+    {
+      "bom-ref": "control-host-admission-control",
+      "name": "Apply admission controls at the host layer",
+      "description": "Oak imposes no cap on query complexity or save size; rate-limit and quota-limit upstream of Session.save and QueryManager.createQuery.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-session-api"
+      ]
+    },
+    {
+      "bom-ref": "control-front-http-listeners",
+      "name": "Front oak-http and oak-run server with authentication and network controls",
+      "description": "Do not expose oak-http or oak-run server on a network with no fronting authentication or reverse proxy; these are real listeners, and treating them as internal-only without network controls puts the repository on the wire. Treat oak-run generally as offline operator tooling that holds full repository authority.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http"
+      ]
+    },
+    {
+      "bom-ref": "control-filesystem-permissions",
+      "name": "Restrict filesystem permissions on repository storage",
+      "description": "Restrict OS filesystem permissions on repository.home, oak-run keystores, tar segments, blob directories, and any certificate or key material to the Oak process user.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-segment-store"
+      ]
+    }
+  ]
+}

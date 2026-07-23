@@ -1,0 +1,244 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-devlake",
+      "name": "Apache DevLake",
+      "description": "Dev data platform deployed as four core services: a database (MySQL or a compatible system), Grafana, the DevLake core service, and the config-ui interface. The security documentation covers authentication and deployment posture for these services; it recommends an internal deployment and warns explicitly against exposing DevLake to the internet. It also carries the disclaimer that security is complicated, Apache DevLake makes no guarantee of any kind, and users should consult their security advisor before applying the guidance.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://devlake.apache.org/docs/v1.0/GettingStarted/Authentication",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://devlake.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "devlake"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://devlake.apache.org/docs/v1.0/GettingStarted/Authentication"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-devlake",
+      "name": "DevLake deployment",
+      "description": "The four core services described by the security documentation (database, Grafana, DevLake core, config-ui) and the recommended internal deployment: keep database and DevLake ports unexposed, access the DevLake APIs through config-ui, and expose only Grafana (with user management) and config-ui (with basic authentication) to users.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-database",
+          "type": "data-store",
+          "name": "Database",
+          "description": "MySQL or a compatible alternative (including cloud-based systems); secure it per the database vendor's security documentation. Remove its ports unless direct access is necessary.",
+          "zone": "zone-internal"
+        },
+        {
+          "bom-ref": "asset-devlake-core",
+          "type": "service",
+          "name": "DevLake core service",
+          "description": "The DevLake service itself. It does not support user management of any kind, so its port should not be exposed to the outside world; access its APIs through config-ui endpoints instead.",
+          "zone": "zone-internal"
+        },
+        {
+          "bom-ref": "asset-config-ui",
+          "type": "service",
+          "name": "config-ui",
+          "description": "Configuration interface supporting Basic Authentication via the ADMIN_USER and ADMIN_PASS container environment variables. It is not designed to be used by many people; access should be limited to necessary personnel only, with port-forwarding techniques considered.",
+          "zone": "zone-internal"
+        },
+        {
+          "bom-ref": "asset-grafana",
+          "type": "service",
+          "name": "Grafana",
+          "description": "Dashboarding service; supports user management, to be configured per Grafana's official documentation based on organizational needs. Its ports may be exposed with user management enabled and read-only database credentials.",
+          "zone": "zone-internal"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-internal",
+          "name": "Internal deployment network",
+          "type": "trust",
+          "description": "The recommended deployment location for all four services, with only the necessary Grafana and config-ui ports reachable by users."
+        },
+        {
+          "bom-ref": "zone-users",
+          "name": "Users and external networks",
+          "type": "trust",
+          "description": "Users reaching the exposed Grafana and config-ui ports; the public internet is explicitly not a recommended source of traffic."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-exposed-ports",
+          "name": "Exposed service ports",
+          "type": "trust",
+          "zones": [
+            "zone-users",
+            "zone-internal"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Security is complicated; Apache DevLake makes no guarantee of any kind, and users should consult their security advisor before applying the guidance."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-devlake-port-exposure",
+        "name": "Unauthenticated access to an exposed DevLake core port",
+        "description": "The DevLake core service does not support user management of any kind, so anyone who can reach its port can use its APIs without authentication. The documentation therefore recommends not exposing its port to the outside world and accessing the APIs through config-ui endpoints instead.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-devlake-core"
+        ],
+        "mitigations": [
+          "control-internal-deployment"
+        ]
+      },
+      {
+        "bom-ref": "threat-config-ui-unauthorized-access",
+        "name": "Unauthorized access to config-ui",
+        "description": "config-ui is the administrative interface and is not designed to be used by many people; without Basic Authentication configured, or with access granted too broadly, unauthorized parties can reconfigure DevLake.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-config-ui"
+        ],
+        "mitigations": [
+          "control-config-ui-basic-auth",
+          "control-internal-deployment"
+        ]
+      },
+      {
+        "bom-ref": "threat-internet-deployment",
+        "name": "Deployment exposed to the internet",
+        "description": "Internet deployment is explicitly warned against ('THIS IS DANGEROUS, DON'T DO IT'). If attempted despite the warning, the documentation recommends at minimum HTTPS encryption for both Grafana and config-ui.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-config-ui",
+          "asset-grafana",
+          "asset-devlake-core",
+          "asset-database"
+        ],
+        "mitigations": [
+          "control-internal-deployment",
+          "control-https"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-exposed-ports",
+        "boundary": "boundary-exposed-ports",
+        "name": "Exposed service ports trust boundary",
+        "description": "Only Grafana (with user management and read-only database credentials) and config-ui (with Basic Authentication) should be reachable by users; database and DevLake core ports stay internal.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-devlake-port-exposure",
+          "threat-config-ui-unauthorized-access"
+        ],
+        "controlsAtBoundary": [
+          "control-internal-deployment",
+          "control-config-ui-basic-auth",
+          "control-grafana-user-management"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-internal-deployment",
+      "name": "Deploy internally with a minimal exposed surface",
+      "description": "Use the recommended internal deployment: remove database ports unless direct access is necessary, remove DevLake core ports and access its APIs through config-ui endpoints, expose Grafana ports only with user management and read-only database credentials, and limit config-ui access to necessary personnel (consider port-forwarding techniques).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-exposed-ports"
+      ]
+    },
+    {
+      "bom-ref": "control-config-ui-basic-auth",
+      "name": "Enable Basic Authentication on config-ui",
+      "description": "Set the ADMIN_USER and ADMIN_PASS environment variables for the config-ui container to enable Basic Authentication.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-config-ui"
+      ]
+    },
+    {
+      "bom-ref": "control-grafana-user-management",
+      "name": "Use Grafana user management and read-only database credentials",
+      "description": "Enable Grafana's built-in user management, configured per Grafana's official documentation based on organizational needs, and give Grafana read-only database credentials when exposing it.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-grafana"
+      ]
+    },
+    {
+      "bom-ref": "control-database-vendor-security",
+      "name": "Follow the database vendor's security documentation",
+      "description": "Secure the database (MySQL or a compatible alternative, including cloud-based systems) by following the vendor's security documentation.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-database"
+      ]
+    },
+    {
+      "bom-ref": "control-https",
+      "name": "HTTPS for Grafana and config-ui if internet-exposed",
+      "description": "If an internet deployment is attempted despite the explicit warning against it, use HTTPS encryption for both Grafana and config-ui.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-grafana",
+        "asset-config-ui"
+      ]
+    }
+  ]
+}

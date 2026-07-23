@@ -1,0 +1,405 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-iceberg",
+      "name": "Apache Iceberg",
+      "description": "Table format implementation, client libraries, engine integrations, and catalog-related components, often deployed as a library and integration layer inside larger systems that provide their own authentication, authorization, and credential management. The model is scoped to the Iceberg project itself, not to every deployment that embeds it, and does not define the complete security model for query engines that embed Iceberg or for storage-level authorization enforced outside Iceberg.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/iceberg/blob/main/SECURITY-THREAT-MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. It complements the shorter public-facing security model in site/docs/security.md."
+        },
+        {
+          "type": "website",
+          "url": "https://iceberg.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "iceberg"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/iceberg/blob/main/SECURITY-THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/iceberg/main/SECURITY-THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-iceberg",
+      "name": "Iceberg deployment roles and boundaries",
+      "description": "Roles and trust boundaries described by the Iceberg threat model: an operator wires catalog, metastore, REST service, engine, and storage integration around Iceberg; a trusted catalog control plane (possibly a REST catalog server) supplies metadata, locations, configuration, and delegated credentials; the Iceberg-owned client code must preserve catalog, session, and principal boundaries; storage-level and engine-level authorization are owned outside Iceberg.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-iceberg-library",
+          "type": "component",
+          "name": "Iceberg library and integrations",
+          "description": "The table format implementation, client libraries, engine integrations, and catalog-related components shipped in the Iceberg repository.",
+          "zone": "zone-iceberg"
+        },
+        {
+          "bom-ref": "asset-rest-catalog-client",
+          "type": "component",
+          "name": "REST catalog client",
+          "description": "Client-side catalog object consuming server-provided metadata, configuration, and credentials. Client-side bugs in routing, caching, or reuse may be security-relevant, especially when the Iceberg-owned client leaks credential-bearing state across catalog, session, or principal boundaries it is expected to preserve.",
+          "zone": "zone-iceberg"
+        },
+        {
+          "bom-ref": "asset-catalog-control-plane",
+          "type": "service",
+          "name": "Catalog control plane",
+          "description": "Resolves tables and supplies metadata, locations, configuration, and delegated credentials to Iceberg; may be a REST catalog server, a metastore-backed catalog, or another implementation. Iceberg assumes a trusted catalog or metastore, outside its primary security boundary. It should not expose secrets to unintended principals or leak credential-bearing state across unintended boundaries.",
+          "zone": "zone-catalog"
+        },
+        {
+          "bom-ref": "asset-object-storage",
+          "type": "data-store",
+          "name": "Object storage",
+          "description": "Object store permissions are enforced by the storage provider and the credentials the surrounding deployment hands to Iceberg; Iceberg is not the root authority for bucket- or object-level authorization.",
+          "zone": "zone-storage"
+        },
+        {
+          "bom-ref": "asset-engine",
+          "type": "system",
+          "name": "Engine or embedding application",
+          "description": "Query engines and applications may expose only a subset of Iceberg capabilities to users; they are responsible for their own user-facing authorization boundaries unless Iceberg explicitly documents otherwise.",
+          "zone": "zone-engine"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-iceberg",
+          "name": "Iceberg-owned code",
+          "type": "trust",
+          "description": "Iceberg components whose own trust boundaries (catalog, session, principal separation) must hold."
+        },
+        {
+          "bom-ref": "zone-catalog",
+          "name": "Catalog control plane",
+          "type": "trust",
+          "description": "Trusted control-plane components supplying metadata, configuration, and delegated credentials."
+        },
+        {
+          "bom-ref": "zone-storage",
+          "name": "Storage provider",
+          "type": "trust",
+          "description": "Object stores enforcing their own permissions with the credentials the deployment chose."
+        },
+        {
+          "bom-ref": "zone-engine",
+          "name": "Engine and its users",
+          "type": "trust",
+          "description": "Query engines or applications embedding Iceberg and the users they authorize."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Operator",
+          "type": "trust",
+          "description": "The role trusted to choose endpoints, warehouses, and storage integrations, configure credentials, and decide which users may create tables, read tables, or invoke maintenance actions."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-operator-configuration",
+          "name": "Boundary 1: operator-trusted configuration",
+          "type": "trust",
+          "zones": [
+            "zone-operator",
+            "zone-iceberg"
+          ]
+        },
+        {
+          "bom-ref": "boundary-catalog-metadata",
+          "name": "Boundary 2: catalog-supplied metadata",
+          "type": "trust",
+          "zones": [
+            "zone-catalog",
+            "zone-iceberg"
+          ]
+        },
+        {
+          "bom-ref": "boundary-rest-configuration",
+          "name": "Boundary 3: REST catalog server-supplied configuration and delegated storage access",
+          "type": "trust",
+          "zones": [
+            "zone-catalog",
+            "zone-iceberg"
+          ]
+        },
+        {
+          "bom-ref": "boundary-storage-authorization",
+          "name": "Boundary 4: storage-level authorization",
+          "type": "trust",
+          "zones": [
+            "zone-iceberg",
+            "zone-storage"
+          ]
+        },
+        {
+          "bom-ref": "boundary-engine-authorization",
+          "name": "Boundary 5: engine-level user authorization",
+          "type": "trust",
+          "zones": [
+            "zone-engine",
+            "zone-iceberg"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Deploys and configures the catalog, metastore, REST service, engine, and storage integration around Iceberg; trusted to choose endpoints, warehouses, and storage integrations, configure credentials, and decide which users may create tables, read tables, or invoke maintenance actions."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-table-writer",
+          "party": {
+            "roles": [
+              {
+                "name": "Table writer or maintainer"
+              }
+            ],
+            "persona": {
+              "description": "May already have legitimate power to write or replace table metadata, write or delete files, choose paths under an allowed warehouse or table location, and invoke destructive maintenance operations. A report that only shows a new way to achieve the same effect this role can already cause legitimately is usually not a security issue in Iceberg."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Iceberg assumes a trusted catalog or metastore, which is outside its primary security boundary."
+        },
+        {
+          "description": "Catalog properties, endpoint configuration, warehouse and storage roots, metastore wiring, and REST catalog server configuration are trusted operator or deployment inputs."
+        },
+        {
+          "description": "Iceberg does not aim to be the primary enforcement point for user-to-user authorization inside a query engine, storage-level authorization, or service-side credential scoping performed by an external catalog."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-secret-disclosure-new-audience",
+        "name": "Secret or credential disclosure to a new audience",
+        "description": "Exposure of secrets or delegated credentials to principals that were not already trusted with them, for example catalog secrets exposed through a user-visible engine surface, or one catalog's credentials or auth state leaking into another catalog or session. This category is generally security-relevant in Iceberg when the report is credible and reproducible; secret exposure is the major exception to treating REST catalog server inputs as trusted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-iceberg-library",
+          "asset-rest-catalog-client"
+        ]
+      },
+      {
+        "bom-ref": "threat-iceberg-owned-boundary-violation",
+        "name": "Violation of an Iceberg-owned trust boundary",
+        "description": "Security issues exist when Iceberg itself is expected to separate catalogs, principals, or sessions and fails to do so, for example process-global signer or auth state crossing catalog instances, or secret-bearing state from one principal reused for another principal within an Iceberg-owned boundary. Creating new unauthorized capabilities in Iceberg-owned components or integrations is likewise in scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-iceberg-library",
+          "asset-rest-catalog-client"
+        ]
+      },
+      {
+        "bom-ref": "threat-attacker-controlled-configuration",
+        "name": "Reports depending on attacker control of operator-trusted configuration",
+        "description": "Catalog properties, endpoint configuration, warehouse and storage roots, metastore wiring, and REST catalog server configuration are trusted operator or deployment inputs. A report that depends on the attacker controlling those values directly is usually not a vulnerability in Iceberg itself.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-iceberg-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-catalog",
+        "name": "Malicious catalog, metastore, or external service",
+        "description": "Iceberg treats catalog-supplied metadata locations, table properties, namespace properties, and related control-plane information as trusted by default, including service endpoints, configuration, and delegated storage access from a REST catalog server. A malicious catalog supplying incorrect or malicious metadata, or a malicious REST catalog server sending dangerous endpoints, is usually not an Iceberg vulnerability by itself; many client-side credential-selection bugs are correctness or specification issues rather than security boundary failures.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-catalog-control-plane",
+          "asset-iceberg-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-overbroad-storage-permissions",
+        "name": "Over-broad IAM or permissive storage ACLs",
+        "description": "Object store permissions are enforced by the storage provider and the credentials the surrounding deployment chooses to hand to Iceberg; Iceberg is not the root authority for bucket- or object-level authorization. Reports that depend primarily on over-broad IAM or permissive storage ACLs are usually deployment-sensitive rather than product-security issues in Iceberg.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-object-storage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-robustness",
+        "name": "Malformed-input robustness and correctness bugs",
+        "description": "Malformed-input crashes, raw runtime exceptions, and memory amplification are usually treated as robustness or hardening work rather than security issues in Iceberg itself. The same applies to correctness bugs: wrong byte offsets, stale or corrupted decoded values, ambiguous prefix matching, and race conditions or logic bugs that do not create a new trust-boundary violation.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-iceberg-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-equivalent-harm",
+        "name": "Equivalent-harm reports from already-privileged actors",
+        "description": "If the actor already has a legitimate capability that can cause the same harm, the new path is usually not a security issue. This often applies to table writers or maintainers who already control metadata layout, file layout, or destructive maintenance operations.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-iceberg-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-engine-user-authorization",
+        "name": "User-to-user authorization inside a query engine",
+        "description": "Iceberg integrations may surface data and operations through a query engine or application, but Iceberg is not a complete user-authorization framework for those systems; engines and embedding applications are responsible for their own user-facing authorization boundaries unless Iceberg explicitly documents otherwise.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-engine"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-operator-configuration",
+        "boundary": "boundary-operator-configuration",
+        "name": "Operator-trusted configuration",
+        "description": "Catalog properties, endpoints, warehouse and storage roots, metastore wiring, and REST catalog server configuration are trusted deployment inputs.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-attacker-controlled-configuration"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-catalog-metadata",
+        "boundary": "boundary-catalog-metadata",
+        "name": "Catalog-supplied metadata",
+        "description": "Metadata locations, table properties, namespace properties, and related control-plane information from a catalog or metastore are treated as trusted by default.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-catalog"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-rest-configuration",
+        "boundary": "boundary-rest-configuration",
+        "name": "REST catalog server-supplied configuration and delegated storage access",
+        "description": "Service endpoints, configuration, and delegated storage access from the REST catalog server are trusted control-plane inputs unless Iceberg documents a stronger guarantee; the major exception is secret exposure to a new audience, which is security-relevant.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-malicious-catalog",
+          "threat-secret-disclosure-new-audience"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-storage-authorization",
+        "boundary": "boundary-storage-authorization",
+        "name": "Storage-level authorization",
+        "description": "Enforced by the storage provider and the credentials the deployment hands to Iceberg; not owned by Iceberg.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-overbroad-storage-permissions"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-engine-authorization",
+        "boundary": "boundary-engine-authorization",
+        "name": "Engine-level user authorization",
+        "description": "Iceberg is not a complete user-authorization framework for query engines or applications that embed it.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-engine-user-authorization"
+        ]
+      }
+    ]
+  }
+}

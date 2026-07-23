@@ -1,0 +1,183 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:09Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-trafficserver-ingress-controller",
+      "name": "Apache Traffic Server Ingress Controller",
+      "description": "Kubernetes ingress integration on top of Apache Traffic Server. Its security model builds on the Traffic Server PMC's umbrella model (apache/trafficserver SECURITY.md), which remains canonical for the C++ core (proxy data plane, plugins, configuration loading), and adds two trust surfaces the umbrella model does not cover directly: the Kubernetes validating admission webhook and the translation of Ingress resources into Traffic Server remap.config / plugin.config routing directives.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/trafficserver-ingress-controller/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "documentation",
+          "url": "https://github.com/apache/trafficserver/blob/master/SECURITY.md",
+          "comment": "Umbrella Traffic Server security model governing the C++ core surface."
+        },
+        {
+          "type": "website",
+          "url": "https://trafficserver.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "trafficserver"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/trafficserver-ingress-controller/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/trafficserver-ingress-controller/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ts-ingress",
+      "name": "Ingress controller trust surfaces",
+      "description": "The two additional trust surfaces the ingress controller adds on top of the Traffic Server core: the validating admission webhook exposed to the Kubernetes API server, and the translation of resolved Ingress resources into Traffic Server routing configuration influenced by cluster users holding Ingress privileges.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-admission-webhook",
+          "type": "api",
+          "name": "Validating admission webhook",
+          "description": "Webhook exposed to the Kubernetes API server. Requests originate from the control plane and are authenticated by the API server's TLS bearer-token bootstrap; the webhook bodies (proposed Ingress, Service, Endpoints, and ConfigMap payloads) are treated as adversary-controlled input on the wire.",
+          "zone": "zone-controller"
+        },
+        {
+          "bom-ref": "asset-routing-translation",
+          "type": "module",
+          "name": "Ingress-to-remap.config translation",
+          "description": "Translates resolved Ingress resources into Traffic Server remap.config / plugin.config directives that route HTTP traffic to upstream Services; the routing table and therefore the proxy's outbound destinations are influenced by cluster users with Ingress create/update privileges.",
+          "zone": "zone-controller"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-control-plane",
+          "name": "Kubernetes control plane",
+          "type": "trust",
+          "description": "The API server originating admission webhook requests, authenticated by TLS bearer-token bootstrap; the payloads it forwards are nonetheless adversary-controlled input."
+        },
+        {
+          "bom-ref": "zone-cluster-users",
+          "name": "Cluster users with Ingress privileges",
+          "type": "trust",
+          "description": "Users holding Ingress create/update RBAC privileges in a namespace; the trust boundary is the RBAC scope on those resource kinds."
+        },
+        {
+          "bom-ref": "zone-controller",
+          "name": "Ingress controller and Traffic Server",
+          "type": "trust",
+          "description": "The controller process and the Traffic Server proxy whose routing it manages; the C++ core surface remains governed by the umbrella Traffic Server model."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-webhook",
+          "name": "Admission webhook boundary",
+          "type": "trust",
+          "zones": [
+            "zone-control-plane",
+            "zone-controller"
+          ]
+        },
+        {
+          "bom-ref": "boundary-rbac",
+          "name": "Ingress RBAC boundary",
+          "type": "trust",
+          "zones": [
+            "zone-cluster-users",
+            "zone-controller"
+          ]
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-webhook-payload-handling",
+        "name": "Malicious admission webhook payloads",
+        "description": "Webhook bodies (the proposed Ingress, Service, Endpoints, and ConfigMap payloads) are treated as adversary-controlled input on the wire; admission decisions and the parsing of those payloads must not crash, leak, or allow injection. Findings on admission-webhook handling are in scope for the ASF reporting process.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admission-webhook"
+        ]
+      },
+      {
+        "bom-ref": "threat-ingress-translation-abuse",
+        "name": "Abuse of ingress-to-remap.config translation",
+        "description": "Cluster users with Ingress create/update privileges can influence the routing table and therefore the proxy's outbound destinations; the trust boundary is the RBAC scope on those resource kinds in the namespace. Defects in the translation of Ingress resources into remap.config / plugin.config directives that let a user exceed that RBAC scope are in scope for the ASF reporting process.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-routing-translation"
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-webhook",
+        "boundary": "boundary-webhook",
+        "name": "Admission webhook trust boundary",
+        "description": "Requests are authenticated as coming from the API server, but the resource payloads they carry are adversary-controlled input on the wire.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-webhook-payload-handling"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-rbac",
+        "boundary": "boundary-rbac",
+        "name": "Ingress RBAC trust boundary",
+        "description": "The RBAC scope on Ingress (and related) resource kinds in the namespace bounds what a cluster user may legitimately make the proxy route; the translation code must not let influence exceed that scope.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ingress-translation-abuse"
+        ]
+      }
+    ]
+  }
+}

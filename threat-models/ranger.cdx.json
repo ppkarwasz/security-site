@@ -1,0 +1,763 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-ranger",
+      "name": "Apache Ranger",
+      "description": "Framework to enable, monitor and manage comprehensive data security across 20+ data processing services. A central web application (Ranger Admin) authors fine-grained authorization policies; lightweight per-service Java plugins, deployed inside each data service's own process, pull those policies and enforce authorization decisions locally. In threat-model terms Ranger is a distributed Policy Decision / Policy Enforcement system, complemented by a user/group sync daemon, an optional tag-sync daemon, a PDP server exposing a network authorization API, an audit framework, and Ranger KMS for HDFS transparent encryption. The threat model is v1.1, reviewed by the Ranger PMC on 2026-06-12.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ranger/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ranger.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ranger"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ranger/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ranger/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ranger",
+      "name": "Ranger distributed PDP/PEP deployment",
+      "description": "Multi-component distributed system deployed across a cluster: Ranger Admin (default port 6080), usersync/tagsync daemons, the PDP server, the audit framework, Ranger KMS, and a fleet of plugins each embedded inside a separate data-service process on trusted intra-cluster hosts. End users of guarded data services never talk to Ranger directly; their identity and requested action are the inputs to the embedded plugin (PEP).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-admin",
+          "type": "service",
+          "name": "Ranger Admin",
+          "description": "Central web application and REST API (/service/..., /public/v2/api/...) where administrators author policies, manage users/roles, and view audits. Highest-value component: anyone who can author policy can grant access to all guarded data.",
+          "zone": "zone-central-services"
+        },
+        {
+          "bom-ref": "asset-plugins",
+          "type": "component",
+          "name": "Per-service plugins (PEPs)",
+          "description": "Java plugins running inside each guarded data service's process (HDFS NameNode, HiveServer2, HBase server, Kafka, NiFi, Trino, ...). They pull policy from the Admin at a configured interval (e.g. 30 seconds), cache the last-known policy, evaluate (principal, resource, action) requests locally, and emit audit records. Fully trusted once authenticated, a deliberate design choice.",
+          "zone": "zone-guarded-services"
+        },
+        {
+          "bom-ref": "asset-pdp",
+          "type": "service",
+          "name": "PDP service",
+          "description": "Separate process exposing a network authorization API (/authz/*) for callers that cannot embed a PEP. Requires an authenticated client (Kerberos/JWT/trusted-header); only liveness/readiness/metrics probes are reachable unauthenticated.",
+          "zone": "zone-central-services"
+        },
+        {
+          "bom-ref": "asset-sync-daemons",
+          "type": "process",
+          "name": "Usersync and tagsync daemons",
+          "description": "Usersync reads user/group data from LDAP/AD/Unix and writes it to the Admin DB; tagsync feeds classification tags from Atlas/Kafka. Policy integrity is only as good as these feeds.",
+          "zone": "zone-central-services"
+        },
+        {
+          "bom-ref": "asset-kms",
+          "type": "service",
+          "name": "Ranger KMS",
+          "description": "Key management service for HDFS transparent encryption; keys live in a DB or HSM. Modeled at its own trust level because it handles key material.",
+          "zone": "zone-kms"
+        },
+        {
+          "bom-ref": "asset-audit-framework",
+          "type": "subsystem",
+          "name": "Audit framework",
+          "description": "Records allow/deny decisions and administrative actions to configured sinks (Solr/OpenSearch, HDFS, RDBMS, Kafka, log file). Audit is a record, not a control.",
+          "zone": "zone-central-services"
+        },
+        {
+          "bom-ref": "asset-policy-store",
+          "type": "data-store",
+          "name": "Policy, user, and audit stores",
+          "description": "Relational database backing the Admin policy/audit/user store, plus audit sinks and the KMS key store. Ranger assumes these stores are access-controlled and integrity-preserving.",
+          "zone": "zone-backing-stores"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-end-users",
+          "name": "End users of guarded data services",
+          "type": "trust",
+          "description": "Principals whose HDFS/Hive/etc. access Ranger authorizes. Untrusted with respect to the decisions Ranger makes about them; they are authenticated by the host service, not by Ranger."
+        },
+        {
+          "bom-ref": "zone-guarded-services",
+          "name": "Guarded data-service hosts",
+          "type": "trust",
+          "description": "Trusted, administered cluster nodes running the data services with embedded Ranger plugins."
+        },
+        {
+          "bom-ref": "zone-central-services",
+          "name": "Ranger central services",
+          "type": "trust",
+          "description": "Ranger Admin, PDP service, usersync/tagsync, and the audit framework."
+        },
+        {
+          "bom-ref": "zone-administrators",
+          "name": "Administrative clients",
+          "type": "trust",
+          "description": "Security administrators (trusted for the instance), delegated administrators (trusted for their delegated scope only), auditors (read-only), and key admins (KMS only) using the Admin UI or REST API."
+        },
+        {
+          "bom-ref": "zone-external-sources",
+          "name": "Identity and tag sources",
+          "type": "trust",
+          "description": "LDAP/AD/Unix identity stores read by usersync and Atlas/Kafka tag feeds read by tagsync; trusted as the authority for user/group membership and tags."
+        },
+        {
+          "bom-ref": "zone-backing-stores",
+          "name": "Backing stores",
+          "type": "trust",
+          "description": "Relational database, audit sinks (Solr/HDFS/...), and the KMS key store (DB/HSM); assumed access-controlled and integrity-preserving."
+        },
+        {
+          "bom-ref": "zone-kms",
+          "name": "Key management",
+          "type": "trust",
+          "description": "Ranger KMS and its key material; a distinct trust level within the deployment."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-access-request",
+          "name": "End user access request",
+          "type": "trust",
+          "zones": [
+            "zone-end-users",
+            "zone-guarded-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-policy-distribution",
+          "name": "Plugin/PDP to Admin policy distribution",
+          "type": "trust",
+          "zones": [
+            "zone-guarded-services",
+            "zone-central-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-admin-rest",
+          "name": "Administration UI and REST API",
+          "type": "trust",
+          "zones": [
+            "zone-administrators",
+            "zone-central-services"
+          ]
+        },
+        {
+          "bom-ref": "boundary-internal-dataplane",
+          "name": "Internal data plane (sync sources and backing stores)",
+          "type": "trust",
+          "zones": [
+            "zone-external-sources",
+            "zone-central-services",
+            "zone-backing-stores"
+          ]
+        },
+        {
+          "bom-ref": "boundary-kms-access",
+          "name": "KMS key operations",
+          "type": "trust",
+          "zones": [
+            "zone-guarded-services",
+            "zone-kms"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-security-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Security administrator"
+              }
+            ],
+            "persona": {
+              "description": "Authors policies, manages users/roles, views audits via the Admin UI or REST API. Trusted for the instance; the model does not defend against a malicious top-level administrator."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-delegated-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Delegated administrator"
+              }
+            ],
+            "persona": {
+              "description": "A group owner to whom administration of a subset of resources has been delegated. Trusted for their delegated scope only; overreach by a delegated admin is in scope."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-auditor",
+          "party": {
+            "roles": [
+              {
+                "name": "Auditor"
+              }
+            ],
+            "persona": {
+              "description": "May view policies and access audits but not author them; writes are blocked."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-key-admin",
+          "party": {
+            "roles": [
+              {
+                "name": "Key Admin"
+              }
+            ],
+            "persona": {
+              "description": "Administers Ranger KMS keys only."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-end-user",
+          "party": {
+            "roles": [
+              {
+                "name": "End user of a guarded data service"
+              }
+            ],
+            "persona": {
+              "description": "The principal whose data access Ranger authorizes. Untrusted; authenticated by the host service, not by Ranger, and never interacts with Ranger directly."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "JVM-based runtime with modern JDK module assumptions; components are deployed within a cluster network where plugin nodes are administered hosts, not internet-facing machines."
+        },
+        {
+          "description": "An external authentication authority (typically Kerberos, plus LDAP/AD for user/group identity) establishes principal identity before authorization is requested; Ranger trusts the identity the PEP presents."
+        },
+        {
+          "description": "The backing relational database, audit sinks, and KMS key store are themselves access-controlled and integrity-preserving."
+        },
+        {
+          "description": "TLS is recommended in production, but plaintext HTTP is the shipped and supported default (maintainer-confirmed); a report that reduces to traffic being unencrypted by default is by-design operator hardening, not a vulnerability."
+        },
+        {
+          "description": "When Ranger is the ACL enforcer and no policy matches, the result is deny, except the HDFS service, which falls through to the host's native ACLs. If a plugin can neither evaluate fresh nor cached policy it denies (again except HDFS fallthrough)."
+        },
+        {
+          "description": "Time-bound policies assume reasonably synchronized clocks across Admin and plugin nodes; the policy-evaluation engine is thread-safe under concurrent reads and periodic policy refresh."
+        },
+        {
+          "description": "Ranger seeds bootstrap accounts (admin, rangerusersync, rangertagsync, keyadmin), but the installer mandates an explicit, complexity-checked password on fresh install; a seeded/default password is not a supported production posture."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Authorization decision diverges from authored policy",
+        "description": "An end user of a guarded data service gains access the policy denies (or is denied access the policy grants) by manipulating the requested resource/action or exploiting policy-evaluation edge cases (resource-name matching, wildcard/recursion handling, case sensitivity, tag-vs-resource precedence). An existing deny-policy (or the absence of any grant) that nonetheless yields access is CVE-class VALID per the PMC.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins",
+          "asset-pdp"
+        ],
+        "mitigations": [
+          "control-bounded-policy-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "threat-policy-distribution-tampering",
+        "name": "Policy interception or substitution on the plugin-to-Admin channel",
+        "description": "A network peer impersonates the Admin to a plugin (or a plugin to the Admin), or intercepts/substitutes policy in transit. The policy-download path is authenticated (Kerberos, JWT, or header-based auth with a trusted proxy), but plaintext HTTP is the shipped default, so policy substitution or MITM on an unprotected channel is an attack class left to the operator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins",
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-authenticated-policy-download",
+          "control-enable-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-unauthorized-administration",
+        "name": "Unauthenticated or under-privileged administrative action",
+        "description": "An unauthenticated actor or an under-privileged/delegated administrator authors or reads policy outside their scope, escalates their own role, or reads audits/keys they should not. Administrative actions must be access-controlled; a low-privilege or delegated administrator exceeding their delegated scope is an in-scope adversary.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "mitigations": [
+          "control-admin-authentication-rbac",
+          "control-restrict-network-exposure"
+        ]
+      },
+      {
+        "bom-ref": "threat-audit-tampering",
+        "name": "Audit record tampering or forgery by a non-admin",
+        "description": "A non-admin able to tamper with or forge audit records is a security finding (maintainer-confirmed). Missed records alone are correctness-grade. Audit-store injection (e.g. log/Solr injection via crafted resource names) is a related attack class left to the integrator/operator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "repudiation"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-audit-framework"
+        ],
+        "mitigations": [
+          "control-centralized-audit"
+        ]
+      },
+      {
+        "bom-ref": "threat-kms-unauthorized-key-retrieval",
+        "name": "Unauthorized key retrieval from Ranger KMS",
+        "description": "A KMS client obtains key material for keys it is not authorized to use. The key is the KMS-policy resource; unauthorized key retrieval is CVE-class VALID per the PMC.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-kms"
+        ],
+        "mitigations": [
+          "control-kms-policy-authorization"
+        ]
+      },
+      {
+        "bom-ref": "threat-evaluation-hang",
+        "name": "Hang inside the host service on crafted resource input",
+        "description": "A hang or CPU exhaustion inside the host service caused by crafted resource input to the policy engine may be a security issue. Super-linear evaluation cost in policy size or resource-string length is NOT a bug (maintainer-confirmed); whether Ranger makes no resource guarantee at all was deferred by the PMC for later ratification.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "mitigations": [
+          "control-bounded-policy-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "threat-identity-tag-injection",
+        "name": "Forged identity or tag data injected upstream of Ranger",
+        "description": "A malicious identity/tag source, or someone able to inject into usersync/tagsync inputs, forges group/role membership or classification tags and thereby gains policy grants. Policy is only as trustworthy as the identity/tag source; upstream injection is out of model (the identity source is trusted), so securing the directory and tag-source channels is the operator's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-sync-daemons"
+        ],
+        "mitigations": [
+          "control-secure-identity-sources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-stale-policy-window",
+        "name": "Stale policy enforced during the revocation-propagation window",
+        "description": "Plugins cache the last-known policy and pull changes at a configured interval, so a just-revoked grant may persist until the next successful pull. The revocation-propagation delay is by design (maintainer-confirmed); cached policy is availability, not authority, and operators must not treat revocation as instantaneous.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "mitigations": [
+          "control-size-pull-interval"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plaintext-transport",
+        "name": "Policy and audit exposure on plaintext transport",
+        "description": "Plaintext HTTP is the shipped and supported default for plugin-to-Admin and UI-to-Admin traffic; plaintext deployment exposes policy and audit in transit. Ranger supports TLS but does not enforce it at the protocol layer, so a report that reduces to traffic being unencrypted by default is by-design operator hardening, not a code vulnerability.",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-admin",
+          "asset-plugins"
+        ],
+        "mitigations": [
+          "control-enable-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-compromised-plugin-host",
+        "name": "Compromised or Byzantine plugin host",
+        "description": "An attacker with code execution on a node running a plugin has already defeated the PEP locally; Ranger cannot defend a PEP against its own compromised host. Every PEP is fully trusted once authenticated, a deliberate design choice that keeps runtime overhead low, and Ranger makes no cross-node integrity claim. Out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-spoofed-end-user",
+        "name": "Forged or spoofed end-user principal",
+        "description": "Ranger authorizes an already-authenticated principal and does not establish identity. A forged principal accepted by the host service's authentication layer is the host service's or cluster Kerberos's problem, not Ranger's. Out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-top-admin",
+        "name": "Malicious top-level security administrator",
+        "description": "The fully-trusted security administrator is the root of authority for the Ranger instance; the model does not defend the guarded data against a malicious omnipotent admin. Delegated admins overreaching IS in scope. Out of scope, together with side-channel and co-tenancy adversaries (maintainer-confirmed out of scope).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-admin"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-backing-store-compromise",
+        "name": "Direct compromise of the database, audit store, or key store",
+        "description": "Compromise of the backing database, audit store, or key store directly (bypassing Ranger) is that store's own trust boundary and out of scope; the operator must secure these stores independently.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-policy-store"
+        ],
+        "mitigations": [
+          "control-secure-backing-stores"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-unconsulted-access-path",
+        "name": "Guarded-service access path that does not consult the plugin",
+        "description": "A Ranger deny is not a sandbox: enforcement depends on the host service actually calling the plugin for every access path. A code path in the guarded service that does not consult the plugin is not protected by Ranger, and resource-name canonicalization mismatches between the host service and the policy engine are a shared responsibility with the host service (maintainer-confirmed), not a Ranger-only defect.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-plugins"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-access-request",
+        "boundary": "boundary-access-request",
+        "name": "End user access request boundary",
+        "description": "Primary untrusted-input boundary: the requested resource name and action are derived from an untrusted user, though the identity is asserted by the host service's authentication layer, which Ranger trusts.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-authorization-bypass",
+          "threat-evaluation-hang",
+          "threat-spoofed-end-user",
+          "threat-unconsulted-access-path"
+        ],
+        "controlsAtBoundary": [
+          "control-bounded-policy-evaluation"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-policy-distribution",
+        "boundary": "boundary-policy-distribution",
+        "name": "Policy distribution boundary",
+        "description": "The plugin trusts that downloaded policy genuinely originates from the legitimate Admin server, and the Admin trusts that only authorized plugins download policy. Authenticated via Kerberos, JWT, or header-based auth with a trusted proxy; the local policy cache is load-bearing.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-policy-distribution-tampering",
+          "threat-stale-policy-window",
+          "threat-plaintext-transport",
+          "threat-compromised-plugin-host"
+        ],
+        "controlsAtBoundary": [
+          "control-authenticated-policy-download",
+          "control-enable-tls",
+          "control-size-pull-interval"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-admin-rest",
+        "boundary": "boundary-admin-rest",
+        "name": "Administration boundary",
+        "description": "The highest-value boundary: anyone who can author policy can grant themselves or others access to all guarded data. REST endpoints fall into three buckets: public (login/static, health, metrics), plugin/PEP identity (policy/tag/role download and grant/revoke), and authenticated admin/user (everything else, with session plus @PreAuthorize RBAC and writes blocked for the read-only Auditor).",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-unauthorized-administration",
+          "threat-malicious-top-admin",
+          "threat-audit-tampering"
+        ],
+        "controlsAtBoundary": [
+          "control-admin-authentication-rbac",
+          "control-restrict-network-exposure",
+          "control-centralized-audit"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-internal-dataplane",
+        "boundary": "boundary-internal-dataplane",
+        "name": "Internal data plane boundary",
+        "description": "Usersync/tagsync feeds and the Admin's database, audit sinks, and key store: integrity of the user/group/role data and the policy store determines the integrity of every downstream decision. Identity and tag sources are trusted as authoritative; the stores are trusted infrastructure.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-identity-tag-injection",
+          "threat-backing-store-compromise"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-identity-sources",
+          "control-secure-backing-stores"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-kms-access",
+        "boundary": "boundary-kms-access",
+        "name": "KMS key operation boundary",
+        "description": "Ranger KMS releases key material only to clients authorized by key-access policy; key operations are performed by authenticated KMS clients.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-kms-unauthorized-key-retrieval"
+        ],
+        "controlsAtBoundary": [
+          "control-kms-policy-authorization"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-bounded-policy-evaluation",
+      "name": "Bounded, thread-safe policy evaluation with fail-safe default",
+      "description": "The policy-evaluation engine is bounded and thread-safe (maintainer-confirmed). When Ranger is the ACL enforcer and no policy matches, the result is deny, except HDFS, which falls through to native ACLs; if a plugin can neither evaluate fresh nor cached policy it denies (except HDFS fallthrough).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-plugins",
+        "asset-pdp"
+      ]
+    },
+    {
+      "bom-ref": "control-authenticated-policy-download",
+      "name": "Authenticated policy download and authorization API",
+      "description": "Plugins and the PDP service authenticate via Kerberos, JWT, or header-based auth with a trusted proxy to download policy; the PDP's /authz/* API requires an authenticated client and the server refuses to start with no auth handler configured. Secure download variants additionally require a user in policy.download.auth.users.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-policy-distribution"
+      ]
+    },
+    {
+      "bom-ref": "control-admin-authentication-rbac",
+      "name": "Admin authentication and role-based access control",
+      "description": "The Admin authenticates management/UI users via LDAP, AD, Unix, PAM, Kerberos/SPNEGO, Knox SSO, header, JWT, or internal DB, and enforces session plus @PreAuthorize RBAC on REST endpoints, with writes blocked for the read-only Auditor role and delegated admins confined to their delegated scope. The installer mandates an explicit, complexity-checked admin password on fresh install.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-admin-rest"
+      ]
+    },
+    {
+      "bom-ref": "control-centralized-audit",
+      "name": "Centralized audit of access and administrative actions",
+      "description": "Allow/deny decisions and administrative actions are recorded to the configured audit sink (Solr/HDFS/DB/log). Disabling audit voids the auditability property; audit is a record, not a control, and absence of an audit record is not proof access was blocked.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-audit-framework"
+      ]
+    },
+    {
+      "bom-ref": "control-kms-policy-authorization",
+      "name": "KMS key-access policy authorization",
+      "description": "Ranger KMS authorizes each key operation against key-access policy and releases key material only to authorized clients.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-kms"
+      ]
+    },
+    {
+      "bom-ref": "control-enable-tls",
+      "name": "Enable and require TLS with mutual authentication",
+      "description": "Enable and require TLS on UI-to-Admin and plugin-to-Admin channels, with mutual authentication so a plugin cannot be impersonated and policy cannot be intercepted or substituted. TLS is recommended in production but plaintext HTTP is the shipped default.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-policy-distribution",
+        "boundary-admin-rest"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-network-exposure",
+      "name": "Restrict network exposure of Ranger endpoints",
+      "description": "Deploy plugins only on trusted, administered cluster nodes inside the trust boundary; never expose the Admin REST API or the policy-download endpoint to untrusted networks. Anyone reaching policy-write endpoints can grant themselves access to all guarded data.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-admin-rest"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-identity-sources",
+      "name": "Secure and authenticate identity and tag sources",
+      "description": "Secure and authenticate the LDAP/AD/Unix directory connection used by usersync and the Atlas/Kafka channel used by tagsync, and verify the upstream Kerberos authentication layer so the principal identities Ranger authorizes are genuine. Tag-based policy is only as trustworthy as the tag feed.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-internal-dataplane"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-backing-stores",
+      "name": "Secure the backing database, audit sinks, and key store",
+      "description": "Secure the backing DB, audit sinks (Solr/HDFS), and the KMS key store independently; Ranger trusts them. Do not disable audit and then rely on it for compliance evidence.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-policy-store"
+      ]
+    },
+    {
+      "bom-ref": "control-size-pull-interval",
+      "name": "Size the policy-pull interval to data sensitivity",
+      "description": "Understand that revocation propagates only at the policy-pull interval (plus cache); size that interval to the sensitivity of the guarded data and do not assume instant revocation.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-plugins"
+      ]
+    }
+  ]
+}

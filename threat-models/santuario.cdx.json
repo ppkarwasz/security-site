@@ -1,0 +1,389 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-santuario-xmlsec",
+      "name": "Apache Santuario XML Security for Java",
+      "description": "Java library (org.apache.santuario:xmlsec) implementing the W3C XML Signature and XML Encryption standards plus the JSR-105 javax.xml.crypto API. Consumed in-process by applications and frameworks (notably WS-Security stacks: WSS4J, CXF, OpenSAML/Shibboleth) to sign, verify, encrypt, and decrypt XML. It ships a mature DOM-based stack and a newer StAX (streaming) stack; the security-critical operations are verification and decryption of attacker-controlled XML. The threat model is a DRAFT under maintainer review (2026-06-10), not yet ratified.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/santuario-xml-security-java/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://santuario.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "santuario"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/santuario-xml-security-java/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/santuario-xml-security-java/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-santuario",
+      "name": "In-process XML signature/encryption processing",
+      "description": "The library runs inside a trusted calling application. The defining trust split: the calling application is trusted; the XML input submitted for verification or decryption is untrusted and adversary-controlled. Everything in that document (elements, Reference URIs, Transform chains, KeyInfo, EncryptedKey, algorithm identifiers, namespace prefixes) must be treated as hostile. Verified/decrypted results are handed back to the caller, who must still check WHO signed and WHAT was signed.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-xmlsec-library",
+          "type": "component",
+          "name": "xmlsec library (DOM and StAX stacks)",
+          "description": "DOM XML Signature verification (XMLSignature.checkSignatureValue, SignedInfo), DOM XML Encryption decryption (XMLCipher), the StAX streaming stack (InboundXMLSec, input processors), transforms/canonicalization, key resolution (KeyResolver over attacker-supplied KeyInfo), and the JSR-105 API surface. All of these process untrusted XML; signing/encryption of the caller's own trusted data is only partially in the model.",
+          "zone": "zone-calling-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-xml-suppliers",
+          "name": "XML suppliers",
+          "type": "trust",
+          "description": "The party that supplies the XML being verified or decrypted: a network peer in a WS-Security/SAML exchange, or the sender of a signed document. Full control of the XML structure, transforms, KeyInfo, and algorithms; able to craft signature-wrapping, transform, key-confusion, decryption-oracle, and resource-exhaustion payloads."
+        },
+        {
+          "bom-ref": "zone-calling-application",
+          "name": "Calling application",
+          "type": "trust",
+          "description": "The trusted application or framework that invokes the library in-process and owns key trust, signature-coverage checking, and its own XML toolchain after extraction."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-untrusted-xml",
+          "name": "Untrusted XML document boundary",
+          "type": "trust",
+          "zones": [
+            "zone-xml-suppliers",
+            "zone-calling-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A conformant JRE with a JAXP XML parser and a JCE provider for the crypto primitives; the library relies on the platform parser's DTD/entity controls."
+        },
+        {
+          "description": "Primitive correctness (RSA/AES/SHA, GCM nonce handling) is the JCE provider's responsibility; the library composes primitives."
+        },
+        {
+          "description": "XMLSignature/XMLCipher instances are not assumed thread-safe; per-operation instances are the expected usage."
+        },
+        {
+          "description": "Secure validation mode is the load-bearing configuration: a finding is in-model only if reachable from the untrusted XML during verify/decrypt with secure validation enabled. Whether secure validation is on by default depends on entry point and version (JSR-105 vs native path); this is the model's most important open question (Q6)."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XXE / external entity resolution during parse or verify",
+        "description": "An external entity resolved from the attacker's XML during parsing or verification, leading to SSRF or local file read. Secure validation rejects DOCTYPE and external entity resolution and disables RetrievalMethod/KeyInfo remote dereferencing. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-secure-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-dangerous-transforms",
+        "name": "Code execution or remote fetch via a dangerous Transform",
+        "description": "XSLT and other code-executing or remote-dereferencing transforms run on attacker XML during signature verification. Secure validation forbids dangerous transforms, notably XSLT. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-secure-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-algorithms",
+        "name": "Signature accepted under a weak algorithm or undersized key",
+        "description": "A signature accepted under MD5, truncated HMAC, or an undersized RSA key. Secure validation enforces minimum key sizes and rejects known-weak digest/MAC/signature algorithms, folding in the historical CVE mitigations. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-secure-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-expansion-dos",
+        "name": "Resource exhaustion via Reference/Transform expansion",
+        "description": "Super-linear CPU/memory blowup from many Reference or Transform elements in the attacker's XML. Secure validation caps the number of Reference/Transform elements to bound expansion (exact caps to be confirmed by maintainers, Q7).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-secure-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-signature-forgery",
+        "name": "Signature forgery / cryptographic verification bypass",
+        "description": "An invalid signature verifies as true given a well-formed signature and a provided key, violating the cryptographic correctness of the verify/decrypt operation, the library's core function. Severity: critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ]
+      },
+      {
+        "bom-ref": "threat-xml-signature-wrapping",
+        "name": "XML Signature Wrapping (XSW)",
+        "description": "A valid signature over SOME element is not a signature over the element the application cares about; the library verifies that referenced content has a valid digest but does not decide whether the RIGHT content was signed. XSW lives entirely in this gap and is the number one real-world Santuario-adjacent vulnerability class; checking that the signature covers the security-relevant elements is the caller's responsibility. False friend: 'the signature verified' is not 'the document is authentic and unmodified where it matters'.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-check-signature-coverage"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-keyinfo-key-confusion",
+        "name": "Key confusion via unvalidated KeyInfo",
+        "description": "The library resolves keys from the message's attacker-supplied KeyInfo as a convenience, not a trust decision. It does not decide whether the key is trusted; certificate-path validation or key allow-listing is the caller's responsibility. A report that boils down to 'I trusted a self-signed cert in KeyInfo' is out of model / by design.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-establish-key-trust"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-secure-validation-off",
+        "name": "Processing untrusted XML with secure validation off",
+        "description": "With secure validation disabled, XXE, XSLT transforms, weak algorithms, and unbounded expansion are all reachable, by design, for backward-compatible processing of trusted XML. Findings requiring secure validation to be off do not meet the model's reachability precondition and are out of model (non-default build, pending Q6 on defaults).",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "mitigations": [
+          "control-secure-validation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-protocol-oracles",
+        "name": "Protocol-level decryption oracles and replay",
+        "description": "The library performs the cryptographic decrypt; padding-oracle, replay, and decrypt-then-verify ordering defences are protocol-level (WS-Security/SAML) concerns that the caller's stack must handle. No decryption-oracle hardening is provided at the protocol layer.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-out-of-scope-adversaries",
+        "name": "Compromised caller, JCE-provider flaws, side channels, retired components",
+        "description": "Out of scope: an attacker who controls the calling process or the trust/keystore configuration (they have already won); side-channel or co-tenant adversaries against the JCE provider; an attacker who can make the caller disable secure validation or skip trust checks; the retired C++ project and the two archived repos; and the application's XML toolchain after extraction of decrypted/verified content.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-xmlsec-library"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-untrusted-xml",
+        "boundary": "boundary-untrusted-xml",
+        "name": "Untrusted XML input boundary",
+        "description": "The boundary is the XML document submitted for verification or decryption: structure, Reference URIs, Transform chains, KeyInfo, EncryptedKey, and algorithm identifiers are all attacker-controlled. The triager's reachability test: a finding is in-model only if reachable from the untrusted XML during verify/decrypt with secure validation enabled.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-xxe",
+          "threat-dangerous-transforms",
+          "threat-weak-algorithms",
+          "threat-expansion-dos",
+          "threat-signature-forgery",
+          "threat-xml-signature-wrapping",
+          "threat-keyinfo-key-confusion",
+          "threat-protocol-oracles"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-validation",
+          "control-check-signature-coverage",
+          "control-establish-key-trust",
+          "control-treat-output-untrusted"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-secure-validation",
+      "name": "Secure validation mode",
+      "description": "The load-bearing configuration (XMLSignature/XMLCipher.setSecureValidation(true), the org.apache.xml.security.secureValidation property, on by default in some JSR-105 paths). With secure validation on, the library rejects DTDs and external entity / RetrievalMethod / remote KeyInfo dereferencing, forbids dangerous transforms (notably XSLT), enforces minimum key sizes and rejects known-weak digest/MAC/signature algorithms (MD5, SHA-1 in signatures, short RSA, HMAC truncation), and caps the number of Reference/Transform elements. Callers must enable it for any XML from outside their trust boundary; whether it is on by default per entry point/version is the model's key open question.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "boundary-untrusted-xml",
+        "asset-xmlsec-library"
+      ]
+    },
+    {
+      "bom-ref": "control-check-signature-coverage",
+      "name": "Check what was signed (XSW defence)",
+      "description": "The caller must verify that the signature's References resolve to the exact content about to be trusted, preferring ID-based references the caller controls and re-checking post-verify, to defeat XML Signature Wrapping. Never use verification as authorization without binding the signer identity to an authorization decision.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-untrusted-xml"
+      ]
+    },
+    {
+      "bom-ref": "control-establish-key-trust",
+      "name": "Establish key trust independently",
+      "description": "The caller must validate the certificate chain or match the resolved key against an allow-list; never trust KeyInfo-embedded keys or certificates implicitly.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-untrusted-xml"
+      ]
+    },
+    {
+      "bom-ref": "control-treat-output-untrusted",
+      "name": "Treat decrypted/verified output as untrusted",
+      "description": "Treat decrypted or verified bytes as untrusted until the caller's own validation passes, and apply resource limits at the boundary.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-untrusted-xml"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-private-keys",
+      "name": "Protect signing and decryption private keys",
+      "description": "Caller-side key management: protect the private keys used for signing and decryption.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-xmlsec-library"
+      ]
+    }
+  ]
+}

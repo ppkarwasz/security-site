@@ -1,0 +1,110 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-inlong",
+      "name": "Apache InLong",
+      "description": "Data integration platform. The security model defines explicit security boundaries aligned with module design roles: the Sort module performs real-time data synchronization across trusted databases, and the Manager module provides tenant isolation with a permission framework in which only Group owners can modify or delete their Groups, Sinks, Streams, and associated data.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://inlong.apache.org/docs/next/security/",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://inlong.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "inlong"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://inlong.apache.org/docs/next/security/"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-malicious-database-data",
+        "name": "Malicious data in databases read by the Sort module",
+        "description": "The Sort module handles real-time data synchronization, reading and writing across trusted databases. The system assumes database sources are secure; malicious data within databases constitutes unsafe input outside the module's threat model. Users must independently validate data sources and authenticate access origins.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-validate-data-sources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-intra-tenant-information-access",
+        "name": "Access to collective business information within a tenant",
+        "description": "The Manager module provides tenant isolation. Within a single tenant, all members can access collective business information including Groups, Sinks, and Streams; under the established permission framework, only Group owners can modify or delete their respective Groups, Sinks, Streams, and associated data. Members performing authorized operations remain within security boundaries, so intra-tenant visibility is not a vulnerability; users should restrict tenant membership to prevent unauthorized information access.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-tenant-membership",
+          "control-group-owner-permissions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-validate-data-sources",
+      "name": "Validate data sources and authenticate access origins",
+      "description": "Users of the Sort module must independently validate data sources and authenticate access origins, since the module assumes the databases it reads from and writes to are secure.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-tenant-membership",
+      "name": "Restrict tenant membership",
+      "description": "Restrict tenant membership in the Manager module to prevent unauthorized access to the tenant's collective business information (Groups, Sinks, Streams).",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-group-owner-permissions",
+      "name": "Group-owner permission framework",
+      "description": "Under the Manager module's permission framework, only Group owners can modify or delete their respective Groups, Sinks, Streams, and associated data.",
+      "category": "preventive",
+      "status": "implemented"
+    }
+  ]
+}

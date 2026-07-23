@@ -1,0 +1,139 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-baremaps",
+      "name": "Apache Baremaps",
+      "description": "Toolkit for creating and managing maps. The security model describes who is trusted: administrators manage the system, configurations, tasks, and data through the CLI or other administrative interfaces; users interact only through limited, controlled interfaces such as the web interface or API.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/incubator-baremaps/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://baremaps.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "baremaps"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/incubator-baremaps/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/incubator-baremaps/main/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-baremaps",
+      "name": "Baremaps trust model",
+      "description": "Two roles with distinct trust levels: trusted administrators managing the system through the CLI and administrative interfaces, and untrusted users reaching the application only through limited, controlled interfaces (web interface, API).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Administrates Apache Baremaps, managing the system, configurations, tasks, and data through the CLI or other administrative interfaces. Fully trusted and responsible for the security of the system and application."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-user",
+          "party": {
+            "roles": [
+              {
+                "name": "User"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted. Uses Apache Baremaps through limited, controlled interfaces such as the web interface or API."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Administrators are fully trusted and responsible for the security of the system and application."
+        },
+        {
+          "description": "Configuration files and data sources are managed exclusively by trusted administrators."
+        },
+        {
+          "description": "Apache Baremaps relies entirely on trusted administrators to manage files and data; risks such as file path traversal are low because only administrators have access to critical configuration and data inputs."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-user-file-path-traversal",
+        "name": "Path traversal via user-provided files",
+        "description": "User-provided files are not trusted. If a user uploads a file through an HTTP endpoint, Apache Baremaps must systematically sanitize and validate the content to block partial path traversal attacks (for example a zip file with a path traversal vulnerability).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-sanitize-user-files"
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-file-path-traversal",
+        "name": "Path traversal in administrator-provided files",
+        "description": "Administrator-provided files are trusted. If an administrator uses a zip file with a path traversal vulnerability, Apache Baremaps does not systematically sanitize the content, as the administrator is expected to ensure the integrity of the files.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-sanitize-user-files",
+      "name": "Systematic sanitization of user-provided files",
+      "description": "Apache Baremaps must systematically sanitize and validate the content of files uploaded by untrusted users through HTTP endpoints to block partial path traversal attacks.",
+      "category": "preventive",
+      "status": "implemented"
+    }
+  ]
+}

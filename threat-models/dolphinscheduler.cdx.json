@@ -1,0 +1,370 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "platform",
+      "bom-ref": "component-dolphinscheduler",
+      "name": "Apache DolphinScheduler",
+      "description": "Workflow task scheduling system. The security model describes the scope of work, responsibilities, and key functions of users with different roles (service deployment personnel, system administrators, ordinary users) so that users understand the precautions in the deployment, use, operation, and maintenance stages, and developers understand the boundary between security vulnerabilities and normal functions. The system supports single node, pseudo cluster, and cluster deployment (server or cloud), can run user-defined scripts, code, and SQL on workers, and integrates data sources, a resource center, alerting, and k8s task types.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/dolphinscheduler/blob/dev/docs/docs/en/contribute/join/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://dolphinscheduler.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "dolphinscheduler"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/dolphinscheduler/blob/dev/docs/docs/en/contribute/join/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/dolphinscheduler/dev/docs/docs/en/contribute/join/security-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-dolphinscheduler",
+      "name": "DolphinScheduler roles and resources",
+      "description": "User roles and platform resources described by the security model: service deployment personnel operate the servers, system administrators hold all platform permissions, and ordinary users develop and operate workflows whose tasks (arbitrary commands, code, and SQL) execute on workers. All roles are highly trusted not to abuse their functions.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-workers",
+          "type": "process",
+          "name": "Workers and worker groups",
+          "description": "Execute user-created tasks; users can customize any command and code to run in a specified worker group, including shell, SQL, and jumping to other servers to execute shell scripts. Task runs generate logs viewable and downloadable through the UI, and intermediate files stored on the same node as the task.",
+          "zone": "zone-platform"
+        },
+        {
+          "bom-ref": "asset-data-sources",
+          "type": "service",
+          "name": "Data source connections",
+          "description": "The server performs data source connections and executes user-defined SQL statements; the platform does not limit the type of SQL. SQL execution permission is tied to the user permissions for creating the data source, and users can customize connection parameters that take effect for all tasks using the data source.",
+          "zone": "zone-platform"
+        },
+        {
+          "bom-ref": "asset-resource-center",
+          "type": "data-store",
+          "name": "Resource center",
+          "description": "Configurable with local, distributed (HDFS), or cloud object storage; can be directly connected to the local file system, and in cluster deployments other server files can be mounted to the API server through shared files. Users can modify the content of authorized files; it must be trusted that they will not damage files or cause other risks.",
+          "zone": "zone-platform"
+        },
+        {
+          "bom-ref": "asset-alerting",
+          "type": "service",
+          "name": "Alarm management",
+          "description": "Users configure authorized alarm channels for their processes and can modify alarm configurations containing sensitive credentials; it must be trusted that user alarm configuration and alarm sending will not harm the channel or recipients.",
+          "zone": "zone-platform"
+        },
+        {
+          "bom-ref": "asset-k8s",
+          "type": "infrastructure",
+          "name": "Kubernetes clusters",
+          "description": "DolphinScheduler itself and task operations support k8s clusters, provided by operations; operations must ensure the security of k8s services and prevent issues such as pod escape.",
+          "zone": "zone-platform"
+        },
+        {
+          "bom-ref": "asset-security-center",
+          "type": "subsystem",
+          "name": "Security center",
+          "description": "Administrator-configured resources: queues, tenants, users, alarm groups, worker groups, tokens, k8s clusters, and k8s namespaces.",
+          "zone": "zone-platform"
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-deployment-personnel",
+          "party": {
+            "roles": [
+              {
+                "name": "Service deployment personnel"
+              }
+            ],
+            "persona": {
+              "description": "Hold authority to operate the servers. Must understand how tasks run to ensure server security boundaries: create/switch users for multi-tenant scenarios, confirm the service startup user's permissions, protect sensitive files, secure the network between worker servers, provide permissions for local task types (such as datax), trust mounted resource-center directories, and ensure k8s service security."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-system-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "System administrator"
+              }
+            ],
+            "persona": {
+              "description": "Has all operation permissions of DolphinScheduler, including queue, tenant, user, alarm group, worker group, and token management, all configurations including sensitive credentials, and authorization of resources, data sources, and projects to users. Must be highly trusted not to abuse these functions, with a deliberately limited scope of use."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-ordinary-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Ordinary system user"
+              }
+            ],
+            "persona": {
+              "description": "Actual workflow development and operation users. Can create workflows and tasks (executing any command and code on workers in the supported task types), create and modify data source connections including sensitive credentials, and view/download task logs. Should be highly trusted not to abuse these functions."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-unauthenticated-user",
+          "party": {
+            "roles": [
+              {
+                "name": "Unlogged-in user"
+              }
+            ],
+            "persona": {
+              "description": "Apache DolphinScheduler does not allow unlogged-in users to access the system."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "DolphinScheduler's deployment and usage are based on the assumption that the user's network is secure and trustworthy; it does not address internal network cross-infiltration issues."
+        },
+        {
+          "description": "Users who log in by any of the supported authentication methods (account/password, LDAP, SSO through Casdoor, OAuth2) are highly trusted not to abuse their permissions and functions."
+        },
+        {
+          "description": "Administrator authorization of resources, data sources, and projects means the authorized user's operations on them, including task running and reading/modifying permitted resources on server nodes, are fully trusted."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-arbitrary-task-code",
+        "name": "Arbitrary command, code, and SQL execution by authorized users",
+        "description": "Users can execute any command or code on worker machines through node configuration and any type of SQL through data source connections; this is the platform's normal function, performed by highly trusted authorized users, not a vulnerability. Deployment personnel must confirm the service startup user's permissions and protect sensitive files to bound what tasks can reach.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-workers",
+          "asset-data-sources"
+        ],
+        "mitigations": [
+          "control-deployment-hardening",
+          "control-authorization-scoping"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-insecure-plugin-parameters",
+        "name": "Attacks via insecure plugin or connection parameters set by authorized users",
+        "description": "A user setting insecure parameters in a plug-in (data sources, tasks, and others) and then attacking the system through that configuration is not a vulnerability: setting parameters is an active behavior of a trusted, authorized user (for example adding allowLoadLocalInfile=true to JDBC connection parameters when connecting to Doris via the MySQL driver, which may send local sensitive files to the server).",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-data-sources"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-obtained-deployment-secrets",
+        "name": "Access using sensitive deployment configuration obtained by any means",
+        "description": "Deployment configuration (such as auth-token data in configuration files) is service-sensitive information whose importance equals database connection credentials; deployment users should modify it per the official documentation. When any user obtains sensitive configuration, the platform considers them a normal authorized user and fully trusts their operations, so such access is not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-security-center"
+        ],
+        "mitigations": [
+          "control-deployment-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-intermediate-files",
+        "name": "Operations on intermediate files generated during task execution",
+        "description": "Task execution generates intermediate files encapsulating the environment and parameters of the task, stored on the same node as the task. Allocating a worker to a user means fully trusting all their operations on that node, including task running and reading or modifying permitted resources, so operating on these files (for example via a remote shell task) is no different from running the same task and is not a vulnerability.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-workers"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-page-input-scripts",
+        "name": "Scripts entered through page input boxes by authorized users",
+        "description": "Multiple input boxes allow users to customize configurations. Administrators must fully trust all authorized operations of target users during deployment and authorization; if adding or modifying configurations through pages or interfaces is within the user's permissions, attacking through that path is not a security vulnerability.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-security-center"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-malicious-images",
+        "name": "Attacks by modifying images or providing unsafe images",
+        "description": "Service and task operation both support k8s clusters; before a service or task runs, the user must ensure the image's functions and configured parameters and trust all operations during the run. Modifying tasks or parameters by any means before the image runs to attack does not constitute a security vulnerability.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-k8s"
+        ],
+        "mitigations": [
+          "control-k8s-security"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-sensitive-log-information",
+        "name": "Attacks using sensitive information printed in service logs",
+        "description": "DolphinScheduler prints some sensitive information in service logs for deployers to view detailed program operation. Service deployers are trusted users not believed to attack the program, so this is not a vulnerability.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-admin-untrusted-websites",
+        "name": "Compromise via administrators visiting untrusted third-party websites",
+        "description": "System administrators may access untrusted third-party websites, resulting in system attacks; administrators are trusted users assumed to have basic security awareness, and problems caused by their weak precautions are not considered vulnerabilities.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-network-infiltration",
+        "name": "Internal network cross-infiltration",
+        "description": "Deployment and usage are based on the assumption that the user's network is secure and trustworthy; DolphinScheduler does not address internal network cross-infiltration issues.",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-login-required",
+      "name": "Authentication required for all access",
+      "description": "Unlogged-in users are not allowed to access the system. Four authentication methods are supported: login with account and password, LDAP, SSO login through Casdoor, and OAuth2 authorization login (combinable with the other methods).",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-deployment-hardening",
+      "name": "Deployment hardening by service deployment personnel",
+      "description": "Deployment personnel must confirm the permissions of the service startup user, protect sensitive files through permissions, clarify the boundaries of the deployment user's operation permissions, hold create/switch user permissions for multi-tenant scenarios, ensure network and interaction security between worker servers and task resources, grant permissions needed by worker-local task types (such as datax), ensure mounted resource-center directories only contain files whose operation is trusted, and modify sensitive configuration per the official documentation.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-workers",
+        "asset-resource-center"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization-scoping",
+      "name": "Explicit administrator authorization of resources",
+      "description": "The administrator authorizes operations on resources, data sources, and projects in the user management module and must clearly grant users all usage permissions for the corresponding resources; the scope of the administrator account itself should be ensured and the account highly trusted.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-security-center",
+        "asset-data-sources"
+      ]
+    },
+    {
+      "bom-ref": "control-k8s-security",
+      "name": "Secure the k8s clusters",
+      "description": "The k8s cluster is provided by operations, which must ensure the security of k8s services and prevent security issues such as pod escape.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-k8s"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-network",
+      "name": "Deploy on a secure, trustworthy network",
+      "description": "Deployment and usage assume the user's network is secure and trustworthy; the operator must provide that network, since the platform does not address internal network cross-infiltration.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

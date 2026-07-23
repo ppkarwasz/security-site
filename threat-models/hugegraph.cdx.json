@@ -1,0 +1,117 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:16Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-hugegraph",
+      "name": "Apache HugeGraph",
+      "description": "Graph database server executing graph query language (DSL, including Gremlin) requests. The project recommends running production environments with authentication, an IP whitelist, and audit logging following the principle of least privilege, in containerized (Docker/Kubernetes) isolated deployments.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://hugegraph.apache.org/docs/guides/security",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://hugegraph.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "hugegraph"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://hugegraph.apache.org/docs/guides/security"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-dsl-execution-auth-disabled",
+        "name": "Graph query (DSL) execution with authentication disabled, skipped, or via an unauthorized identity",
+        "description": "Executing DSL queries (such as Gremlin) with Auth disabled or skipped, or by using an anonymous or unauthorized identity, is no longer treated as a new vulnerability individually. Historical instances include CVE-2024-27348 (server command execution in Gremlin). Production deployments are expected to enable authentication with an IP whitelist and audit log.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-auth-ip-whitelist-audit-log",
+          "control-containerized-deployment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-auth-enabled-anonymous-bypass",
+        "name": "Exploitation with the Auth system enabled via an anonymous or unauthorized identity",
+        "description": "Vulnerabilities exploitable in environments where the Auth system is activated, by accessing with an anonymous or unauthorized identity, remain high-risk and warrant reporting. Historical instances include CVE-2024-27349 (server authentication whitelist bypass) and CVE-2024-43441 (fixed JWT token vulnerability).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-auth-ip-whitelist-audit-log"
+        ]
+      },
+      {
+        "bom-ref": "threat-whitelist-bypass-container-escape",
+        "name": "IP whitelist bypass or container escape causing severe unauthorized access",
+        "description": "Vulnerabilities that bypass the IP whitelist or escape the container, causing severe unauthorized access, remain high-risk and warrant reporting.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-auth-ip-whitelist-audit-log",
+          "control-containerized-deployment"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-auth-ip-whitelist-audit-log",
+      "name": "Enable Auth, IP whitelist, and audit log with least privilege",
+      "description": "Production environments should implement Auth (authentication), an IP whitelist, and audit log mechanisms following the principle of least privilege.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-containerized-deployment",
+      "name": "Deploy in isolated containerized environments",
+      "description": "The project recommends containerized environments (Docker/Kubernetes) for isolated deployments in production settings.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

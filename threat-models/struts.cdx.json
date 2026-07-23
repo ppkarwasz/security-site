@@ -1,0 +1,550 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-struts",
+      "name": "Apache Struts",
+      "description": "Java MVC web framework embedded as a dependency inside a web application deployed to a servlet container. A request flows: servlet filter, action mapping, interceptor stack (parameter population, validation), Action, result (JSP/FreeMarker view). Request parameters are bound onto action properties via setters, and view/configuration expressions are evaluated through OGNL against the ValueStack. Struts provides no security mechanism of its own (no authentication, authorization, session security, or input sanitisation); its active security stance is preventing its own machinery, chiefly OGNL expression evaluation and request-parameter binding, from becoming an injection vector.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/struts/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it. The document is a v0 draft not yet reviewed by the Struts PMC, built as a strict superset of SECURITY.md and the published Struts security guidance."
+        },
+        {
+          "type": "website",
+          "url": "https://struts.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "struts"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/struts/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/struts/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-struts",
+      "name": "Struts-backed web application",
+      "description": "Deployment shape described by the threat model: the Struts JARs are embedded inside a WAR written, configured, and deployed by the application developer into a servlet container behind the operator's perimeter. Struts is in-process with the application, has no daemon or listening socket of its own, and has no trust boundary against the application code it runs inside. The single owned trust boundary is the untrusted HTTP request.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-ognl-valuestack",
+          "type": "component",
+          "name": "OGNL evaluation and ValueStack",
+          "description": "Expression evaluation for parameters, tags, and results; the central attack surface of the framework.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-parameter-binding",
+          "type": "component",
+          "name": "Parameter binding (ParametersInterceptor, @StrutsParameter)",
+          "description": "Binds request parameters to action setters via reflection into application objects; the primary boundary component.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-interceptor-stack",
+          "type": "component",
+          "name": "Interceptor stack",
+          "description": "Per-request processing interceptors (cookie, fileupload, fetch-metadata, COOP/COEP, and others) handling request data.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-file-upload",
+          "type": "component",
+          "name": "File upload (Jakarta multipart)",
+          "description": "Multipart request parsing and temporary file handling; a historical CVE surface (S2 bulletins).",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-taglib",
+          "type": "component",
+          "name": "Tag library and JSP/FreeMarker integration",
+          "description": "View rendering and expression output; the output-side OGNL/EL surface.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-config-browser-plugin",
+          "type": "component",
+          "name": "Config Browser Plugin",
+          "description": "Development-only diagnostic that exposes internal configuration; in model only as a dev-only component. Exposure in production is operator misconfiguration.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-http-clients",
+          "name": "Untrusted HTTP clients",
+          "type": "trust",
+          "description": "Any party sending requests (parameters, headers, cookies, multipart uploads) to a Struts-backed endpoint. The primary untrusted boundary; all request-derived values are hostile."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Application and framework",
+          "type": "trust",
+          "description": "The Struts framework in-process with the developer-authored application (actions, JSPs, struts.xml/annotations) inside the servlet container. The application developer and operator are trusted; framework to application code is not a trust boundary."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-request",
+          "name": "HTTP request boundary",
+          "type": "trust",
+          "zones": [
+            "zone-http-clients",
+            "zone-application"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-http-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Untrusted HTTP client"
+              }
+            ],
+            "persona": {
+              "description": "Sends requests (parameters, headers, cookies, multipart uploads) to a Struts-backed endpoint; no credentials. Goal: remote code execution via OGNL (the dominant Struts threat), and secondarily data disclosure, SSRF through framework features, or DoS amplification."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-application-developer",
+          "party": {
+            "roles": [
+              {
+                "name": "Application developer"
+              }
+            ],
+            "persona": {
+              "description": "Writes the actions, JSPs, struts.xml/annotations, and chooses the hardening settings. Trusted by the framework; a finding that requires the developer to write unsafe code or disable a default protection is the application's bug, not Struts'."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator"
+              }
+            ],
+            "persona": {
+              "description": "Deploys the WAR, sets devMode off, restricts dev-only plugins, configures the container and JVM. Trusted."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A servlet container and a JVM the operator maintains; Struts does not patch or harden them."
+        },
+        {
+          "description": "The application is deployed with the current supported version (7.x or 6.x per SECURITY.md); 2.x is end-of-life and out of support."
+        },
+        {
+          "description": "The operator runs production with devMode=false and dev-only diagnostics (Config Browser Plugin) disabled or access-controlled."
+        },
+        {
+          "description": "Struts opens no sockets and makes no outbound connections of its own; any network egress is the application's."
+        },
+        {
+          "description": "Triage reachability precondition: a finding is in-model only if reachable by an untrusted HTTP client against a Struts application that follows the documented secure configuration (current-version defaults, devMode off, dev-only plugins restricted, no developer anti-patterns)."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-ognl-injection-rce",
+        "name": "OGNL injection leading to remote code execution",
+        "description": "Attacker-supplied request data (parameter names and values, cookies, headers) reaches an OGNL evaluation that creates or alters executable code, achieving OGNL-driven code execution or class-loader/member access beyond the allowlist on a default-configured current-version application. This is the S2-RCE class and the framework's stated central concern; security-critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ognl-valuestack"
+        ],
+        "mitigations": [
+          "control-ognl-default-defenses",
+          "control-pattern-checkers",
+          "control-deploy-current-defaults"
+        ]
+      },
+      {
+        "bom-ref": "threat-parameter-binding-bypass",
+        "name": "Parameter-binding safety bypass",
+        "description": "Request parameters bind to a setter the developer did not mark @StrutsParameter, or nesting goes beyond the declared depth, on a default Struts 7.0 application; arbitrary deep/nested property traversal is not reachable by default. Critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parameter-binding"
+        ],
+        "mitigations": [
+          "control-struts-parameter-annotation",
+          "control-pattern-checkers"
+        ]
+      },
+      {
+        "bom-ref": "threat-arbitrary-method-invocation",
+        "name": "Arbitrary action method invocation",
+        "description": "A client invokes arbitrary action methods by name despite Dynamic Method Invocation being at its recommended (off/strict) setting; DMI has been gated by Strict Method Invocation since 2.5. High to critical severity.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ognl-valuestack"
+        ],
+        "mitigations": [
+          "control-strict-method-invocation"
+        ]
+      },
+      {
+        "bom-ref": "threat-expression-bounds-bypass",
+        "name": "Bypass of expression-length and node-type bounds",
+        "description": "OGNL expressions over the configured length (default 256) and forbidden node types must be rejected before evaluation; a bypass of these bounds is a high-severity violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ognl-valuestack"
+        ],
+        "mitigations": [
+          "control-ognl-default-defenses"
+        ]
+      },
+      {
+        "bom-ref": "threat-multipart-parsing",
+        "name": "Multipart and file-upload parsing flaws",
+        "description": "Malicious multipart uploads (file content, filename, content-type) exploiting parser robustness or temp-file handling in the Jakarta multipart file-upload surface, a recurring historical CVE surface for the framework (S2 bulletins).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-file-upload"
+        ],
+        "mitigations": [
+          "control-deploy-current-defaults"
+        ]
+      },
+      {
+        "bom-ref": "threat-fetch-metadata-failure",
+        "name": "Failure of enabled cross-origin defences",
+        "description": "When the FetchMetadata, COOP, and COEP interceptors (opt-in since 6.0) are enabled, the framework must emit/enforce the corresponding Sec-Fetch-* and cross-origin isolation behaviour; an interceptor failing to enforce its documented behaviour when enabled is a medium to high severity violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-interceptor-stack"
+        ],
+        "mitigations": [
+          "control-fetch-metadata-interceptors"
+        ]
+      },
+      {
+        "bom-ref": "threat-superlinear-dos",
+        "name": "Super-linear denial-of-service amplification in framework code",
+        "description": "A resource path inside framework code whose cost grows super-linearly in input size. Per SECURITY.md, only super-linear amplification inside framework code may be in model; generic flooding or large-body streaming is not accepted.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-interceptor-stack"
+        ]
+      },
+      {
+        "bom-ref": "threat-generic-dos",
+        "name": "Generic denial of service",
+        "description": "Generic flooding or large-body streaming against a Struts endpoint. Not accepted per SECURITY.md; the operator absorbs generic flooding/streaming DoS.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-developer-antipatterns",
+        "name": "Findings requiring developer anti-patterns",
+        "description": "Anything the application developer is responsible for: developer-exposed unsafe setters (unannotated or with unsafe side effects), request parameters used in localization or forced OGNL evaluation, raw ${...} JSP-EL over untrusted values, direct JSP access, mixing security levels in one namespace. Struts provides no security mechanism of its own; these are application-responsibility items, out of model.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-parameter-binding",
+          "asset-taglib"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-non-default-config",
+        "name": "Findings requiring documented-insecure or non-default configuration",
+        "description": "Findings that only manifest with devMode=true, the Config Browser Plugin exposed in production, DMI enabled, a disabled 7.0 hardening knob, or a pre-7.0 default. These are out of model as non-default configuration; the secure posture is the 7.0 default set.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-config-browser-plugin"
+        ],
+        "mitigations": [
+          "control-deploy-current-defaults"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-app-security-responsibility",
+        "name": "Absence of application-level security mechanisms",
+        "description": "Struts provides no authentication, authorization, session security, CSRF token store, input sanitisation, or output encoding for the application's own data; it is 'just a pure web framework'. The servlet container, JVM, JDK, OS, and the application's transport (TLS) are likewise out of scope. 'Struts has no built-in login/access control' is by design, not a vulnerability.",
+        "origin": "structural",
+        "mitigations": [
+          "control-supply-app-security"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-jsm-sandbox-reliance",
+        "name": "Reliance on the OGNL Java Security Manager sandbox",
+        "description": "The opt-in OGNL Java Security Manager sandbox (-Dognl.security.manager) is built on the JDK SecurityManager, deprecated for removal since JDK 17 (JEP 411), disabled by default since JDK 18, and permanently disabled in JDK 24 (JEP 486). On modern JDKs the model cannot treat it as a relied-upon control; a report premised on its absence is not a finding.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-default-error-page-xss",
+        "name": "XSS via auto-generated error pages",
+        "description": "Auto-generated error pages do not escape action names (historical S2-006); the application must define custom error pages. XSS in the default error page is a documented hardening item, not a defended property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-taglib"
+        ],
+        "mitigations": [
+          "control-custom-error-pages"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dependency-tail-cves",
+        "name": "Dependency-tail CVEs from SCA scans",
+        "description": "CVEs in transitive jars (e.g. a logging or XML library) reported from software-composition-analysis scans are triaged upstream unless Struts' own code reaches the vulnerable path with untrusted input. Duplicates of disclosed S2-series bulletins/CVEs are closed by reference.",
+        "origin": "structural",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-request",
+        "boundary": "boundary-http-request",
+        "name": "Untrusted HTTP request boundary",
+        "description": "The one boundary Struts owns: every request-derived string (parameter names as well as values, cookie names/values, header values, multipart filenames) is untrusted and may carry an OGNL payload. The framework's job is to bind parameters and evaluate expressions without letting attacker input reach an OGNL evaluation that creates or changes executable code. Framework to application code is not a trust boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-ognl-injection-rce",
+          "threat-parameter-binding-bypass",
+          "threat-arbitrary-method-invocation",
+          "threat-expression-bounds-bypass",
+          "threat-multipart-parsing",
+          "threat-fetch-metadata-failure",
+          "threat-superlinear-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-ognl-default-defenses",
+          "control-struts-parameter-annotation",
+          "control-strict-method-invocation",
+          "control-pattern-checkers",
+          "control-fetch-metadata-interceptors"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-ognl-default-defenses",
+      "name": "Default OGNL-injection defences",
+      "description": "Defence-in-depth controls that became secure-by-default at 7.0: the OGNL allowlist (struts.allowlist.enable), excluded classes/packages, the expression-length cap (struts.ognl.expressionMaxLength, default 256), static-field/proxy/default-package/custom-map disallows, and excluded node types. Their authoritative, current list lives in the published Struts security guidance.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-ognl-valuestack",
+        "boundary-http-request"
+      ]
+    },
+    {
+      "bom-ref": "control-struts-parameter-annotation",
+      "name": "@StrutsParameter annotation requirement",
+      "description": "Since 7.0 (struts.parameters.requireAnnotations, secure-by-default), request parameters bind only to setters the developer marked @StrutsParameter, to the declared depth.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parameter-binding"
+      ]
+    },
+    {
+      "bom-ref": "control-strict-method-invocation",
+      "name": "Strict Method Invocation gating DMI",
+      "description": "Dynamic Method Invocation is gated by Strict Method Invocation since 2.5; devMode and DMI are the two settings whose insecure value most often turns a non-finding into an apparent finding.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-ognl-valuestack"
+      ]
+    },
+    {
+      "bom-ref": "control-pattern-checkers",
+      "name": "Accepted/excluded pattern checkers",
+      "description": "AcceptedPatternsChecker and ExcludedPatternsChecker (since 2.3.20) validate parameter names/values for the Parameters and Cookie interceptors. A custom override that drops below the framework defaults is a developer error, not a framework flaw.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-parameter-binding",
+        "asset-interceptor-stack"
+      ]
+    },
+    {
+      "bom-ref": "control-fetch-metadata-interceptors",
+      "name": "FetchMetadata, COOP, and COEP interceptors",
+      "description": "Opt-in cross-origin defences available since 6.0; when enabled the framework emits/enforces the corresponding Sec-Fetch-* and cross-origin isolation behaviour.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-interceptor-stack"
+      ]
+    },
+    {
+      "bom-ref": "control-deploy-current-defaults",
+      "name": "Deploy a current supported version with default hardening on",
+      "description": "Deploy a current supported version (7.x or 6.x) with the default hardening left on, devMode off, and dev-only plugins restricted. The security posture changed materially at 7.0, where a cluster of OGNL-injection and parameter-binding defences became secure-by-default; the version is itself load-bearing for triage.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ognl-valuestack",
+        "asset-parameter-binding",
+        "asset-file-upload",
+        "asset-config-browser-plugin"
+      ]
+    },
+    {
+      "bom-ref": "control-custom-error-pages",
+      "name": "Define custom error pages",
+      "description": "The application must define custom error pages; auto-generated error pages do not escape action names (historical S2-006).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-taglib"
+      ]
+    },
+    {
+      "bom-ref": "control-supply-app-security",
+      "name": "Supply application-level security controls",
+      "description": "The application must supply its own authentication, authorization, session security, CSRF protection, and TLS; keep JSPs hidden behind actions, annotate parameter setters, and never feed request parameters into forced OGNL evaluation or localization. Struts provides none of those mechanisms.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-http-request"
+      ]
+    }
+  ]
+}

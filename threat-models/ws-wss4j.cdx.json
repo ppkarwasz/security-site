@@ -1,0 +1,615 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-ws-wss4j",
+      "name": "Apache WSS4J",
+      "description": "Java implementation of the OASIS WS-Security specifications (SOAP Message Security 1.1, UsernameToken Profile 1.1, X.509 Certificate Token Profile 1.1, SAML Token Profile 1.1, Kerberos Token Profile 1.1, SwA Profile 1.1, Basic Security Profile 1.1). An in-process library, not a service or SOAP stack: it is embedded by a Web Services stack such as Apache CXF or Apache Axis to apply and validate WS-Security message headers on SOAP envelopes (signature, encryption, timestamps, replay caches, security tokens). Cryptographic primitives are delegated to Apache Santuario, the JDK JCE provider, Bouncy Castle, and OpenSAML. Two processing engines ship: DOM-based (ws-security-dom) and streaming StAX-based (ws-security-stax). Supported branches: 4.0.x, 3.0.x, 2.4.x. Source document is a draft awaiting WSS4J / Webservices PMC review.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ws-wss4j/blob/master/THREAT-MODEL.md",
+          "comment": "Source security threat model (draft); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ws.apache.org/wss4j/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ws"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ws-wss4j/blob/master/THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ws-wss4j/master/THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ws-wss4j",
+      "name": "WSS4J embedded message-security deployment",
+      "description": "Trust structure described by the threat model: the embedding SOAP stack (CXF / Axis), its CallbackHandler and Validator implementations, and the keystore / truststore files are trusted; the wire-side peer producing the SOAP envelope bytes is the only untrusted role. WSS4J receives an already-parsed Document (DOM engine) or XMLStreamReader (StAX engine); the bytes-to-XML parsing step belongs to the caller.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-dom-engine",
+          "type": "component",
+          "name": "DOM engine (ws-security-dom)",
+          "description": "WSSecurityEngine and per-element processors (Signature, Encryption, Timestamp, UsernameToken, SAML, Kerberos, SecurityContextToken) driven from a parsed org.w3c.dom.Document; holds the entire SOAP envelope in memory.",
+          "zone": "zone-embedding-stack"
+        },
+        {
+          "bom-ref": "asset-stax-engine",
+          "type": "component",
+          "name": "Streaming StAX engine (ws-security-stax) and policy enforcement (ws-security-policy-stax)",
+          "description": "InboundWSSec / OutboundWSSec streaming processing over a caller-supplied XMLStreamReader, plus the WS-SecurityPolicy PolicyEnforcer. The internal XML_INPUT_FACTORY used for the security-header reparse sets SUPPORT_DTD=false and IS_SUPPORTING_EXTERNAL_ENTITIES=false; the caller-supplied reader is the caller's responsibility.",
+          "zone": "zone-embedding-stack"
+        },
+        {
+          "bom-ref": "asset-common-services",
+          "type": "component",
+          "name": "Common services (Crypto, replay caches, configuration)",
+          "description": "ws-security-common: the Crypto interface (Merlin, CertificateStore, MerlinDevice), the EHCache- or memory-backed ReplayCache instances for nonces, timestamps and SAML OneTimeUse, BSP rule enforcement, and ConfigurationConstants defaults.",
+          "zone": "zone-embedding-stack"
+        },
+        {
+          "bom-ref": "asset-key-material",
+          "type": "data-store",
+          "name": "Keystores, truststores, and replay-cache files",
+          "description": "File-backed keystores and truststores (via Merlin), Crypto properties files, and the EHCache replay-cache spool. Owned by the embedding application; protection is via OS filesystem permissions.",
+          "zone": "zone-key-material"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-wire-peers",
+          "name": "Wire-side SOAP peers",
+          "type": "trust",
+          "description": "Producers of the bytes of the incoming SOAP envelope (the wsse:Security header and any signed / encrypted parts): unauthenticated peers, and authenticated peers relevant for replay, token reuse, and sender-vouches escalation."
+        },
+        {
+          "bom-ref": "zone-embedding-stack",
+          "name": "Embedding SOAP stack and WSS4J",
+          "type": "trust",
+          "description": "The SOAP stack that owns the network surface and invokes WSS4J, its CallbackHandler (passwords, keys), Validator implementations, and the WSS4J engines. Trusted by construction."
+        },
+        {
+          "bom-ref": "zone-key-material",
+          "name": "Key material on disk",
+          "type": "trust",
+          "description": "Keystores, truststores, Crypto properties files, and replay-cache storage, protected by OS-level permissions."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-soap-message",
+          "name": "Inbound SOAP message boundary",
+          "type": "trust",
+          "zones": [
+            "zone-wire-peers",
+            "zone-embedding-stack"
+          ]
+        },
+        {
+          "bom-ref": "boundary-key-material",
+          "name": "Key material access boundary",
+          "type": "trust",
+          "zones": [
+            "zone-embedding-stack",
+            "zone-key-material"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Minimum JDK per branch (JDK8 for 2.x, JDK11 for 3.0.x, JDK17 for 4.0.x); Apache Santuario, OpenSAML, and optionally Bouncy Castle on the classpath at versions matching the branch. Defects intrinsic to these upstreams, to EHCache, and to the JCE provider are reported upstream."
+        },
+        {
+          "description": "The host wall-clock is correct within the configured skew: TTL_TIMESTAMP (default 300 s) and TTL_FUTURE_TIMESTAMP (default 60 s) bound the message-validity window; a wrong host clock can reject valid signatures or accept replays inside the wider window."
+        },
+        {
+          "description": "WSS4J opens no listening sockets, spawns no child processes, installs no signal handlers, reads only documented system properties, and touches the filesystem only via the JDK KeyStore / Properties / EHCache APIs at caller-supplied paths (negative claims awaiting maintainer ratification)."
+        },
+        {
+          "description": "The Kerberos KDC and JAAS infrastructure are correctly configured; local code in the embedding JVM, keystore owners, hostile CallbackHandler / Validator implementations, co-tenants, side-channel observers beyond the hardened comparators, and quantum adversaries are out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-token-authentication-bypass",
+        "name": "Inbound message accepted with an invalid security token",
+        "description": "An inbound SOAP envelope is accepted as authenticated even though the embedded UsernameToken, X.509 signature, SAML assertion, or Kerberos token is invalid (wrong signature, unknown CA, untrusted issuer, expired, mis-bound subject). Violates claimed property P1 (security-critical, VALID). BSP 1.1 compliance checking on inbound envelopes (IS_BSP_COMPLIANT=true since 1.6) additionally rejects envelopes that violate BSP rules not on the caller's ignoredBSPRules list.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-stax-engine"
+        ],
+        "mitigations": [
+          "control-token-validators",
+          "control-bsp-compliance"
+        ]
+      },
+      {
+        "bom-ref": "threat-signature-wrapping",
+        "name": "XML signature wrapping against signed message parts",
+        "description": "An inbound envelope is accepted as integrity-protected even though a referenced part was relocated, swapped, or unsigned (classic XML signature wrapping); this is the threat the VulnerabliltyVectorsTest regression suite exercises. There is no automatic signature-wrapping defense without WS-SecurityPolicy or explicit SIGNATURE_PARTS: the action-based API requires the caller to specify which parts must be signed, and failing to do so produces a working but insecure deployment.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-stax-engine"
+        ],
+        "mitigations": [
+          "control-ws-securitypolicy",
+          "control-signature-encryption-parts"
+        ]
+      },
+      {
+        "bom-ref": "threat-confidentiality-bypass",
+        "name": "Plaintext recovery from encrypted message parts",
+        "description": "An attacker recovers plaintext of an EncryptedData block without the corresponding private key, or bypasses confidentiality by swapping or wrapping EncryptedData references (violates claimed property P3). REQUIRE_SIGNED_ENCRYPTED_DATA_ELEMENTS (default false; CVE-2015-0227 was about its enforcement) requires EncryptedData to live in a signed subtree.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-stax-engine"
+        ],
+        "mitigations": [
+          "control-signature-encryption-parts",
+          "control-gcm-symmetric"
+        ]
+      },
+      {
+        "bom-ref": "threat-bleichenbacher-oracle",
+        "name": "Bleichenbacher-style oracle on RSA key transport",
+        "description": "The recipient produces a distinguishable error or timing signal between malformed padding and well-formed-but-rejected plaintext, letting an attacker iteratively recover the symmetric key (CVE-2015-0226 class). Defended by the ALLOW_RSA15_KEY_TRANSPORT_ALGORITHM=false default since 2.0.0 with RSA-OAEP as the default key transport; re-enabling RSA v1.5 for legacy interop reintroduces the oracle path.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-stax-engine"
+        ],
+        "mitigations": [
+          "control-rsa-oaep-default"
+        ]
+      },
+      {
+        "bom-ref": "threat-replay",
+        "name": "Replay of previously accepted tokens or messages",
+        "description": "An inbound envelope identical to one already accepted within the TTL window is accepted again (UsernameToken nonce, Timestamp, or SAML2 OneTimeUse replay, violating claimed property P5), or an envelope with an Expires in the past is accepted (violating strict timestamp enforcement, P6).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-common-services"
+        ],
+        "mitigations": [
+          "control-replay-caches",
+          "control-timestamp-strict"
+        ]
+      },
+      {
+        "bom-ref": "threat-saml-subject-confirmation-bypass",
+        "name": "SAML assertion with mis-bound SubjectConfirmation accepted",
+        "description": "An inbound SAML assertion with mis-bound Subject / HolderOfKey / Bearer / SenderVouches is accepted as authenticating a different principal, violating claimed property P9 (strict SAML SubjectConfirmation validation, VALIDATE_SAML_SUBJECT_CONFIRMATION=true by default).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-stax-engine"
+        ],
+        "mitigations": [
+          "control-saml-subject-validation"
+        ]
+      },
+      {
+        "bom-ref": "threat-timing-side-channel",
+        "name": "Timing side channel on secret comparators",
+        "description": "An attacker recovers a password or signature value via a timing side channel measured against WSS4J's comparator. UsernameTokenValidator's password compare was hardened to MessageDigest.isEqual in 2.3.1 (WSS-677); whether the rest of the comparator surface has been swept is an open maintainer question (Q16), and other comparators may still be early-exit.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine",
+          "asset-common-services"
+        ],
+        "mitigations": [
+          "control-constant-time-compare"
+        ]
+      },
+      {
+        "bom-ref": "threat-cert-substitution",
+        "name": "Certificate substitution under unconstrained chain trust",
+        "description": "With chain trust and no DN constraints, any certificate issued by any CA in the truststore passes signature validation: a successful X.509 trust chain validation does not authenticate the holder of the private key as the expected principal unless SIG_SUBJECT_CERT_CONSTRAINTS (or SIG_ISSUER_CERT_CONSTRAINTS) is set. Revocation checking (ENABLE_REVOCATION) is off by default.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-common-services"
+        ],
+        "mitigations": [
+          "control-cert-constraints"
+        ]
+      },
+      {
+        "bom-ref": "threat-decompression-bomb",
+        "name": "Decompression bomb in signed compressed payloads",
+        "description": "An inbound signed compressed payload expands beyond the configured threshold. The streaming engine enforces a maximum-decompressed-bytes bound (wss-config-compression.xml, exercised by VulnerabliltyVectorsDecompressedBytesTest); the DOM engine has no equivalent bound, a disclaimed gap pending maintainer ruling (Q15).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-stax-engine",
+          "asset-dom-engine"
+        ],
+        "mitigations": [
+          "control-decompression-bound"
+        ]
+      },
+      {
+        "bom-ref": "threat-weak-legacy-defaults",
+        "name": "Weak legacy algorithm defaults (SHA-1 digest, AES-CBC)",
+        "description": "A small number of knobs ship in a posture the best-practice document itself flags as deprecated or weak: default SIG_DIGEST_ALGO=SHA-1, default ENC_SYM_ALGO=AES-128-CBC (exposed to padding-oracle classes the best-practice doc advises avoiding), and REQUIRE_SIGNED_ENCRYPTED_DATA_ELEMENTS=false. Whether these are supported production posture, dev defaults, or legacy-interop defaults to be flipped is an open maintainer question (Q10-Q11, proposed: legacy interop defaults, hardening candidates).",
+        "origin": "structural",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-common-services"
+        ],
+        "mitigations": [
+          "control-gcm-symmetric",
+          "control-signature-encryption-parts"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe-caller-parser",
+        "name": "XXE / DTD / billion laughs on the caller's XML parsing step",
+        "description": "WSS4J does not parse SOAP from bytes: it receives a Document (DOM engine) or XMLStreamReader (StAX engine) from the caller, and does not retroactively re-secure a reader or document built with DTD or external-entity expansion enabled. The InboundWSSec javadoc warns: configure your xmlStreamReader correctly, otherwise you can create a security hole. Reports requiring an un-hardened caller parser are out of model (trusted input); WSS4J's internal factory for the security-header reparse is hardened.",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-stax-engine",
+          "asset-dom-engine"
+        ],
+        "mitigations": [
+          "control-harden-caller-parser"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-password-digest-offline-attack",
+        "name": "Offline dictionary attack against PASSWORD_DIGEST UsernameTokens",
+        "description": "PASSWORD_DIGEST is not password hashing: the wire format is SHA-1(nonce || created || password), so a peer with the digest and the cleartext nonce and created values can mount an offline dictionary attack against the password. A documented false-friend property; use TLS and a strong password policy regardless.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine"
+        ],
+        "mitigations": [
+          "control-operational-hardening"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dom-envelope-dos",
+        "name": "Memory exhaustion via oversized envelopes in DOM mode",
+        "description": "The DOM engine reads the whole SOAP envelope into memory with no bound on its size; denial of service via a very large signed envelope is a deployment-side concern. The streaming engine is bounded by the caller's XMLInputFactory limits. WSS4J has no rate limiter of its own; concurrent inbound message rate is whatever the SOAP stack admits.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-dom-engine"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-surface-abuse",
+        "name": "Hostile trusted components and operator-weakened configuration",
+        "description": "Out-of-model surfaces: a hostile CallbackHandler, Validator, Crypto, or Processor registered through WSSConfig (trusted by construction); local code in the embedding JVM; owners of keystore / truststore / password files; a SOAP stack that routes a body regardless of WSS4J's verdict; transport-layer security (TLS is the stack's / container's job); application-level authorization of authenticated peers; upstream defects in Santuario, OpenSAML, Bouncy Castle, EHCache, or the JCE provider; and deployments where the operator flipped a hardened default (ALLOW_RSA15_KEY_TRANSPORT_ALGORITHM=true, IS_BSP_COMPLIANT=false, TIMESTAMP_STRICT=false).",
+        "origin": "adversarial",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-soap-message",
+        "boundary": "boundary-soap-message",
+        "name": "Inbound SOAP message trust boundary",
+        "description": "The bytes of the incoming SOAP envelope's wsse:Security header and any signed or encrypted parts, supplied by a wire peer through the embedding stack, are the only untrusted input. The security tokens inside the envelope are the authentication that WSS4J validates.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-token-authentication-bypass",
+          "threat-signature-wrapping",
+          "threat-confidentiality-bypass",
+          "threat-bleichenbacher-oracle",
+          "threat-replay",
+          "threat-saml-subject-confirmation-bypass",
+          "threat-timing-side-channel",
+          "threat-cert-substitution",
+          "threat-decompression-bomb",
+          "threat-dom-envelope-dos"
+        ],
+        "controlsAtBoundary": [
+          "control-token-validators",
+          "control-ws-securitypolicy",
+          "control-signature-encryption-parts",
+          "control-rsa-oaep-default",
+          "control-replay-caches",
+          "control-timestamp-strict",
+          "control-bsp-compliance",
+          "control-saml-subject-validation",
+          "control-decompression-bound"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-key-material",
+        "boundary": "boundary-key-material",
+        "name": "Key material trust boundary",
+        "description": "Keystores, truststores, Crypto properties files, and the replay-cache spool are trusted files owned by the embedding application; WSS4J does not create or rotate them, and their protection, passwords, and durability are the operator's responsibility.",
+        "trustLevel": "highly-trusted",
+        "threatsAtBoundary": [
+          "threat-trusted-surface-abuse"
+        ],
+        "controlsAtBoundary": [
+          "control-operational-hardening"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-token-validators",
+      "name": "Default token Validator chain",
+      "description": "The inbound processing chain validates UsernameToken, X.509 signatures, SAML assertions, Timestamps, and Kerberos tokens through a default Validator set (replaceable via WSSConfig as a documented extension point), against the caller-configured Crypto / truststore and CallbackHandler-supplied secrets.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-ws-securitypolicy",
+      "name": "Use WS-SecurityPolicy-driven configuration",
+      "description": "Use WS-SecurityPolicy (PolicyEnforcer in ws-security-policy-stax) in preference to the action-based approach whenever possible; the best-practice guide strongly favors it because it provides automatic protection against XML signature wrapping.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-stax-engine",
+        "boundary-soap-message"
+      ]
+    },
+    {
+      "bom-ref": "control-signature-encryption-parts",
+      "name": "Pin signed and encrypted parts and inbound algorithms",
+      "description": "When using the action-based approach, set SIGNATURE_PARTS and ENCRYPTION_PARTS for outbound, set REQUIRE_SIGNED_ENCRYPTED_DATA_ELEMENTS=true for inbound, and specify SIG_ALGO and ENC_KEY_TRANSPORT on inbound to enforce the algorithm choice.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine",
+        "boundary-soap-message"
+      ]
+    },
+    {
+      "bom-ref": "control-rsa-oaep-default",
+      "name": "RSA-OAEP key transport, RSA v1.5 disabled",
+      "description": "Since 2.0.0 the default key-transport algorithm is RSA-OAEP and ALLOW_RSA15_KEY_TRANSPORT_ALGORITHM defaults to false, defending against Bleichenbacher-style oracles (CVE-2015-0226). Never set ALLOW_RSA15_KEY_TRANSPORT_ALGORITHM=true for new deployments.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-replay-caches",
+      "name": "Replay caches for nonces, timestamps, and SAML OneTimeUse",
+      "description": "Replay protection is on by default via EHCacheReplayCache instances (NONCE_CACHE_INSTANCE, TIMESTAMP_CACHE_INSTANCE, SAML_ONE_TIME_USE_CACHE_INSTANCE). Configure the cache to a writable, persistent location sized for the expected token-per-TTL volume, verify durability across restart if cross-restart replay defense is relied on, and do not share a cache across deployments at different trust levels.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-common-services",
+        "boundary-soap-message"
+      ]
+    },
+    {
+      "bom-ref": "control-timestamp-strict",
+      "name": "Strict timestamp enforcement",
+      "description": "TIMESTAMP_STRICT=true by default rejects past-expiry timestamps; TTL_TIMESTAMP (300 s) and TTL_FUTURE_TIMESTAMP (60 s) bound the message-validity window and clock-skew tolerance, with analogous UsernameToken TTLs.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-common-services"
+      ]
+    },
+    {
+      "bom-ref": "control-bsp-compliance",
+      "name": "Basic Security Profile 1.1 compliance checking",
+      "description": "IS_BSP_COMPLIANT=true by default since 1.6 enforces the BSP 1.1 inbound shape; disabling it to make interop work with a non-conformant stack is a documented misuse pattern.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-saml-subject-validation",
+      "name": "SAML SubjectConfirmation validation",
+      "description": "VALIDATE_SAML_SUBJECT_CONFIRMATION=true by default validates inbound SAML SubjectConfirmation methods (HolderOfKey, Bearer, SenderVouches) so assertions are bound to the right principal.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-constant-time-compare",
+      "name": "Constant-time comparison of password secrets",
+      "description": "Since 2.3.1 (WSS-677), UsernameTokenValidator's password comparison uses MessageDigest.isEqual to defeat timing side channels. Reports against other comparators are treated as model gaps until the maintainer rules on a comprehensive sweep.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-common-services"
+      ]
+    },
+    {
+      "bom-ref": "control-decompression-bound",
+      "name": "Maximum decompressed bytes bound (StAX engine)",
+      "description": "The streaming engine enforces a maximum-decompressed-bytes bound on signed compressed payloads when wired via wss-config-compression.xml; the DOM engine carries no equivalent bound.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-cert-constraints",
+      "name": "Subject DN constraints and revocation with chain trust",
+      "description": "When relying on chain trust, set SIG_SUBJECT_CERT_CONSTRAINTS (or SIG_ISSUER_CERT_CONSTRAINTS) regular expressions to bound acceptable signer identities; set ENABLE_REVOCATION=true and supply a current CRL file when revocation matters (setting it without a CRL silently degrades). Never enable merlin.load.cacerts=true unless the system-wide CA bundle is deliberately trusted for WS-Security purposes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-common-services"
+      ]
+    },
+    {
+      "bom-ref": "control-gcm-symmetric",
+      "name": "Prefer AES-GCM over CBC symmetric encryption",
+      "description": "Explicitly set ENC_SYM_ALGO to an AES-GCM identifier; the best-practice document advises avoiding CBC symmetric encryption algorithms, and the current AES-128-CBC default is a legacy-interop posture.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-caller-parser",
+      "name": "Harden the caller's XML parsing of inbound SOAP bytes",
+      "description": "Parse inbound SOAP bytes with a DOM parser or XMLStreamReader configured with DTDs and external entities disabled; for the StAX engine the documented minimum is SUPPORT_DTD=false, IS_SUPPORTING_EXTERNAL_ENTITIES=false, IS_COALESCING=false, and (for Woodstox) P_MIN_TEXT_SEGMENT=8192. WSS4J's internal factory for the security-header reparse already sets DTD and external entities to false.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-dom-engine",
+        "asset-stax-engine",
+        "boundary-soap-message"
+      ]
+    },
+    {
+      "bom-ref": "control-operational-hardening",
+      "name": "Operational hardening of the embedding deployment",
+      "description": "Run on a supported branch (4.0.x, 3.0.x, 2.4.x) and apply advisories from the WSS4J and Apache CXF advisory pages; use TLS for the transport (WSS4J is message-level security, not a substitute); restrict OS permissions on keystore, truststore, and Crypto properties files; override the documented example passwords (merlin.keystore.password 'security', merlin.truststore.password 'changeit'); treat the CallbackHandler and any custom Validator as part of the security TCB; and combine PASSWORD_DIGEST with TLS and a strong password policy.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-key-material",
+        "boundary-key-material"
+      ]
+    }
+  ]
+}

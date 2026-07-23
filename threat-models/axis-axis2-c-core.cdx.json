@@ -1,0 +1,590 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:43:00Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-axis2c",
+      "name": "Apache Axis2 C Core",
+      "description": "SOAP and REST web services engine implemented in C. Provides HTTP/1.1 and HTTP/2 transports, dual XML parsers (Guththila and libxml2), native JSON processing (json-c), MTOM/XOP attachment handling, and hot-deployment of services. Runs as a standalone HTTP server or as an Apache httpd module (mod_axis2). Being a C implementation, memory safety vulnerabilities are in scope in addition to the logical vulnerabilities shared with Axis2/Java.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/axis-axis2-c-core/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://axis.apache.org/axis2/c/core/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "axis"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/axis-axis2-c-core/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/axis-axis2-c-core/master/SECURITY.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-axis2c",
+      "name": "Axis2/C message processing pipeline",
+      "description": "Architecture described by the threat model: a remote client's untrusted input passes through Apache httpd (TLS, connection limits, WAF) or the development-only standalone axis2_http_server, into mod_axis2 / the HTTP request processor, Content-Type routing to a JSON or XML parser, the AXIOM object model, dispatchers, handler phases (where the Rampart/C security module executes), the message receiver invoking the service function, and response serialization.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-http-front",
+          "type": "gateway",
+          "name": "HTTP front end (Apache httpd with mod_axis2, or standalone server)",
+          "description": "Apache httpd handling TLS, connection limits and WAF for production deployments via mod_axis2; the standalone axis2_http_server is single-threaded, has no production-grade connection limits and is intended for development only. HTTP/2 is provided via nghttp2 (CVE-2023-44487 rapid reset mitigated by the nghttp2 version).",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-xml-parsers",
+          "type": "module",
+          "name": "XML parsers (Guththila and libxml2)",
+          "description": "Guththila (default) is inherently XXE-safe (no entity processing) and fuzz-tested via OSS-Fuzz. The optional libxml2 parser is hardened with XML_PARSE_NONET, a custom entity loader blocking all external resolution, a depth limit of 256, an attribute limit of 256, and a namespace limit of 64.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-json-parsers",
+          "type": "module",
+          "name": "JSON parsers (json-c and JSON-to-AXIOM reader)",
+          "description": "json-c direct parsing on the HTTP/2 path and the JSON-to-AXIOM reader on the HTTP/1.1 path; both fuzz-tested, with a 64-level depth limit and a 10MB payload size limit.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-http-parsing",
+          "type": "module",
+          "name": "HTTP header, request line and MTOM/XOP handling",
+          "description": "HTTP header formatting uses sprintf() writing to a heap buffer sized from measured input lengths, fuzz-tested via OSS-Fuzz; status line limited to 512 bytes; MTOM/XOP attachments bounded by a 100MB default chunked transfer maximum.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-http-client",
+          "type": "component",
+          "name": "HTTP client transport (outbound)",
+          "description": "Outbound transport with TLS 1.2+ enforced, SSLv2/SSLv3/TLS 1.0-1.1 disabled, AEAD ciphers only, and hostname validation enabled.",
+          "zone": "zone-engine"
+        },
+        {
+          "bom-ref": "asset-services-dir",
+          "type": "data-store",
+          "name": "Services directory and configuration",
+          "description": "Hot-deployment directory for service shared libraries (.so/.dll) and axis2.xml configuration, writable by the server administrator and service deployers.",
+          "zone": "zone-deployment"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-clients",
+          "name": "Remote clients",
+          "type": "trust",
+          "description": "Anonymous clients are untrusted remote callers with no credentials who can reach any HTTP endpoint; all their input is hostile. Authenticated clients (identity verified by TLS client certificate, WS-Security via Rampart/C, or application-level auth) are partially trusted."
+        },
+        {
+          "bom-ref": "zone-engine",
+          "name": "Axis2/C engine",
+          "type": "trust",
+          "description": "The message processing pipeline: transports, parsers, AXIOM, dispatchers, handler phases and message receivers."
+        },
+        {
+          "bom-ref": "zone-deployment",
+          "name": "Deployment host",
+          "type": "trust",
+          "description": "Filesystem holding axis2.xml, TLS certificates and the services directory, managed by the fully trusted server administrator and trusted service deployers."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-http-entry",
+          "name": "HTTP entry point",
+          "type": "trust",
+          "zones": [
+            "zone-clients",
+            "zone-engine"
+          ]
+        },
+        {
+          "bom-ref": "boundary-deployment",
+          "name": "Service deployment",
+          "type": "trust",
+          "zones": [
+            "zone-deployment",
+            "zone-engine"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-server-administrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Server Administrator"
+              }
+            ],
+            "persona": {
+              "description": "Fully trusted. Configures axis2.xml, compiles with chosen parser/transport options, manages TLS certificates, deploys services."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-deployer",
+          "party": {
+            "roles": [
+              {
+                "name": "Service Deployer"
+              }
+            ],
+            "persona": {
+              "description": "Trusted. Deploys shared libraries (.so/.dll) into the services directory; has filesystem write access."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-authenticated-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Authenticated Client"
+              }
+            ],
+            "persona": {
+              "description": "Partially trusted. Identity verified by transport (TLS client cert), WS-Security (via Rampart/C), or application-level auth."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-anonymous-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Anonymous Client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted remote caller with no credentials. Can reach any HTTP endpoint. All input is hostile."
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-memory-corruption-rce",
+        "name": "Remote code execution via memory corruption",
+        "description": "Buffer overflow, format string, or other memory corruption exploitable by a remote attacker through the Axis2/C framework, and memory safety violations (heap/stack buffer overflows, use-after-free, double-free, null pointer dereferences) reachable from untrusted input. The threat model rates buffer overflow, use-after-free, format string, integer overflow and null dereference risks as low after the January 2026 hardening (correctly sized heap allocations, allocator-based memory management with ASAN testing, code review of logging macros, defensive null checks).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xml-parsers",
+          "asset-json-parsers",
+          "asset-http-parsing"
+        ],
+        "mitigations": [
+          "control-fuzz-testing",
+          "control-build-hardening",
+          "control-hardening-2026"
+        ]
+      },
+      {
+        "bom-ref": "threat-integer-overflow",
+        "name": "Integer overflow in size calculations",
+        "description": "Size calculations in buffer allocation or payload processing that wrap around, leading to undersized buffers and subsequent overflows. Payload size limits prevent wrap-around in allocation; integer overflow and size_t consistency fixes from a Gemini code review were applied in early 2026.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-json-parsers",
+          "asset-http-parsing"
+        ],
+        "mitigations": [
+          "control-parser-limits",
+          "control-hardening-2026"
+        ]
+      },
+      {
+        "bom-ref": "threat-format-string",
+        "name": "Format string vulnerabilities",
+        "description": "User-controlled data passed as the format argument to printf-family functions or logging macros. Risk rated low: a code review addressed logging macro usage in January 2026, and recommended build flags include -Wformat -Wformat-security.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-parsing"
+        ],
+        "mitigations": [
+          "control-build-hardening",
+          "control-hardening-2026"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe",
+        "name": "XML External Entity (XXE) injection",
+        "description": "The XML parser resolves external entities from untrusted input, enabling file read or SSRF. Guththila is inherently immune (no entity processing); libxml2 requires hardening and is configured with XML_PARSE_NONET and a custom entity loader that blocks all external resolution. XXE in WSDL/XSD imported schemas is handled by the chosen XML parser's hardening.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xml-parsers"
+        ],
+        "mitigations": [
+          "control-libxml2-hardening"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf",
+        "name": "Server-Side Request Forgery (SSRF)",
+        "description": "The server makes requests to arbitrary hosts due to attacker-controlled URLs in WSDL imports, external entities, or client-side HTTP transport. URL parsing is fuzz-tested via the fuzz_url_parser OSS-Fuzz target for SSRF detection.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-client",
+          "asset-xml-parsers"
+        ],
+        "mitigations": [
+          "control-libxml2-hardening",
+          "control-fuzz-testing"
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-dos",
+        "name": "Denial of service via parser abuse",
+        "description": "XML bombs, deeply nested JSON (more than 64 levels), or payloads exceeding size limits (over 10MB) that crash the process or exhaust memory; deep-nesting stack exhaustion in Guththila and the JSON paths; large attachment or temp file exhaustion via MTOM/XOP; recursive schema DoS in WSDL/XSD validation. The document notes there are no explicit limits on schema complexity or recursion depth during WSDL/XSD validation, a potential DoS risk.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-xml-parsers",
+          "asset-json-parsers",
+          "asset-http-parsing"
+        ],
+        "mitigations": [
+          "control-parser-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-info-disclosure",
+        "name": "Information disclosure in faults and error responses",
+        "description": "Stack traces, internal paths, or configuration details leaked in SOAP faults or HTTP error responses.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-front"
+        ]
+      },
+      {
+        "bom-ref": "threat-tls-weakness",
+        "name": "TLS/SSL vulnerabilities in the client transport",
+        "description": "Acceptance of deprecated protocols (SSLv2, SSLv3, TLS 1.0/1.1) or weak cipher suites in the HTTP client transport; TLS downgrade and hostname validation bypass. The client transport enforces TLS 1.2+, disables the deprecated protocols, uses AEAD ciphers only and enables hostname validation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-client"
+        ],
+        "mitigations": [
+          "control-tls-enforcement"
+        ]
+      },
+      {
+        "bom-ref": "threat-header-injection",
+        "name": "HTTP header injection and malformed header parsing",
+        "description": "Header injection (CRLF) and malformed header parsing against http_header.c, and oversized or malformed request/status lines. Mitigated by heap buffers sized from measured input lengths, a 512-byte status line limit, delimiter-based request line parsing, and OSS-Fuzz coverage.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-parsing"
+        ],
+        "mitigations": [
+          "control-fuzz-testing",
+          "control-parser-limits"
+        ]
+      },
+      {
+        "bom-ref": "threat-vulnerable-dependencies",
+        "name": "Vulnerabilities in tracked dependencies",
+        "description": "Known CVE classes in OpenSSL, libxml2, json-c, nghttp2 and Apache httpd (e.g. CVE-2020-12762 integer overflow in json-c, CVE-2023-44487 HTTP/2 rapid reset in nghttp2). The project documents minimum dependency versions and runs monthly CVE checks via GitHub Actions.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-http-front",
+          "asset-xml-parsers",
+          "asset-json-parsers",
+          "asset-http-client"
+        ],
+        "mitigations": [
+          "control-dependency-management"
+        ]
+      },
+      {
+        "bom-ref": "threat-user-service-vulns",
+        "name": "Vulnerabilities in user-written services",
+        "description": "Input validation, SQL injection, and business logic flaws in deployed service implementations are the service author's responsibility, not a security issue in Axis2/C.",
+        "origin": "accidental",
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-missing-authentication",
+        "name": "Missing authentication on endpoints",
+        "description": "Axis2/C does not ship built-in authentication. Securing endpoints is the responsibility of Rampart/C, the web server (Apache httpd), or a reverse proxy. Vulnerabilities in the optional, external Rampart/C (WS-Security) module belong to that separate project.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-http-front"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-hot-deployment-perms",
+        "name": "Hot-deployment with weak filesystem permissions",
+        "description": "If an attacker can write to the services directory, they can deploy arbitrary shared libraries. This is an OS-level access control issue, not an Axis2/C security issue.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-services-dir"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-network-dos",
+        "name": "Denial of service at the network level",
+        "description": "SYN floods, slowloris, and connection exhaustion are mitigated by Apache httpd or the network infrastructure, not by Axis2/C.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-standalone-server-production",
+        "name": "Use of the standalone HTTP server in production",
+        "description": "The standalone axis2_http_server is intended for development/testing: single-threaded, without production-grade connection limits. Production deployments should use mod_axis2 behind a reverse proxy; issues arising only from production use of the standalone server are not security issues.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-http-front"
+        ],
+        "mitigations": [
+          "control-production-deployment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-http-entry",
+        "boundary": "boundary-http-entry",
+        "name": "HTTP entry trust boundary",
+        "description": "Remote clients (anonymous ones untrusted, all input hostile) deliver bytes into the message processing pipeline through Apache httpd/mod_axis2 or the standalone server.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-memory-corruption-rce",
+          "threat-xxe",
+          "threat-parser-dos",
+          "threat-header-injection",
+          "threat-integer-overflow",
+          "threat-info-disclosure"
+        ],
+        "controlsAtBoundary": [
+          "control-parser-limits",
+          "control-libxml2-hardening",
+          "control-fuzz-testing"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-deployment",
+        "boundary": "boundary-deployment",
+        "name": "Deployment trust boundary",
+        "description": "The services directory and axis2.xml are managed by trusted administrators and deployers; write access to the services directory is equivalent to arbitrary code deployment and is protected by OS-level access control.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-hot-deployment-perms"
+        ],
+        "controlsAtBoundary": [
+          "control-production-deployment"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-parser-limits",
+      "name": "Parser depth and size limits",
+      "description": "JSON payload size limit (10MB) and depth limit (64 levels); libxml2 depth limit 256, attribute limit 256, namespace limit 64; HTTP status line limit 512 bytes; MTOM chunked transfer maximum 100MB by default; payload size limits preventing integer wrap-around in allocation.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-parsers",
+        "asset-json-parsers",
+        "asset-http-parsing"
+      ]
+    },
+    {
+      "bom-ref": "control-libxml2-hardening",
+      "name": "XXE-safe XML parsing",
+      "description": "Guththila performs no entity processing and is inherently XXE-safe; the optional libxml2 parser uses XML_PARSE_NONET and a custom entity loader override that blocks all external entity resolution.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-tls-enforcement",
+      "name": "TLS 1.2+ with strong ciphers in the client transport",
+      "description": "TLS 1.0/1.1 completely disabled; SSLv2/SSLv3 disabled; strong cipher suites enforced (AEAD plus forward secrecy); hostname validation enabled.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-http-client"
+      ]
+    },
+    {
+      "bom-ref": "control-fuzz-testing",
+      "name": "OSS-Fuzz integration",
+      "description": "Active OSS-Fuzz integration with 5 fuzz targets (fuzz_xml_parser, fuzz_json_parser, fuzz_json_reader, fuzz_http_header, fuzz_url_parser) plus application-level fuzz_finbench testing with integer overflow and boundary value inputs; local fuzzing validated with over 8M iterations and zero ASAN errors.",
+      "category": "detective",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-xml-parsers",
+        "asset-json-parsers",
+        "asset-http-parsing"
+      ]
+    },
+    {
+      "bom-ref": "control-build-hardening",
+      "name": "Build-time hardening flags",
+      "description": "Production builds should use CFLAGS=\"-fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -Wformat -Wformat-security\" and LDFLAGS=\"-pie -Wl,-z,relro,-z,now\"; AddressSanitizer is available for development via --enable-asan.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-hardening-2026",
+      "name": "January-February 2026 hardening and feature removals",
+      "description": "NTLM authentication, the TCP transport, the CGI transport and the libcurl HTTP backend were removed (AXIS2C-1708); TLS 1.0/1.1 disabled; strong cipher suites enforced; JSON limits added; libxml2 entity loader override added; integer overflow and size_t consistency fixes from Gemini code review applied.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-dependency-management",
+      "name": "Dependency minimum versions and CVE monitoring",
+      "description": "Minimum versions tracked for OpenSSL (1.1.1k+), libxml2 (2.9.10+), json-c (0.15+), nghttp2 (1.50.0+) and Apache httpd (2.4.62+), with monthly CVE checks via a GitHub Actions workflow.",
+      "category": "detective",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-production-deployment",
+      "name": "Deploy via mod_axis2 behind a reverse proxy",
+      "description": "Use Apache httpd with mod_axis2 (TLS, connection limits, WAF) behind a reverse proxy in production; the standalone HTTP server is for development only. See docs/SECURITY.md for detailed deployment hardening guidance.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-http-front"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,369 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:17Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-ws-xmlschema",
+      "name": "Apache XmlSchema",
+      "description": "Lightweight schema object model that can be used to manipulate and generate XML schema representations. An in-process Java library (xmlschema-core object model, parser, serializer and URI resolver; xmlschema-walker visitor and tooling validator) that parses, models, walks, and serializes W3C XML Schema documents, consumed primarily by SOAP stacks (Apache CXF, Apache Axis) and code-generation / data-binding tooling. The threat model is that of an XML-parsing library that performs caller-directed network or filesystem IO when it follows xs:include / xs:import / schemaLocation references. Source document is under maintainer review.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/ws-xmlschema/blob/master/THREAT-MODEL.md",
+          "comment": "Source security threat model; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://ws.apache.org/xmlschema/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "ws"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/ws-xmlschema/blob/master/THREAT-MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/ws-xmlschema/master/THREAT-MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-ws-xmlschema",
+      "name": "XmlSchema embedded-library trust structure",
+      "description": "Trust structure described by the threat model: the embedding Java application, its URIResolver and ExtensionRegistry implementations, and the JVM system properties are trusted; the producer of the schema bytes is the attacker-controllable input position, and following an xs:import / xs:include is a second, possibly cross-origin fetch (the principal SSRF surface). Out of model: XML document validation, the WSDL parser, the JDK SchemaFactory, and test components (xmlschema-bundle-test, w3c-testcases).",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-schema-parser",
+          "type": "component",
+          "name": "Schema parser and object model (XmlSchemaCollection, SchemaBuilder)",
+          "description": "Parses .xsd bytes into the in-memory schema model and serializes it back (XmlSchemaSerializer). Internal DocumentBuilderFactory and TransformerFactory instances are configured with FEATURE_SECURE_PROCESSING=true, but disallow-doctype-decl and explicit external-entity toggles are not set.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-uri-resolver",
+          "type": "component",
+          "name": "URI resolver (DefaultURIResolver)",
+          "description": "Resolves xs:include / xs:import schemaLocation references by constructing a URL from the parent schema's base URI plus the schema-location value and returning an InputSource pointing at it; the JDK then fetches it on parse. Applies no allowlist, no protocol restriction, and no host filtering of any kind. Caller-replaceable via XmlSchemaCollection.setSchemaResolver.",
+          "zone": "zone-application"
+        },
+        {
+          "bom-ref": "asset-extension-registry",
+          "type": "module",
+          "name": "ExtensionRegistry system-property extension point",
+          "description": "The class named by the org.apache.ws.commons.schema.extension_registry system property is loaded via Class.forName and instantiated at XmlSchemaCollection construction time. The system property is trusted, operator-controlled state.",
+          "zone": "zone-application"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-schemas",
+          "name": "Schema producers and referenced hosts",
+          "type": "trust",
+          "description": "Producers of the input schema bytes (full byte control, including xs:import schemaLocation values pointing anywhere) and the hosts those imports resolve to, which return further schema bytes that Axiom-style recursive parsing consumes."
+        },
+        {
+          "bom-ref": "zone-application",
+          "name": "Embedding application process",
+          "type": "trust",
+          "description": "The embedding Java application, its caller-supplied URIResolver / ExtensionRegistry / base URI, the JVM system properties, and the JDK XML platform. All trusted by construction."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-schema-parse",
+          "name": "Schema parsing and import-resolution boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-schemas",
+            "zone-application"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A conformant JDK XML platform (DocumentBuilderFactory, TransformerFactory, SAX parser); the behavior of FEATURE_SECURE_PROCESSING depends on the provider in use, and XmlSchema does not bundle Xerces. Minimum Java 17 in the 2.3.0 release."
+        },
+        {
+          "description": "The bundled DefaultURIResolver issues HTTP / HTTPS / file:// / jar: fetches via the JDK URL handlers when a schemaLocation is followed; proxies, URL-scheme restrictions, and TLS validity are outside XmlSchema's control."
+        },
+        {
+          "description": "XmlSchema opens no listening sockets other than what the JDK URL handler does when following an import, spawns no child processes, installs no signal handlers, reads only the documented extension_registry system property, and writes nothing of its own initiative (negative claims awaiting maintainer ratification)."
+        },
+        {
+          "description": "Schemas are held in memory with no built-in ceiling on schema-document size, number of imports, or import-graph depth; bounding is the caller's responsibility."
+        },
+        {
+          "description": "In-process callers, hostile URIResolver / ExtensionRegistry implementations, the host filesystem owner, co-tenants in a shared JVM, side-channel observers, and quantum adversaries are out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-schema-import-ssrf",
+        "name": "SSRF and cross-origin fetch via xs:import / xs:include schemaLocation",
+        "description": "An attacker-controlled schema containing an xs:import or xs:include with an arbitrary schemaLocation causes the bundled DefaultURIResolver to construct a URL and the JDK to fetch it: HTTP / HTTPS SSRF, file:// disclosure, or jar: access, with no allowlist, protocol restriction, host filtering, read timeout, or rate limit. The model explicitly disclaims SSRF defense; callers handling attacker-controllable schemas are responsible for installing a restricting URIResolver. Whether the unrestricted default is a supported production posture or a documented dev/test default is an open maintainer question (Q12, proposed: operators must install a restricting resolver).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-uri-resolver"
+        ],
+        "mitigations": [
+          "control-restricting-uri-resolver",
+          "control-import-budgets"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-entity-expansion-dos",
+        "name": "Billion-laughs / quadratic entity expansion in schema parsing",
+        "description": "A crafted .xsd drives entity expansion during the read(InputSource | InputStream | Reader) parse. FEATURE_SECURE_PROCESSING=true on the internal factories mitigates the most expensive expansion cases on many providers, but not universally; whether the secure-processing feature is the sufficient intended defense or stricter toggles should be set is an open maintainer question (Q6).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-schema-parser"
+        ],
+        "mitigations": [
+          "control-secure-processing",
+          "control-explicit-xxe-toggles"
+        ]
+      },
+      {
+        "bom-ref": "threat-xxe-beyond-secure-processing",
+        "name": "XXE via DTD-enabled JDK XML providers",
+        "description": "XmlSchema does not set disallow-doctype-decl=true, external-general-entities=false, or external-parameter-entities=false; it relies on FEATURE_SECURE_PROCESSING=true, which on many JDK XML providers bounds entity expansion but does not disable external entities or DTD processing entirely. The model disclaims XXE / DTD defense beyond secure processing; sufficiency depends on the JDK XML provider in use (open maintainer question Q6, proposed: add the explicit toggles in a future release).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-schema-parser"
+        ],
+        "mitigations": [
+          "control-secure-processing",
+          "control-explicit-xxe-toggles"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-preparsed-dom-input",
+        "name": "XXE inherited from caller-parsed Document / Element input",
+        "description": "XmlSchemaCollection.read(Document) and read(Element) accept a caller-parsed DOM; XmlSchema does not re-parse, so the caller's DocumentBuilderFactory decided the XXE / DTD posture and XmlSchema's internal hardening is moot. Reports requiring an un-hardened caller parser are out of model (trusted input).",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-schema-parser"
+        ],
+        "mitigations": [
+          "control-harden-caller-parser"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-schema-amplification-dos",
+        "name": "Memory exhaustion via unbounded schema size or import graph",
+        "description": "There is no bound on schema-document size, import-graph depth, or import fan-out: a schema that includes thousands of imports, or imports recursively, is processed to completion or until JVM resources are exhausted. Bounding schema size and import-graph depth is explicitly the caller's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-schema-parser",
+          "asset-uri-resolver"
+        ],
+        "mitigations": [
+          "control-import-budgets"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-plain-http-import-substitution",
+        "name": "Network substitution of schemas fetched over plain http://",
+        "description": "Imported schemas are fetched in cleartext when the URL is http://; a network attacker on the path can substitute the response. TLS validity is the JDK URL handler's concern, XmlSchema does no certificate pinning, and the caller must use TLS-protected URLs, a restricting resolver, or integrity-controlled schema sources (pinned internal mirror, checksum-verified artifacts).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-uri-resolver"
+        ],
+        "mitigations": [
+          "control-restricting-uri-resolver"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-extension-registry-loading",
+        "name": "Malicious class loading via the extension_registry system property",
+        "description": "The class named by org.apache.ws.commons.schema.extension_registry is Class.forName-loaded into the running JVM and instantiated at XmlSchemaCollection construction. The system property is trusted operator-controlled state; setting it from a servlet-context init parameter or user-influenced config file is a documented misuse pattern, and an untrusted-actor-set value is out of model (trusted input).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-extension-registry"
+        ],
+        "mitigations": [
+          "control-trusted-configuration"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-schema-parse",
+        "boundary": "boundary-schema-parse",
+        "name": "Schema parsing and import-resolution trust boundary",
+        "description": "Attacker-controllable schema bytes enter through XmlSchemaCollection.read(...); each xs:include / xs:import the resolver follows is a second, possibly cross-origin fetch whose response is recursively parsed. The internal factories carry FEATURE_SECURE_PROCESSING=true; destination filtering and resource budgets are the caller's responsibility.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-schema-import-ssrf",
+          "threat-entity-expansion-dos",
+          "threat-xxe-beyond-secure-processing",
+          "threat-schema-amplification-dos",
+          "threat-plain-http-import-substitution"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-processing",
+          "control-restricting-uri-resolver",
+          "control-import-budgets"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-secure-processing",
+      "name": "FEATURE_SECURE_PROCESSING on internal XML factories",
+      "description": "XmlSchema sets FEATURE_SECURE_PROCESSING=true on its internal DocumentBuilderFactory and TransformerFactory (XmlSchemaCollection, XmlSchemaSerializer) and on the walker's DomBuilderFromSax factory. This is the XSLT-conventional hardening lever; it mitigates expensive expansion on many providers but is not a full XXE defense (a documented false friend).",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-schema-parser",
+        "boundary-schema-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-explicit-xxe-toggles",
+      "name": "Set explicit anti-XXE parser features (defense in depth)",
+      "description": "In addition to FEATURE_SECURE_PROCESSING=true, set disallow-doctype-decl=true, external-general-entities=false, and external-parameter-entities=false, and verify the JDK XML provider in use treats secure processing as sufficient when parsing attacker-controlled bytes. A future-release change adding the explicit toggles inside XmlSchema is the proposed answer to open question Q6.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-schema-parser"
+      ]
+    },
+    {
+      "bom-ref": "control-restricting-uri-resolver",
+      "name": "Install a restricting URIResolver for untrusted schemas",
+      "description": "If the schema bytes are attacker-controllable, install a restricting URIResolver via XmlSchemaCollection.setSchemaResolver that refuses arbitrary http:// / https:// / file:// / jar: / ftp: URLs: allow only https:// to approved hosts; deny file://, jar:, loopback, link-local, and RFC1918 / private ranges; use connect/read timeouts and fail closed; log import-resolution decisions; and prefer integrity-controlled schema sources (pinned internal mirror or checksum-verified artifacts) over live internet fetches. The bundled DefaultURIResolver does not filter.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-uri-resolver",
+        "boundary-schema-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-import-budgets",
+      "name": "Apply schema size and import-fetch budgets at the caller",
+      "description": "Bound the maximum allowable schema size, maximum import depth, total imported bytes, and total import count per top-level parse at the caller boundary; XmlSchema imposes no such limits.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-schema-parser",
+        "boundary-schema-parse"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-caller-parser",
+      "name": "Harden the caller's DocumentBuilderFactory for pre-parsed input",
+      "description": "When passing a pre-parsed Document or Element into XmlSchemaCollection.read(...), use a DocumentBuilderFactory hardened against XXE, specifically with disallow-doctype-decl=true and external-entity processing disabled.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-schema-parser"
+      ]
+    },
+    {
+      "bom-ref": "control-trusted-configuration",
+      "name": "Set extension_registry and base URI only from trusted sources",
+      "description": "Set org.apache.ws.commons.schema.extension_registry only at JVM startup from a trusted source; do not allow untrusted actors to set it. Set XmlSchemaCollection.setBaseUri(...) from an operator-trusted string, not from anywhere an attacker can influence (note that an absolute schemaLocation URL wins over the base URI). Run on a release-supported branch (currently the 2.3.0 line).",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-extension-registry"
+      ]
+    }
+  ]
+}

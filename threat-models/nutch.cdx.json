@@ -1,0 +1,476 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:06:58Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-nutch",
+      "name": "Apache Nutch",
+      "description": "Extensible, Hadoop-based open-source web crawler: an operator runs it (in local or distributed/batch mode, or via the nutch-server REST control API) to fetch, parse, and index web content at scale through a plugin architecture (protocol, parse, index, and scoring plugins; parsing largely via Apache Tika). The defining security fact is that Nutch fetches and parses content from the open, untrusted web by design: crawled bytes are attacker-controllable input, and the threat model is about robustly handling that input and about which controls are the operator's job, not about preventing Nutch from reaching or parsing hostile content. This is a v0 DRAFT by the ASF Security team, a strict superset of the website security model, with many claims tagged (inferred) pending PMC confirmation.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/nutch/blob/master/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://nutch.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "nutch"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/nutch/blob/master/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/nutch/master/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-nutch",
+      "name": "Nutch crawler deployment",
+      "description": "Two boundaries matter, and they differ from a typical service: the fetch boundary (primary), where everything fetched from the web is untrusted and crosses into the parser and store (bytes-from-the-internet to parsed structures), and the operator/config boundary, where seeds, URL filters, plugin selection, and the nutch-server endpoint are operator-controlled and trusted. Data flow: seed URLs (operator) to fetch (untrusted content) to parse (Tika/plugins on untrusted bytes) to URL extraction and filtering to crawl DB to index backend.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-fetcher",
+          "type": "component",
+          "name": "Fetcher and protocol plugins",
+          "description": "protocol-http(client) and related plugins opening outbound connections to arbitrary fetched hosts; consumes untrusted content (page bytes, headers, redirects, robots.txt, sitemaps, feeds).",
+          "zone": "zone-crawler"
+        },
+        {
+          "bom-ref": "asset-parsers",
+          "type": "component",
+          "name": "Parser plugins (Tika, HTML, feed, and others)",
+          "description": "parse-* plugins spending CPU and memory on untrusted bytes and the declared content-type.",
+          "zone": "zone-crawler"
+        },
+        {
+          "bom-ref": "asset-url-filters",
+          "type": "component",
+          "name": "URL filters and normalizers",
+          "description": "urlfilter-* and urlnormalizer-* regex components; a crawl-scoping boundary fed URLs extracted from hostile pages, not a security guarantee.",
+          "zone": "zone-crawler"
+        },
+        {
+          "bom-ref": "asset-crawl-store",
+          "type": "data-store",
+          "name": "Crawl store / DB",
+          "description": "Local filesystem or HDFS storage for crawl data.",
+          "zone": "zone-crawler"
+        },
+        {
+          "bom-ref": "asset-nutch-server",
+          "type": "api",
+          "name": "nutch-server REST control API",
+          "description": "Optional HTTP control endpoint for orchestration; the legacy REST API provides no authentication and assumes a trusted environment.",
+          "zone": "zone-crawler"
+        },
+        {
+          "bom-ref": "asset-indexer-backends",
+          "type": "service",
+          "name": "Indexer and storage backends (Solr, Elasticsearch, HDFS)",
+          "description": "Backends provisioned and secured by the operator; Nutch writes to them but does not own their security (a boundary component).",
+          "zone": "zone-operator"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-web",
+          "name": "Untrusted web",
+          "type": "trust",
+          "description": "Every fetched page, redirect, robots.txt, sitemap, feed, and embedded resource is attacker-controllable input."
+        },
+        {
+          "bom-ref": "zone-crawler",
+          "name": "Nutch crawler",
+          "type": "trust",
+          "description": "The crawler process (fetcher, parsers, filters, crawl store, optional nutch-server) running in the operator's trusted environment."
+        },
+        {
+          "bom-ref": "zone-operator",
+          "name": "Trusted operator environment",
+          "type": "trust",
+          "description": "The operator/admin owning seeds, URL filters, plugin config, the Hadoop/host environment, backends, and the nutch-server endpoint."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-fetch",
+          "name": "Fetch boundary",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-web",
+            "zone-crawler"
+          ]
+        },
+        {
+          "bom-ref": "boundary-operator-config",
+          "name": "Operator/config boundary",
+          "type": "trust",
+          "zones": [
+            "zone-operator",
+            "zone-crawler"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-operator",
+          "party": {
+            "roles": [
+              {
+                "name": "Operator / admin"
+              }
+            ],
+            "persona": {
+              "description": "Trusted; owns seeds, URL filters, plugin config, the Hadoop/host environment, and the nutch-server endpoint."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-content-supplier",
+          "party": {
+            "roles": [
+              {
+                "name": "Crawled-content supplier"
+              }
+            ],
+            "persona": {
+              "description": "The untrusted web; the core in-model adversary with full control of the bytes, headers, and redirects Nutch fetches, assumed unable to reach the operator's config, host, or backends."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-rest-client",
+          "party": {
+            "roles": [
+              {
+                "name": "REST API client"
+              }
+            ],
+            "persona": {
+              "description": "Assumed to be inside the trusted environment per the website model; the legacy REST API provides no authentication. A network client of an exposed nutch-server is an in-scope adversary only if the control API is reachable beyond the trusted environment."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Nutch is designed to operate in trusted environments, either locally or on a Hadoop cluster; only trusted operators reach its control surfaces, and HTTPS or network isolation for any exposed endpoint is the operator's responsibility."
+        },
+        {
+          "description": "Seeds, regex-urlfilter, normalizers, the plugin set, and backend credentials are operator-controlled trusted inputs, protected by filesystem permissions."
+        },
+        {
+          "description": "Indexer and storage backends (Solr, Elasticsearch, HDFS) are provisioned and secured by the operator."
+        },
+        {
+          "description": "Nutch opens outbound network connections to arbitrary fetched hosts, reads and writes the crawl store, runs parser libraries over untrusted bytes, and with nutch-server opens a listening HTTP port; it is not expected to run as root."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-hostile-content-parsing",
+        "name": "Hostile fetched content breaks parsing robustness (crash, OOM, hang, XXE)",
+        "description": "The primary in-model threat: whoever controls a fetched page can serve hostile HTML/XML/feeds/redirects/headers/robots.txt to crash the parser, exhaust resources, exfiltrate via the parser (XXE), or poison the crawl DB and extracted links. The committed property is robust handling of fetched content within configured limits: parsing and normalization complete or fail safely rather than corrupting the crawl store or host. Hostile content can be arbitrarily large, deep, or compressed (decompression/zip bombs, billion-laughs); super-linear CPU/memory in fetched-content size or a hang on crafted content is proposed as in-model, while 'slow on a huge legitimate crawl' is not. Whether XML/feed parsers are hardened against XXE and entity bombs by default is an open maintainer question.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers",
+          "asset-fetcher",
+          "asset-crawl-store"
+        ],
+        "mitigations": [
+          "control-resource-limits",
+          "control-plugin-selection"
+        ]
+      },
+      {
+        "bom-ref": "threat-fetched-content-code-execution",
+        "name": "Code execution driven by crawled content",
+        "description": "Fetched pages are data, not code; Nutch does not execute scripts from crawled pages server-side. Crawled-content-driven code execution would violate this property and is rated critical.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-parsers",
+          "asset-fetcher"
+        ]
+      },
+      {
+        "bom-ref": "threat-crawl-scope-escape",
+        "name": "Escape of the configured crawl scope",
+        "description": "Nutch fetches within the operator's URL filters and seeds and must not silently ignore the configured scope; fetching URLs the filters exclude is a violation (severity medium). By contrast, 'it fetched an internal URL' is not by itself a vulnerability: it means the operator's scope allowed it.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-url-filters",
+          "asset-fetcher"
+        ],
+        "mitigations": [
+          "control-url-filter-scoping"
+        ]
+      },
+      {
+        "bom-ref": "threat-crawler-ssrf",
+        "name": "SSRF to internal services via the crawler (by design)",
+        "description": "Reaching URLs is the crawler's function; Nutch provides no sandbox or curation of what it crawls, and it will fetch whatever the operator's scope permits, including internal hosts. Crawler 'SSRF' is inherent and controlled by operator URL filters, not by Nutch refusing to fetch; it is out of model unless the configured scope is bypassed. URL filters are a crawl-scoping tool, not a security boundary or a guarantee against SSRF.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-fetcher",
+          "asset-url-filters"
+        ],
+        "mitigations": [
+          "control-url-filter-scoping"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-exposed-nutch-server",
+        "name": "Unauthenticated nutch-server exposed outside the trusted environment",
+        "description": "The legacy nutch-server REST API provides no authentication and assumes a trusted environment. Exposing it (or the crawl store) to an untrusted network without fronting authentication is a documented misuse pattern, and defending such a deployment is an explicit non-goal; findings requiring an endpoint exposed outside the trusted environment are out of model.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-nutch-server"
+        ],
+        "mitigations": [
+          "control-trusted-environment"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-urlfilter-redos",
+        "name": "ReDoS in URL-filter or normalizer regex",
+        "description": "URL filters and normalizers are regex-based and are fed URLs extracted from hostile pages; regular-expression denial of service is a well-known class listed among the attack classes left to the operator, who must use bounded/safe regex. An unsafe default regex could be hardened at maintainer discretion.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-url-filters"
+        ],
+        "mitigations": [
+          "control-safe-regex"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-crawler-traps",
+        "name": "Crawler traps and infinite link spaces",
+        "description": "Hostile sites can present infinite link spaces or traps; these are bounded by fetch limits and are an operator tuning task. Following a redirect, hitting a trap, or using lots of CPU on a huge crawl is not a defect unless the cost is super-linear on crafted content.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-fetcher"
+        ],
+        "mitigations": [
+          "control-resource-limits"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-trusted-input-control",
+        "name": "Attacks requiring control of operator-trusted inputs",
+        "description": "Findings that require control of seeds, URL filters, plugin configuration, or the host are out of model (trusted input); the operator and anyone who controls seeds/filters/plugins/host are out-of-scope adversaries, as is anyone reaching a nutch-server or crawl store the operator exposed outside the trusted environment. The security of indexer/storage backends and the Hadoop cluster is likewise out of scope, as are contrib/unsupported plugins and examples, which are threat-modeled separately.",
+        "origin": "adversarial",
+        "affectedAssets": [
+          "asset-url-filters",
+          "asset-crawl-store",
+          "asset-indexer-backends"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-fetch",
+        "boundary": "boundary-fetch",
+        "name": "Fetch trust boundary",
+        "description": "The primary boundary: bytes from the internet become parsed structures. A fetcher/parser finding is in-model when reachable from attacker-controlled fetched content (a hostile page, feed, or redirect).",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-hostile-content-parsing",
+          "threat-fetched-content-code-execution",
+          "threat-crawl-scope-escape",
+          "threat-crawler-traps"
+        ],
+        "controlsAtBoundary": [
+          "control-resource-limits",
+          "control-url-filter-scoping",
+          "control-plugin-selection"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-operator-config",
+        "boundary": "boundary-operator-config",
+        "name": "Operator/config trust boundary",
+        "description": "Seeds, URL filters, plugin selection, and the nutch-server endpoint are operator-controlled and trusted; findings requiring control of them are out of model.",
+        "trustLevel": "trusted",
+        "threatsAtBoundary": [
+          "threat-exposed-nutch-server",
+          "threat-trusted-input-control"
+        ],
+        "controlsAtBoundary": [
+          "control-trusted-environment",
+          "control-protect-config"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-trusted-environment",
+      "name": "Run Nutch only in a trusted environment",
+      "description": "Do not expose nutch-server or the crawl store to untrusted networks without fronting authentication; keep the deployment inside the trusted environment the website model assumes.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-nutch-server"
+      ]
+    },
+    {
+      "bom-ref": "control-url-filter-scoping",
+      "name": "Scope the crawl with URL filters and seeds",
+      "description": "Use URL filters (regex-urlfilter.txt, domain/host filters) and seed scoping to avoid fetching internal or unintended hosts; without scoping the crawler will follow links anywhere, including internal hosts.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-url-filters",
+        "boundary-fetch"
+      ]
+    },
+    {
+      "bom-ref": "control-resource-limits",
+      "name": "Set fetcher and parser resource limits",
+      "description": "Set db.max.outlinks, fetch size/time limits, and parse limits appropriate to crawling hostile content, bounding resource use on hostile or large content.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-fetcher",
+        "asset-parsers"
+      ]
+    },
+    {
+      "bom-ref": "control-plugin-selection",
+      "name": "Choose plugin.includes deliberately",
+      "description": "Load only the protocol and parse plugins you need; the plugin.includes set determines the actually-exposed parser/protocol attack surface, and loading unnecessary or unsupported parser plugins widens it.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-parsers",
+        "asset-fetcher"
+      ]
+    },
+    {
+      "bom-ref": "control-safe-regex",
+      "name": "Use bounded, safe URL-filter regex",
+      "description": "The operator must use bounded/safe regular expressions in URL filters and normalizers, which are fed URLs from hostile pages, to avoid regular-expression denial of service.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-url-filters"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-backends",
+      "name": "Secure indexer and storage backends independently",
+      "description": "Secure Solr/Elasticsearch/HDFS backends with their own access control; Nutch writes to them but does not own their security.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-indexer-backends"
+      ]
+    },
+    {
+      "bom-ref": "control-protect-config",
+      "name": "Protect configuration files and crawl data",
+      "description": "Protect seeds, filter configuration, and crawl data with host filesystem permissions.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-crawl-store",
+        "boundary-operator-config"
+      ]
+    }
+  ]
+}

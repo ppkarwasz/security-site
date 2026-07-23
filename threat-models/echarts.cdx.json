@@ -1,0 +1,245 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:08Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-echarts",
+      "name": "Apache ECharts",
+      "description": "JavaScript charting and visualization library rendering via Canvas or SVG, with HTML rendering reserved for specific components such as tooltips and the dataView toolbox feature. Its APIs generally assume trusted inputs: ECharts performs no automatic sanitization because it cannot determine which inputs are untrusted, so the embedding application must escape, sanitize, or validate untrusted content before passing it to the identified at-risk options.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://echarts.apache.org/handbook/en/best-practices/security/#",
+          "comment": "Source security model document (ECharts Security Guidelines); this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://echarts.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "echarts"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://echarts.apache.org/handbook/en/best-practices/security/#"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-tooltip-formatter-xss",
+        "name": "XSS via untrusted HTML in tooltip.formatter",
+        "description": "The tooltip.formatter option accepts HTML/DOM input; passing untrusted content into it enables script injection in the host page. The core principle of the guidelines is that if no untrusted content is involved, these injection vulnerabilities will not arise; guarding untrusted input is the application's responsibility.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-html-escaping",
+          "control-html-sanitization",
+          "control-sandboxed-iframe"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-dataview-xss",
+        "name": "XSS via untrusted HTML in the dataView toolbox feature",
+        "description": "Options of toolbox.feature.dataView can inject script into the dataView panel when they carry untrusted HTML strings; the application must escape or sanitize them.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-html-escaping",
+          "control-html-sanitization"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-extracsstext-css-injection",
+        "name": "CSS injection via tooltip.extraCssText",
+        "description": "APIs accepting inline CSS strings (modifying style.cssText), such as tooltip.extraCssText, allow CSS injection when sourced from untrusted inputs. CSS sanitization is complex and most sanitizers remove all CSS by default; the application must validate such values.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-css-validation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-link-protocol-xss",
+        "name": "Protocol-based XSS via untrusted URLs in link options",
+        "description": "Untrusted URLs in title.link, title.sublink, and treemap or sunburst data.link can execute malicious code via javascript: or data: protocols. The application must enforce protocol whitelisting before passing URLs to ECharts.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-url-protocol-whitelist"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-saveasimage-filename",
+        "name": "Unsafe download filename in saveAsImage",
+        "description": "The toolbox.feature.saveAsImage.name option accepts a download filename; untrusted values can carry path traversal sequences or problematic characters. Safe inputs originate from trusted sources, use only ASCII characters, and respect length limits; traversal sequences should be stripped from untrusted inputs.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-filename-validation"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-transform-reg-redos",
+        "name": "ReDoS via the dataset filter transform reg option",
+        "description": "The filter transform's config.reg option compiles strings directly into RegExp without complexity validation. Patterns with catastrophic backtracking (nested quantifiers such as ^(a+)+$) can freeze browsers or block server-side rendering through regular expression denial of service when the pattern comes from an untrusted source.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-regex-restrictions"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-untrusted-js-function",
+        "name": "Code execution via untrusted JS-function options",
+        "description": "JS-function options (callbacks) generally pose minimal risk when sourced from application code, but untrusted function inputs carry execution risks equivalent to untrusted HTML and require the same mitigation strategies (sanitization, sandboxing).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-sandboxed-iframe"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-html-escaping",
+      "name": "HTML-escape untrusted values",
+      "description": "Escape the characters ampersand, less-than, greater-than, double quote, and single quote before interpolating untrusted values into HTML-accepting options, for example with echarts.format.encodeHTML in a tooltip formatter. Essential for both correctness and security.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-html-sanitization",
+      "name": "Sanitize untrusted HTML server-side",
+      "description": "When untrusted markup must be interpreted as actual HTML, run it through a sanitizer that removes script, style, and link elements, event handler attributes such as onclick, and dangerous protocols (javascript:, data:). Server-side enforcement is essential for content originating from clients, as client-side sanitization alone can be bypassed.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-sandboxed-iframe",
+      "name": "Sandbox scenarios requiring untrusted code",
+      "description": "For scenarios requiring untrusted code execution, sandboxed iframes provide enhanced isolation.",
+      "category": "compensating",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-css-validation",
+      "name": "Validate untrusted inline CSS",
+      "description": "Validate inline CSS strings from untrusted sources before passing them to options that modify style.cssText; most sanitizers remove all CSS by default.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-url-protocol-whitelist",
+      "name": "Whitelist URL protocols",
+      "description": "Enforce a whitelist of safe protocols on any URL passed to link options, rejecting javascript: and data: URLs.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-filename-validation",
+      "name": "Validate download filenames",
+      "description": "Restrict saveAsImage filenames from untrusted sources to ASCII characters, validate their length, and strip path traversal sequences.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-regex-restrictions",
+      "name": "Restrict untrusted regular expressions",
+      "description": "For untrusted sources of the filter transform reg option: enforce a maximum length and reject nested quantifiers, whitelist only simple patterns, use linear-time regex engines or implement timeouts, and disallow reg from external configurations.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

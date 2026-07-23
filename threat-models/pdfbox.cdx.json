@@ -1,0 +1,156 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:04Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-pdfbox",
+      "name": "Apache PDFBox",
+      "description": "Java library (pdfbox.jar) for creating, manipulating, and extracting content from PDF documents, accessed through its public Java API by other Java applications. Command-line utilities (PDFToText, PDFDebugger, and others) are convenience wrappers around the library API and follow the library's security scope. PDF encryption (RC4, AES-128, AES-256) and digital signatures are implemented using the Java Cryptography Architecture and the Bouncy Castle libraries.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/pdfbox/security/policy",
+          "comment": "Source security model document; this file is a structured translation of it. The canonical human-authored version is published at https://pdfbox.apache.org/security.html."
+        },
+        {
+          "type": "website",
+          "url": "https://pdfbox.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "pdfbox"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/pdfbox/security/policy"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/pdfbox/trunk/SECURITY.md"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-untrusted-pdf-exploitation",
+        "name": "Code execution, data access, sandbox escape, or disproportionate resource amplification from an untrusted PDF",
+        "description": "Remote code execution, privilege escalation, unauthorized data access, escape from an embedding application's sandbox or security boundary, or disproportionate resource amplification (small attacker-controlled inputs triggering catastrophic memory or CPU consumption) caused by processing an untrusted PDF document. These are genuine vulnerabilities and should be reported privately.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-operational-controls"
+        ]
+      },
+      {
+        "bom-ref": "threat-parser-robustness-limitations",
+        "name": "Unchecked exceptions and proportionate resource consumption on malformed PDFs",
+        "description": "Malformed PDFs may cause unchecked exceptions such as NullPointerException or StackOverflowError, or may consume significant memory or CPU relative to document size. General parser and resource exhaustion issues are treated as robustness limitations rather than security vulnerabilities. Pure resource exhaustion findings without privilege escalation, unauthorized access, or disproportionate amplification (for example tenant starvation or indexing-service disruption from a tiny crafted input) are generally out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "mitigations": [
+          "control-operational-controls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-crypto-misuse",
+        "name": "Incorrect use of cryptographic libraries by PDFBox",
+        "description": "Issues in how PDFBox uses the JCA and Bouncy Castle libraries, for example incorrect key derivation or bypass of access permissions, are in scope as PDFBox vulnerabilities.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "mitigations": [
+          "control-dependency-updates"
+        ]
+      },
+      {
+        "bom-ref": "threat-crypto-dependency-vulnerabilities",
+        "name": "Vulnerabilities in the JCA or Bouncy Castle dependencies",
+        "description": "Vulnerabilities in the Java Cryptography Architecture or Bouncy Castle libraries themselves should be reported to their respective projects; PDFBox will incorporate fixes in its releases as needed.",
+        "origin": "structural",
+        "mitigations": [
+          "control-dependency-updates"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-classpath-environment-attacks",
+        "name": "Attacks requiring control of the embedding JVM environment",
+        "description": "The embedding application is assumed to control its own JVM environment, including classpath, JVM arguments, installed security providers, classloaders, and dependency resolution. Attacks that require the attacker to influence any of these are out of scope.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-operational-controls",
+      "name": "Apply operational controls when processing untrusted documents",
+      "description": "Applications embedding PDFBox are expected to apply appropriate operational controls, such as timeouts, memory limits, process isolation, and sandboxing, when processing untrusted documents at scale or in multi-tenant environments. Resource exhaustion risks in those contexts are the responsibility of the embedding application, not of PDFBox itself.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-dependency-updates",
+      "name": "Incorporate cryptographic dependency fixes in releases",
+      "description": "PDFBox incorporates fixes for vulnerabilities in its cryptographic dependencies (JCA, Bouncy Castle) in its releases as needed.",
+      "category": "corrective",
+      "status": "implemented"
+    }
+  ]
+}

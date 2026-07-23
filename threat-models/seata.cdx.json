@@ -1,0 +1,101 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:59:59Z",
+    "component": {
+      "type": "application",
+      "bom-ref": "component-seata",
+      "name": "Apache Seata",
+      "description": "Distributed transaction solution. The security model document is a SecretKey security announcement for Seata-Console, the user console shipped since 1.5.0 that offers query functionality for global transactions, branch transactions, and global lock information. Login uses a username/password verified by the backend, which issues a time-sensitive JWT token signed with a SecretKey; subsequent requests carry the JWT token, which the backend validates before returning data.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://seata.apache.org/docs/next/security/secret-key",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://seata.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "seata"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://seata.apache.org/docs/next/security/secret-key"
+      }
+    ]
+  },
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-default-credentials",
+        "name": "Data leakage or intrusion through default Seata-Console credentials and SecretKey",
+        "description": "Seata-Console's default configuration file contains default settings for the username, password, and SecretKey. Deploying to production without changing them risks data leakage or intrusion due to default credentials; users must change seata.console.user.username, seata.console.user.password, and seata.security.secretKey before the first deployment.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "mitigations": [
+          "control-change-default-credentials"
+        ]
+      },
+      {
+        "bom-ref": "threat-public-network-exposure",
+        "name": "Unnecessary public network access to Seata-Console",
+        "description": "Public network exposure of Seata-Console increases attack exposure. In a production environment, unnecessary public network access should be prohibited; even though Seata-Console does not store or display sensitive data, restricting access is strongly recommended.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "mitigations": [
+          "control-restrict-network-access"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-jwt-authentication",
+      "name": "Username/password login with time-sensitive JWT tokens",
+      "description": "Seata-Console sends the username and password to the backend service for verification; on success the backend generates a time-sensitive JWT token based on a SecretKey. Subsequent visits carry the JWT token, which the backend validates, denying access if it is invalid.",
+      "category": "preventive",
+      "status": "implemented"
+    },
+    {
+      "bom-ref": "control-change-default-credentials",
+      "name": "Change default username, password, and SecretKey before deployment",
+      "description": "When deploying Seata-Console for the first time, change the default username, password, and SecretKey (seata.console.user.username, seata.console.user.password, seata.security.secretKey in application.yml) before deployment. In a Kubernetes deployment, manage this information independently and hierarchically using ConfigMap/Secret resources.",
+      "category": "preventive",
+      "status": "recommended"
+    },
+    {
+      "bom-ref": "control-restrict-network-access",
+      "name": "Prohibit unnecessary public network access",
+      "description": "In a production environment, prohibit unnecessary public network access to Seata-Console. If public network access is required, configure firewalls or ACL rules to restrict IP access.",
+      "category": "preventive",
+      "status": "recommended"
+    }
+  ]
+}

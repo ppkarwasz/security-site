@@ -1,0 +1,493 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T15:41:18Z",
+    "component": {
+      "type": "framework",
+      "bom-ref": "component-cxf",
+      "name": "Apache CXF",
+      "description": "Open-source services framework for building and consuming SOAP (JAX-WS) and REST (JAX-RS) services, with an interceptor-based message pipeline and broad WS-* support (WS-Security, WS-Trust, WS-SecurityPolicy, WS-Addressing, WS-ReliableMessaging). CXF is a framework, not a deployed application: it provides mechanisms (WS-Security, TLS conduits, auth/authorization interceptors, input limits) and the service integrator chooses which are active. The threat model is a DRAFT umbrella for the runtime framework (apache/cxf), covering supported lines 3.6.x / 4.0.x / 4.1.x; cxf-fediz is modelled separately and the build-time repos (cxf-xjc-utils, cxf-build-utils) are out of the runtime model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/cxf/blob/main/THREAT_MODEL.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://cxf.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "cxf"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/cxf/blob/main/THREAT_MODEL.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/cxf/main/THREAT_MODEL.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-cxf",
+      "name": "CXF service deployment",
+      "description": "Architecture described by the threat model: a CXF-hosted service (typically in a servlet container or via the CXF HTTP transport) whose inbound interceptor chain is the trust boundary for untrusted client messages; on the client side, CXF's HTTP conduit and WSDL/schema/MTOM resolution make outbound requests to remote services.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-soap-pipeline",
+          "type": "subsystem",
+          "name": "SOAP / JAX-WS message pipeline",
+          "description": "Endpoint plus interceptor chain with StAX/XML parsing of inbound SOAP envelopes (headers, body, attachments).",
+          "zone": "zone-cxf-service"
+        },
+        {
+          "bom-ref": "asset-ws-security",
+          "type": "module",
+          "name": "WS-Security processing (via WSS4J)",
+          "description": "Signature, encryption, UsernameToken, SAML, and Timestamp interceptors: verify signatures and encryption, validate tokens (UsernameToken, SAML, X.509, Kerberos), check timestamps/nonces for replay, and enforce algorithm/BSP compliance when WS-SecurityPolicy is configured.",
+          "zone": "zone-cxf-service"
+        },
+        {
+          "bom-ref": "asset-jaxrs-pipeline",
+          "type": "subsystem",
+          "name": "REST / JAX-RS pipeline",
+          "description": "Resource matching and providers (JSON/XML/multipart) that unmarshal request bodies into objects, a deserialization and parser-DoS surface.",
+          "zone": "zone-cxf-service"
+        },
+        {
+          "bom-ref": "asset-http-conduit",
+          "type": "gateway",
+          "name": "HTTP transport / conduit",
+          "description": "Client-side HTTP(S) conduit and WSDL/schema/MTOM URL fetching: network egress, an SSRF surface if any URL is attacker-influenced.",
+          "zone": "zone-cxf-service"
+        },
+        {
+          "bom-ref": "asset-auth-interceptors",
+          "type": "module",
+          "name": "AuthN/AuthZ interceptors and security context",
+          "description": "interceptor.security.* and common.security.*: authorizing interceptors map the established identity to roles and permitted operations (AbstractAuthorizingInInterceptor).",
+          "zone": "zone-cxf-service"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-untrusted-clients",
+          "name": "Untrusted service clients",
+          "type": "trust",
+          "description": "Any peer that can send a SOAP/REST request to a CXF endpoint; anonymous until the integrator-configured interceptors validate its WS-Security token or transport credential."
+        },
+        {
+          "bom-ref": "zone-cxf-service",
+          "name": "CXF-hosted service",
+          "type": "trust",
+          "description": "The endpoint, interceptor chains, providers, and the integrator's application code and configuration."
+        },
+        {
+          "bom-ref": "zone-remote-services",
+          "name": "Remote services",
+          "type": "trust",
+          "description": "Remote endpoints CXF consumes as a client, and hosts referenced by WSDL/schema imports or MTOM references; a malicious remote service (hostile WSDL/response) is a secondary adversary."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-inbound",
+          "name": "Inbound interceptor chain",
+          "type": "trust",
+          "zones": [
+            "zone-untrusted-clients",
+            "zone-cxf-service"
+          ]
+        },
+        {
+          "bom-ref": "boundary-outbound",
+          "name": "Client conduit / remote fetch",
+          "type": "trust",
+          "zones": [
+            "zone-cxf-service",
+            "zone-remote-services"
+          ]
+        }
+      ],
+      "actors": [
+        {
+          "bom-ref": "actor-service-client",
+          "party": {
+            "roles": [
+              {
+                "name": "Service client"
+              }
+            ],
+            "persona": {
+              "description": "Untrusted: any peer that can send a SOAP/REST request to a CXF endpoint. Becomes an authenticated client once the integrator's configured interceptors have validated its WS-Security token or transport credential."
+            }
+          }
+        },
+        {
+          "bom-ref": "actor-service-integrator",
+          "party": {
+            "roles": [
+              {
+                "name": "Service integrator"
+              }
+            ],
+            "persona": {
+              "description": "Developer/operator who selects transports, interceptors, WS-SecurityPolicy, JAX-RS providers, and limits. Trusted; configures the security posture; out of model as an adversary."
+            }
+          }
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "A JVM and (typically) a servlet container or the CXF HTTP transport host the endpoints; keystores/truststores and JCE providers are supplied and managed by the integrator."
+        },
+        {
+          "description": "TLS is provided by the container or conduit configuration; CXF supports but does not force it."
+        },
+        {
+          "description": "CXF parses XML/JSON, performs crypto, opens outbound HTTP(S) for client calls, WSDL/schema imports, and MTOM, and reads configured keystores; it is not assumed to spawn processes or read arbitrary files outside configured resources."
+        },
+        {
+          "description": "Spring/Blueprint/cxf.xml configuration is integrator-trusted and never sourced from a request."
+        },
+        {
+          "description": "The underlying XML/crypto stacks (JAXP/StAX provider, JCE provider, WSS4J internals) are in model only as CXF configures and invokes them; provider bugs are upstream. Application business logic behind an endpoint is out of scope."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-xxe-xml-dos",
+        "name": "XXE and XML parser denial of service on inbound messages",
+        "description": "Raw SOAP/XML off the wire is the classic XML-attack surface: XXE file read/SSRF, entity-expansion (billion-laughs), and deeply-nested-document DoS causing OOM or CPU exhaustion. CXF is stated to ship input-limit and secure-parsing defaults; the model records their exact out-of-the-box status as an open maintainer question, and an XXE/XML-bomb reachable in a default configuration would be VALID.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-soap-pipeline",
+          "asset-jaxrs-pipeline"
+        ],
+        "mitigations": [
+          "control-secure-xml-defaults"
+        ]
+      },
+      {
+        "bom-ref": "threat-signature-wrapping",
+        "name": "XML signature wrapping (XSW) alters a signed message",
+        "description": "Signature wrapping defeats naive 'is it signed?' checks: an XML Signature covering 'a' element is not the same as covering 'the' element, and the binding must verify what is signed. Accepting a message altered by XSW where a WS-SecurityPolicy required signature protection is a critical violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ws-security"
+        ],
+        "mitigations": [
+          "control-configure-ws-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-token-forgery-replay",
+        "name": "Forged, expired, or replayed WS-Security tokens",
+        "description": "Crafted WS-Security headers: forged or expired tokens, SAML assertion forgery or replay, and replay of captured tokens. When WS-SecurityPolicy/interceptors are configured, signatures and tokens are verified and replay windows enforced; an accepted forged/replayed/unsigned message where policy required otherwise is a critical violation.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "spoofing"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ws-security"
+        ],
+        "mitigations": [
+          "control-configure-ws-security"
+        ]
+      },
+      {
+        "bom-ref": "threat-authorization-bypass",
+        "name": "Operation invoked without the required role",
+        "description": "Authorizing interceptors deny operations the established identity lacks; an operation invoked without the required role is a critical violation of the authorization-enforcement property.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-auth-interceptors"
+        ],
+        "mitigations": [
+          "control-authorization-interceptors"
+        ]
+      },
+      {
+        "bom-ref": "threat-provider-deserialization",
+        "name": "Deserialization attacks via JAX-RS providers",
+        "description": "JSON/XML/Java deserialization through JAX-RS providers unmarshalling untrusted bodies, including unsafe polymorphic JSON, can lead to remote code execution. Whether unsafe polymorphic/DTD deserialization is off by default for the shipped providers is an open maintainer question; a gadget in a provider the integrator did not enable is outside the default surface.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-jaxrs-pipeline"
+        ],
+        "mitigations": [
+          "control-harden-jaxrs-providers"
+        ]
+      },
+      {
+        "bom-ref": "threat-ssrf-remote-references",
+        "name": "SSRF via WSDL/schema/MTOM remote references",
+        "description": "As a client, or when resolving WSDL/schema imports or MTOM references, CXF makes outbound requests to URLs; if any URL is attacker-influenced this is a server-side request forgery surface. In-model if a URL is attacker-influenceable; whether remote resolution is disabled or allow-listed by default is an open maintainer question.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-conduit"
+        ],
+        "mitigations": [
+          "control-restrict-remote-resolution"
+        ]
+      },
+      {
+        "bom-ref": "threat-hostile-remote-service",
+        "name": "Malicious remote service when CXF is the client",
+        "description": "A malicious remote service (hostile WSDL or response) is the secondary adversary: responses consumed by the CXF client conduit must be validated as untrusted on the client side too.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-conduit"
+        ],
+        "mitigations": [
+          "control-validate-client-responses"
+        ]
+      },
+      {
+        "bom-ref": "threat-transport-mitm",
+        "name": "Man-in-the-middle where transport security was expected",
+        "description": "MITM where TLS was expected, or acceptance of an invalid certificate, violates the transport-security-support property: TLS conduits/listeners perform hostname and certificate validation when configured. A plaintext-password UsernameToken over non-TLS is interceptable (a documented false friend).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-http-conduit"
+        ],
+        "mitigations": [
+          "control-enforce-tls"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-message-crash",
+        "name": "Crash or hang from malformed SOAP/REST input",
+        "description": "Robust message parsing is a claimed property: malformed SOAP/REST input should yield a clean fault, not memory corruption, an unhandled crash, or a hang.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          }
+        ],
+        "affectedAssets": [
+          "asset-soap-pipeline",
+          "asset-jaxrs-pipeline"
+        ]
+      },
+      {
+        "bom-ref": "threat-no-security-without-configuration",
+        "name": "No security without integrator configuration",
+        "description": "An endpoint with no WS-Security policy and no transport security is authenticated and confidential only to the extent the integrator wired it; CXF does not impose message security by default. Insecurity that is purely an integrator misconfiguration (disabling signature verification, trusting all TLS certs, exposing an unauthenticated endpoint, weak algorithms explicitly configured) is the integrator's responsibility and out of model. WS-ReliableMessaging and WS-Addressing are reliability/routing, not security.",
+        "origin": "accidental",
+        "affectedAssets": [
+          "asset-ws-security",
+          "asset-http-conduit"
+        ],
+        "mitigations": [
+          "control-configure-ws-security",
+          "control-enforce-tls"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-inbound",
+        "boundary": "boundary-inbound",
+        "name": "Inbound interceptor chain trust boundary",
+        "description": "Bytes off the wire are untrusted until the configured interceptors (decoding, optional WS-Security, optional auth) have processed them. A finding is in-model on the server inbound path if reachable from an untrusted client message before the integrator-configured auth boundary.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-xxe-xml-dos",
+          "threat-signature-wrapping",
+          "threat-token-forgery-replay",
+          "threat-authorization-bypass",
+          "threat-provider-deserialization",
+          "threat-malformed-message-crash",
+          "threat-transport-mitm"
+        ],
+        "controlsAtBoundary": [
+          "control-secure-xml-defaults",
+          "control-configure-ws-security",
+          "control-authorization-interceptors",
+          "control-harden-jaxrs-providers",
+          "control-enforce-tls"
+        ]
+      },
+      {
+        "bom-ref": "trust-boundary-outbound",
+        "boundary": "boundary-outbound",
+        "name": "Client conduit trust boundary",
+        "description": "Outbound requests for client calls, WSDL/schema imports, and MTOM references cross to remote services; responses and attacker-influenced URLs must be treated as untrusted.",
+        "trustLevel": "semi-trusted",
+        "threatsAtBoundary": [
+          "threat-ssrf-remote-references",
+          "threat-hostile-remote-service"
+        ],
+        "controlsAtBoundary": [
+          "control-restrict-remote-resolution",
+          "control-validate-client-responses"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-configure-ws-security",
+      "name": "Configure WS-SecurityPolicy / WS-Security interceptors",
+      "description": "Configure WS-SecurityPolicy and interceptors for the authentication, signing, and encryption the service actually requires, and verify what is signed (anti-XSW), not merely that something is. Without this configuration a message is only transport-trusted.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ws-security",
+        "boundary-inbound"
+      ]
+    },
+    {
+      "bom-ref": "control-authorization-interceptors",
+      "name": "Authorizing interceptors",
+      "description": "Authorizing interceptors (AbstractAuthorizingInInterceptor) map the established identity to roles and deny operations the identity lacks; the integrator configures the mechanism.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-auth-interceptors"
+      ]
+    },
+    {
+      "bom-ref": "control-secure-xml-defaults",
+      "name": "Keep the secure XML defaults on",
+      "description": "Keep the secure XML-processing defaults on (depth/entity/element/size limits); do not disable secure StAX processing. The model's wave-1 maintainer question is whether these secure defaults are on out of the box.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-soap-pipeline",
+        "asset-jaxrs-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-enforce-tls",
+      "name": "Enforce TLS with proper validation",
+      "description": "Enforce TLS with proper hostname and certificate validation on both listeners and client conduits; do not disable certificate/hostname validation for convenience.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-http-conduit",
+        "boundary-inbound",
+        "boundary-outbound"
+      ]
+    },
+    {
+      "bom-ref": "control-harden-jaxrs-providers",
+      "name": "Harden JAX-RS providers",
+      "description": "Restrict deserialization (no unsafe polymorphic JSON; disable DTDs in XML providers) and set body-size limits on JAX-RS providers handling untrusted bodies.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-jaxrs-pipeline"
+      ]
+    },
+    {
+      "bom-ref": "control-restrict-remote-resolution",
+      "name": "Disable or allow-list remote WSDL/schema/MTOM resolution",
+      "description": "Disable or allow-list remote WSDL/schema/MTOM resolution to close the SSRF surface; never enable remote entity/WSDL/schema resolution against untrusted input.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-http-conduit",
+        "boundary-outbound"
+      ]
+    },
+    {
+      "bom-ref": "control-validate-client-responses",
+      "name": "Validate client-side responses as untrusted",
+      "description": "When CXF consumes a remote service, validate the responses as untrusted input on the client side too.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-outbound"
+      ]
+    },
+    {
+      "bom-ref": "control-track-advisories",
+      "name": "Track advisories and stay on a supported line",
+      "description": "Track https://cxf.apache.org/security-advisories.html and stay on a supported release line (3.6.x / 4.0.x / 4.1.x).",
+      "category": "corrective",
+      "status": "recommended"
+    }
+  ]
+}

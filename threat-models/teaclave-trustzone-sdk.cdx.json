@@ -1,0 +1,421 @@
+{
+  "specFormat": "CycloneDX",
+  "specVersion": "2.0",
+  "metadata": {
+    "timestamp": "2026-07-23T16:00:12Z",
+    "component": {
+      "type": "library",
+      "bom-ref": "component-teaclave-trustzone-sdk",
+      "name": "Apache Teaclave TrustZone SDK",
+      "description": "Rust SDK for writing Arm TrustZone Trusted Applications (TAs) and Client Applications (CAs), following the GlobalPlatform TEE Internal Core API and the OP-TEE implementation it is built on. Nothing in the SDK weakens or replaces those guarantees; it provides ergonomic Rust bindings on top. optee-utee is the TA library on the trusted Secure World side; optee-teec is the CA library running in the untrusted Normal World. Individual demos (e.g. projects/web3/eth_wallet) carry their own additional security-assumptions sections not repeated in the model.",
+      "externalReferences": [
+        {
+          "type": "threat-model",
+          "url": "https://github.com/apache/teaclave-trustzone-sdk/blob/main/docs/security-model.md",
+          "comment": "Source security model document; this file is a structured translation of it."
+        },
+        {
+          "type": "website",
+          "url": "https://teaclave.apache.org/"
+        }
+      ]
+    },
+    "supplier": {
+      "name": "The Apache Software Foundation",
+      "url": [
+        "https://www.apache.org/"
+      ]
+    },
+    "properties": [
+      {
+        "name": "asf:pmc",
+        "value": "teaclave"
+      },
+      {
+        "name": "asf:security-model-link",
+        "value": "https://github.com/apache/teaclave-trustzone-sdk/blob/main/docs/security-model.md"
+      },
+      {
+        "name": "asf:security-model-source",
+        "value": "https://raw.githubusercontent.com/apache/teaclave-trustzone-sdk/main/docs/security-model.md"
+      }
+    ]
+  },
+  "blueprints": [
+    {
+      "bom-ref": "blueprint-trustzone",
+      "name": "TrustZone two-world partition",
+      "description": "A TrustZone system is partitioned into two worlds by hardware: the Normal World (REE) runs the rich OS (Linux/Android), the CA, and all user apps and is untrusted; the Secure World (TEE) runs OP-TEE OS and Trusted Applications and is trusted. Secure World memory is not visible to the Normal World. The single most important boundary is the TA entry point: everything crossing from the Normal World into a TA is attacker-controlled until the TA has validated it.",
+      "modelTypes": [
+        "architecture"
+      ],
+      "assets": [
+        {
+          "bom-ref": "asset-optee-utee",
+          "type": "module",
+          "name": "optee-utee (TA library)",
+          "description": "Boundary plus trusted code: the boundary lives here in parameter.rs, tee_parameter.rs, the entry-point glue (#[ta_invoke_command], #[ta_open_session] macros), and any unsafe dereference of caller-supplied pointers/lengths. ParamMemref::buffer() constructs a Rust slice directly over the Normal-World-supplied pointer and size; OP-TEE core guarantees the pointer refers to memory the caller may share, but the contents and length are attacker-chosen and the backing memory remains mapped and writable by the Normal World during the call.",
+          "zone": "zone-secure-world"
+        },
+        {
+          "bom-ref": "asset-optee-utee-macros",
+          "type": "component",
+          "name": "optee-utee-macros (entry-point codegen)",
+          "description": "Boundary: the generated TA_*EntryPoint wrappers must faithfully pass param_types and the raw params and propagate errors without dropping them.",
+          "zone": "zone-secure-world"
+        },
+        {
+          "bom-ref": "asset-optee-teec",
+          "type": "module",
+          "name": "optee-teec (CA library)",
+          "description": "Runs in the adversary's world. 'Missing input validation' here is generally not a TA-security finding; the TA cannot trust this code regardless. Focus is memory safety and not mishandling secrets returned to the CA.",
+          "zone": "zone-normal-world"
+        },
+        {
+          "bom-ref": "asset-in-ta-crates",
+          "type": "component",
+          "name": "In-TA crates processing untrusted data (secure_db, rustls_provider)",
+          "description": "Logic runs in the TEE but inputs (DB contents persisted via Normal World storage, bytes from a TLS peer) originate outside the TCB; the boundary invariants apply to those inputs. Deserialization of shared proto structures inside the TA is boundary code: a malicious CA can send malformed proto bytes.",
+          "zone": "zone-secure-world"
+        },
+        {
+          "bom-ref": "asset-secure-storage",
+          "type": "data-store",
+          "name": "Secure storage",
+          "description": "Confidential and integrity-protected, but not inherently anti-rollback or highly available: OP-TEE may persist secure objects as encrypted blobs on the Normal World filesystem, where the adversary can delete or roll them back.",
+          "zone": "zone-normal-world"
+        },
+        {
+          "bom-ref": "asset-ta-dependencies",
+          "type": "component",
+          "name": "TA dependency tree",
+          "description": "Every crate compiled into a TA runs inside the Secure World and is part of the TCB, including crypto crates (rustls, rustls-rustcrypto, ed25519-dalek, secp256k1, sha3, bip32) and serialization crates (serde/bincode). The trust boundary stops attacker input at the entry point; it does not sandbox the TA's own dependencies.",
+          "zone": "zone-secure-world"
+        }
+      ],
+      "zones": [
+        {
+          "bom-ref": "zone-normal-world",
+          "name": "Normal World (REE)",
+          "type": "trust",
+          "description": "Rich OS, the CA, and all user apps; untrusted, adversary-controlled up to root privileges."
+        },
+        {
+          "bom-ref": "zone-secure-world",
+          "name": "Secure World (TEE)",
+          "type": "trust",
+          "description": "OP-TEE OS and Trusted Applications; trusted."
+        }
+      ],
+      "boundaries": [
+        {
+          "bom-ref": "boundary-ta-entry",
+          "name": "TA entry point",
+          "type": "trust",
+          "zones": [
+            "zone-normal-world",
+            "zone-secure-world"
+          ]
+        }
+      ],
+      "assumptions": [
+        {
+          "description": "Trusted Computing Base: the hardware root of trust and TrustZone partitioning, the secure boot chain and OP-TEE OS, the Trusted Application itself once loaded and verified by OP-TEE, and the GlobalPlatform Internal Core API surface OP-TEE provides."
+        },
+        {
+          "description": "The adversary has full control of the Normal World including root: it can invoke any TA with arbitrary parameters, place arbitrary content in shared memory and mutate it concurrently during a call (TOCTOU), read any Normal World memory and files including encrypted secure-storage blobs, delete/withhold/replay/reorder anything stored or transmitted through the Normal World, and observe timing and other side channels."
+        },
+        {
+          "description": "A secure user interface (trusted display/input) is hardware-specific and not provided by this SDK; a user confirmation that round-trips through the Normal World cannot be trusted."
+        },
+        {
+          "description": "Cryptographic operations should use the OP-TEE/GlobalPlatform crypto API surface (crypto_op.rs, arithmetical.rs) rather than re-implementing primitives in the TA."
+        },
+        {
+          "description": "no-std vs std is a TCB-size decision: std mode pulls a substantially larger dependency and runtime surface into the TCB; prefer the smallest dependency set that meets the requirement."
+        },
+        {
+          "description": "examples/ are illustrative teaching material, not hardened production code; projects/ are reference applications with their own stated security assumptions; tests, patches, and tools are build/test-time, not runtime TCB."
+        }
+      ]
+    }
+  ],
+  "threats": {
+    "threats": [
+      {
+        "bom-ref": "threat-malicious-ta-parameters",
+        "name": "Malicious parameters at the TA entry point",
+        "description": "The adversary can invoke any TA, open any session, and call any command ID with arbitrary parameters: values, buffer pointers, and buffer lengths are all attacker-chosen, and every byte of a memref is adversarial (a size of 0, a huge size, or a size not matching the payload are all legal inputs; no NUL-termination, well-formedness, or non-emptiness may be assumed). Value parameters are untrusted in content but bounded and not aliased to Normal World memory; Memref parameters are the high-risk case.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-optee-utee",
+          "asset-optee-utee-macros"
+        ],
+        "mitigations": [
+          "control-param-type-checking",
+          "control-boundary-invariants"
+        ]
+      },
+      {
+        "bom-ref": "threat-toctou-shared-memory",
+        "name": "Concurrent mutation of shared memory (TOCTOU / double fetch)",
+        "description": "The Normal World can mutate shared-memory buffers concurrently, including during a TA call. Reading the same shared field twice and assuming it unchanged is a double fetch; MemrefInput must be treated as read-once.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-optee-utee"
+        ],
+        "mitigations": [
+          "control-copy-then-validate"
+        ]
+      },
+      {
+        "bom-ref": "threat-output-secret-leak",
+        "name": "Secret leakage through Output/Inout buffers",
+        "description": "Anything written to an output memref becomes visible to the Normal World; secrets must never cross to the Normal World in cleartext unless the application's threat model explicitly accepts it (returning a mnemonic or key to the CA is a deliberate, documented risk where it appears in demos).",
+        "origin": "accidental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "affectedAssets": [
+          "asset-optee-utee"
+        ],
+        "mitigations": [
+          "control-deliberate-outputs"
+        ]
+      },
+      {
+        "bom-ref": "threat-malformed-proto-deserialization",
+        "name": "Malformed shared-structure bytes deserialized inside the TA",
+        "description": "Deserialization of proto/shared message structures inside the TA is boundary code: a malicious CA can send malformed proto bytes, and in-TA crates such as secure_db and rustls_provider process data (persisted DB contents, TLS peer bytes) originating outside the TCB.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-in-ta-crates"
+        ],
+        "mitigations": [
+          "control-boundary-invariants"
+        ]
+      },
+      {
+        "bom-ref": "threat-storage-rollback",
+        "name": "Rollback, deletion, or withholding of secure storage",
+        "description": "OP-TEE may persist secure objects as encrypted blobs on the Normal World filesystem, where the adversary can delete or roll them back. Rollback of secure storage when no anti-rollback hardware (e.g. RPMB) is used is out of scope for the SDK and the responsibility of the hardware/integrator.",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "tampering"
+          }
+        ],
+        "affectedAssets": [
+          "asset-secure-storage"
+        ],
+        "mitigations": [
+          "control-rpmb-anti-rollback"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-tcb-dependency-compromise",
+        "name": "Vulnerability or backdoor in a TA dependency",
+        "description": "A vulnerability or backdoor in a TA dependency is code execution inside the TEE with access to the TA's secrets and capabilities; the TCB includes the full transitive dependency tree of each TA. Software crypto crates perform key operations in TA-resident memory rather than a hardware crypto engine, making side-channel resistance the integrator's concern; any RNG reaching getrandom must be sourced from a TEE/hardware entropy source, never the Normal World. Build-time dependencies (proc-macros, build scripts) execute on the build host and can tamper with the generated TA binary. The repository does not currently ship a dependency-vetting policy (no deny.toml, cargo-audit/vet/supply-chain configuration, or committed lockfile policy for downstream TAs).",
+        "origin": "adversarial",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "elevation-of-privilege"
+          }
+        ],
+        "affectedAssets": [
+          "asset-ta-dependencies"
+        ],
+        "mitigations": [
+          "control-pin-lock-dependencies",
+          "control-cargo-audit-deny",
+          "control-minimize-ta-dependencies",
+          "control-prefer-gp-crypto"
+        ]
+      },
+      {
+        "bom-ref": "threat-platform-attacks",
+        "name": "Physical, side-channel, and availability attacks",
+        "description": "Unless a specific demo states otherwise, the SDK does not defend against physical and hardware attacks (glitching, bus probing, decapsulation), microarchitectural side channels (Spectre-class, cache timing), or denial of service from the Normal World (which controls scheduling and power). These are the responsibility of the hardware/integrator.",
+        "origin": "environmental",
+        "categories": [
+          {
+            "taxonomy": "STRIDE",
+            "category": "denial-of-service"
+          },
+          {
+            "taxonomy": "STRIDE",
+            "category": "information-disclosure"
+          }
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      },
+      {
+        "bom-ref": "threat-ca-side-findings",
+        "name": "Missing input validation in Client Application code",
+        "description": "CA code (optee-teec, host/) runs in the untrusted world; the TA must validate regardless, so CA-side validation is not a security control and 'missing input validation in the CA' is an expected non-finding. Similarly, examples are illustrative (note copy-risk patterns rather than reporting them as production vulnerabilities), unsafe in *-sys FFI crates is not a finding merely for existing, and a demo's documented and accepted risk is not a new vulnerability.",
+        "origin": "structural",
+        "affectedAssets": [
+          "asset-optee-teec"
+        ],
+        "properties": [
+          {
+            "name": "asf:in-scope",
+            "value": "false"
+          }
+        ]
+      }
+    ],
+    "trustBoundaries": [
+      {
+        "bom-ref": "trust-boundary-ta-entry",
+        "boundary": "boundary-ta-entry",
+        "name": "TA entry point trust boundary",
+        "description": "Crossed through the entry-point macros in optee-utee, which hand the TA a Parameters struct built from the raw TEE_Param array. Params, pointers, lengths, and buffer contents are all attacker-controlled and may mutate concurrently; validate before use. OP-TEE core guarantees a memref pointer refers to memory the caller is allowed to share, so it cannot be used to read arbitrary secure memory.",
+        "trustLevel": "untrusted",
+        "threatsAtBoundary": [
+          "threat-malicious-ta-parameters",
+          "threat-toctou-shared-memory",
+          "threat-output-secret-leak",
+          "threat-malformed-proto-deserialization"
+        ],
+        "controlsAtBoundary": [
+          "control-param-type-checking",
+          "control-boundary-invariants",
+          "control-copy-then-validate",
+          "control-deliberate-outputs"
+        ]
+      }
+    ]
+  },
+  "controls": [
+    {
+      "bom-ref": "control-param-type-checking",
+      "name": "Parameter type validation primitives",
+      "description": "The SDK's as_value/as_memref accessors return BadParameters on a type mismatch; TA code must validate param_types first, confirm each slot is the expected type before interpreting it, and propagate the error rather than bypassing it.",
+      "category": "preventive",
+      "status": "implemented",
+      "appliesTo": [
+        "asset-optee-utee",
+        "boundary-ta-entry"
+      ]
+    },
+    {
+      "bom-ref": "control-boundary-invariants",
+      "name": "TA boundary invariants",
+      "description": "Obligations on TA code, not provided automatically: treat every byte of a memref as adversarial (check length, encoding, structure; never assume NUL-termination, well-formedness, or non-emptiness); bound all lengths (0, huge, or mismatched sizes are legal adversary inputs); and fail closed, returning an error (ErrorKind::BadParameters and friends) on any validation failure rather than proceeding with partially validated input.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-ta-entry"
+      ]
+    },
+    {
+      "bom-ref": "control-copy-then-validate",
+      "name": "Copy-then-validate against TOCTOU",
+      "description": "Because the Normal World can mutate a shared buffer concurrently, copy untrusted input into secure memory once before validating and using it; never double-fetch a shared field; treat MemrefInput as read-once.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "boundary-ta-entry"
+      ]
+    },
+    {
+      "bom-ref": "control-deliberate-outputs",
+      "name": "Deliberate output sizing and content",
+      "description": "Write only what the caller is authorized to learn to Output/Inout memrefs; size outputs deliberately and set the updated size with set_updated_size.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-optee-utee"
+      ]
+    },
+    {
+      "bom-ref": "control-rpmb-anti-rollback",
+      "name": "Hardware anti-rollback (RPMB)",
+      "description": "Anti-rollback for secure storage requires hardware support such as RPMB; sealing/secure storage alone does not provide freshness or availability.",
+      "category": "compensating",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-secure-storage"
+      ]
+    },
+    {
+      "bom-ref": "control-pin-lock-dependencies",
+      "name": "Pin and lock TA dependencies",
+      "description": "Commit Cargo.lock so audited versions are reproducible for production-grade TAs.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ta-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-cargo-audit-deny",
+      "name": "Run cargo audit, deny, and vet",
+      "description": "Run cargo audit (RUSTSEC advisories), consider cargo deny to enforce licenses and ban yanked/duplicate crates, and consider cargo vet or vendoring for the subset of crates that end up in the TCB.",
+      "category": "detective",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ta-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-minimize-ta-dependencies",
+      "name": "Minimize the TA dependency tree",
+      "description": "Review new TA dependencies as TCB additions with the same scrutiny as first-party TA code; prefer no-std, since std mode pulls a substantially larger dependency and runtime surface into the TCB.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ta-dependencies"
+      ]
+    },
+    {
+      "bom-ref": "control-prefer-gp-crypto",
+      "name": "Prefer the OP-TEE/GlobalPlatform crypto API and TEE-backed randomness",
+      "description": "Where the platform offers it, prefer the OP-TEE/GlobalPlatform crypto API over software crypto crates holding key material in TA RAM, and verify that any entropy path inside a TA is TEE/hardware-backed, never sourced from the Normal World.",
+      "category": "preventive",
+      "status": "recommended",
+      "appliesTo": [
+        "asset-ta-dependencies"
+      ]
+    }
+  ]
+}
